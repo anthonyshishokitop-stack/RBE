@@ -444,49 +444,53 @@
           </div>
         </section>
 
-       <!-- ==================== IMPORT BREAKDOWN SECTION ==================== -->
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">📤 Import Breakdown Report (Excel)</h5>
-    </div>
-    <div class="card-body">
-        
-        <!-- File Upload -->
-        <div class="mb-3">
-            <label class="form-label fw-bold">Select Excel File (.xlsx)</label>
-            <input type="file" id="excel-file" accept=".xlsx, .xls" class="form-control">
-            <small class="text-muted">Only the sheet containing "breakdown" will be used.</small>
-        </div>
 
-        <!-- Action Buttons -->
-        <div class="d-grid gap-2">
-            <button onclick="handleFileUpload()" class="btn btn-primary btn-lg">
-                📤 Parse Excel & Start Mapping
-            </button>
+<!-- ==================== IMPORT BREAKDOWN SECTION ==================== -->
+<section id="import-spreadsheet" class="hidden">
+    <div class="header-bar">
+        <h1>📤 Import Breakdown Report (Excel)</h1>
+    </div>
+    
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
             
-            <button onclick="startColumnMapping()" class="btn btn-outline-secondary">
-                🔄 Manual Mapping
+            <!-- File Upload -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Select Excel File (.xlsx)</label>
+                <input type="file" id="excel-file" accept=".xlsx, .xls" class="form-control">
+                <small class="text-muted">Only the sheet containing "breakdown" will be used.</small>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-grid gap-2">
+                <button onclick="handleFileUpload()" class="btn btn-primary btn-lg">
+                    📤 Parse Excel & Start Mapping
+                </button>
+                
+                <button onclick="startColumnMapping()" class="btn btn-outline-secondary">
+                    🔄 Manual Mapping
+                </button>
+            </div>
+
+            <!-- Status -->
+            <div id="import-status" class="mt-3 alert alert-info" style="display:none;"></div>
+            
+            <!-- Preview Area -->
+            <div id="mapping-preview" class="mt-4" style="display:none;">
+                <h6>Preview of Imported Data</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered" id="preview-table"></table>
+                </div>
+            </div>
+
+        </div>
+        <div class="card-footer">
+            <button onclick="importSelectedRows()" class="btn btn-success w-100">
+                ✅ Import to Database (Firebase)
             </button>
         </div>
-
-        <!-- Status -->
-        <div id="import-status" class="mt-3 alert alert-info" style="display:none;"></div>
-        
-        <!-- Preview Area -->
-        <div id="mapping-preview" class="mt-4" style="display:none;">
-            <h6>Preview of Imported Data</h6>
-            <div class="table-responsive">
-                <table class="table table-sm table-bordered" id="preview-table"></table>
-            </div>
-        </div>
-
     </div>
-    <div class="card-footer">
-        <button onclick="importSelectedRows()" class="btn btn-success w-100">
-            ✅ Import to Database (Firebase)
-        </button>
-    </div>
-</div>
+</section>
 
         <!-- CONTROL ROOM REPORT -->
         <section id="control-room" class="hidden">
