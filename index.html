@@ -24,9 +24,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js'></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="script.js"></script>
   
   <style>
     :root {
@@ -444,38 +444,49 @@
           </div>
         </section>
 
-        <!-- IMPORT SPREADSHEET -->
-        <section id="import-spreadsheet" class="hidden">
-          <div class="header-bar">
-            <h1>Import Breakdown Report (Excel)</h1>
-          </div>
-          <div class="card">
-            <p><strong>Upload Report.xlsx</strong><br>Only the <strong>Breakdown Report</strong> sheet will be processed.<br>Data will be mapped and merged into the live RBE status log.</p>
-            <div class="form-group" style="max-width:500px; margin:1.5rem 0;">
-              <label><strong>Shaft for this import batch</strong> (recommended)</label>
-              <select id="import-shaft">
-                <option value="">Do not set shaft (use equipment lookup)</option>
-              </select>
-            </div>
-            <input type="file" id="excel-file" accept=".xlsx,.xls" style="margin:1rem 0;display:block;width:100%;">
-            <button class="btn btn-primary" onclick="handleFileUpload()" style="width:100%;">📤 Parse Excel &amp; Start Mapping</button>
-          </div>
+       <!-- ==================== IMPORT BREAKDOWN SECTION ==================== -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">📤 Import Breakdown Report (Excel)</h5>
+    </div>
+    <div class="card-body">
+        
+        <!-- File Upload -->
+        <div class="mb-3">
+            <label class="form-label fw-bold">Select Excel File (.xlsx)</label>
+            <input type="file" id="excel-file" accept=".xlsx, .xls" class="form-control">
+            <small class="text-muted">Only the sheet containing "breakdown" will be used.</small>
+        </div>
 
-          <div id="mapping-section" class="card hidden">
-            <h2>Map Columns to RBE Fields</h2>
-            <div id="mapping-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;"></div>
-            <button class="btn btn-primary" onclick="previewImport()" style="margin-top:1.5rem;width:100%;">Preview Mapped Data &amp; Select Rows</button>
-          </div>
+        <!-- Action Buttons -->
+        <div class="d-grid gap-2">
+            <button onclick="handleFileUpload()" class="btn btn-primary btn-lg">
+                📤 Parse Excel & Start Mapping
+            </button>
+            
+            <button onclick="startColumnMapping()" class="btn btn-outline-secondary">
+                🔄 Manual Mapping
+            </button>
+        </div>
 
-          <div id="preview-section" class="card hidden">
-            <h2>Preview &amp; Select Rows to Import</h2>
-            <div style="overflow-x:auto;max-height:420px;" id="preview-table"></div>
-            <div style="margin-top:1rem;display:flex;gap:1rem;">
-              <button class="btn btn-success" onclick="importSelectedRows()" style="flex:1;">✅ Import Selected Rows to System</button>
-              <button class="btn btn-danger" onclick="document.getElementById('preview-section').classList.add('hidden')" style="flex:1;">Cancel</button>
+        <!-- Status -->
+        <div id="import-status" class="mt-3 alert alert-info" style="display:none;"></div>
+        
+        <!-- Preview Area -->
+        <div id="mapping-preview" class="mt-4" style="display:none;">
+            <h6>Preview of Imported Data</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered" id="preview-table"></table>
             </div>
-          </div>
-        </section>
+        </div>
+
+    </div>
+    <div class="card-footer">
+        <button onclick="importSelectedRows()" class="btn btn-success w-100">
+            ✅ Import to Database (Firebase)
+        </button>
+    </div>
+</div>
 
         <!-- CONTROL ROOM REPORT -->
         <section id="control-room" class="hidden">
