@@ -704,14 +704,24 @@ onAuthStateChanged(auth, user => {
   
   // ── Navigation & Refresh ────────────────────────────────────────
   function show(section) {
-    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    document.getElementById(section).classList.remove('hidden');
-    document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
-    document.querySelector(`[data-section="${section}"]`).classList.add('active');
-    if (window.innerWidth < 1025) document.getElementById('sidebar').classList.remove('open');
-    refreshCurrentView();
+  document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+  const targetSection = document.getElementById(section);
+  if (targetSection) {
+    targetSection.classList.remove('hidden');
   }
 
+  // Update sidebar active state
+  document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
+  const activeLi = document.querySelector(`[data-section="${section}"]`);
+  if (activeLi) activeLi.classList.add('active');
+
+  if (window.innerWidth < 1025) {
+    document.getElementById('sidebar').classList.remove('open');
+  }
+
+  refreshCurrentView();
+}
+  
   function refreshCurrentView() {
     const section = document.querySelector('section:not(.hidden)')?.id;
     if (!section) return;
@@ -1633,8 +1643,23 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     document.getElementById('theme-toggle').innerHTML = '🌙';
   }
 
-  fillDatalist();
-  show('dashboard');
+  // ── Initial load ────────────────────────────────────────────────
+  function initializeApp() {
+    fillDatalist();
+    
+    // Force show dashboard on refresh
+    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+    document.getElementById('dashboard').classList.remove('hidden');
+    
+    // Set active menu
+    document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
+    document.querySelector('[data-section="dashboard"]').classList.add('active');
+    
+    populateDashboard();   // Make sure dashboard content loads
+  }
+
+  // Run after everything is loaded
+  window.onload = initializeApp;
 </script>
 </body>
 </html>
