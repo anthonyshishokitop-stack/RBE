@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/main.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/main.min.css" href="styles.css" />
 
   
   <!-- === FIREBASE SDK (compat version - works with vanilla JS) === -->
@@ -313,39 +313,37 @@
           </form>
         </section>
 
-     
-<!-- SEARCH -->
+        <!-- SEARCH -->
 <section id="search-status" class="">
-  <div class="header-bar"><h1>🔍 Search Equipment History</h1></div>
+  <div class="header-bar"><h1>Search History</h1></div>
   
+ <!-- Search Form stays the same -->
   <form id="search-form" style="max-width:800px;margin:0 auto;">
-    <div class="form-group">
-      <label>Equipment ID</label>
-      <input id="s-loco" list="loco-list" placeholder="Type or select Equipment ID" style="width:100%;">
-    </div>
-    
-    <div class="form-group">
-      <label>Date (optional)</label>
-      <input id="s-date" type="date">
-    </div>
 
-    <div style="margin:1.5rem 0;display:flex;align-items:center;gap:8px;">
-      <input type="checkbox" id="show-all-history" checked>
-      <label for="show-all-history" style="margin:0;font-weight:600;">Show Full History (ignore date)</label>
+        <div class="form-group"><label>Equipment ID</label><input id="s-loco" list="loco-list"></div>
+    <div class="form-group"><label>Date (optional)</label><input id="s-date" type="date"></div>
+    <div class="form-group"><label>Job Order Equipment</label><select id="job-loco"><option value="">Select Equipment</option><option value="100">100</option><option value="111">111</option><option value="120">120</option><option value="126">126</option><option value="19960">19960</option><option value="2000">2000</option><option value="2026">2026</option><option value="217">217</option></select></div>
+    
+    <div style="margin:1rem 0;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="show-all-history">
+      <label for="show-all-history" style="margin:0;font-weight:600;">Show Full History</label>
     </div>
     
-    <button type="submit" class="btn btn-primary" style="padding:0.8rem 2rem;font-size:1.05rem;">
-      🔍 Search
-    </button>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <button type="submit" class="btn btn-primary">Search</button>
+      <button type="button" class="btn btn-info" onclick="generateJobPDF()"><i class="fas fa-file-pdf"></i> Job Order PDF</button>
+    </div>
   </form>
 
-  <div id="search-results" style="margin-top:2.5rem;"></div>
-
-  <!-- Recent Searches -->
-  <div id="history-container" style="margin-top: 3rem; background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <!-- 🔥 THIS IS THE IMPORTANT PART - History List -->
+  <div id="history-container" style="margin-top: 2.5rem; background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
     <h5 style="margin-bottom: 12px; color: #1e3a8a;">Recent Searches</h5>
-    <ul id="history-list" class="list-group"></ul>
+    <ul id="history-list" class="list-group">
+      <!-- Searches from Firebase will appear here -->
+    </ul>
   </div>
+
+  <div id="search-results" style="margin-top:2rem;">No results found.</div>
 </section>
 
                 <!-- FULL LOG -->
@@ -704,24 +702,14 @@ onAuthStateChanged(auth, user => {
   
   // ── Navigation & Refresh ────────────────────────────────────────
   function show(section) {
-  document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-  const targetSection = document.getElementById(section);
-  if (targetSection) {
-    targetSection.classList.remove('hidden');
+    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(section).classList.remove('hidden');
+    document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
+    document.querySelector(`[data-section="${section}"]`).classList.add('active');
+    if (window.innerWidth < 1025) document.getElementById('sidebar').classList.remove('open');
+    refreshCurrentView();
   }
 
-  // Update sidebar active state
-  document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
-  const activeLi = document.querySelector(`[data-section="${section}"]`);
-  if (activeLi) activeLi.classList.add('active');
-
-  if (window.innerWidth < 1025) {
-    document.getElementById('sidebar').classList.remove('open');
-  }
-
-  refreshCurrentView();
-}
-  
   function refreshCurrentView() {
     const section = document.querySelector('section:not(.hidden)')?.id;
     if (!section) return;
@@ -741,11 +729,12 @@ onAuthStateChanged(auth, user => {
   });
 
   // ── Utility functions ───────────────────────────────────────────
-function fillDatalist() {
+  function fillDatalist() {
     const dl = document.getElementById('loco-list');
     dl.innerHTML = equipment.map(e => `<option value="${e.id}"></option>`).join('');
 
-    // Removed job-loco since we no longer use the select
+    const job = document.getElementById('job-loco');
+    job.innerHTML = '<option value="">Select Equipment</option>' + equipment.map(e => `<option value="${e.id}">${e.id}</option>`).join('');
 
     const shafts = [
       '0 Shaft','1 Shaft','2 Shaft','3 Shaft','4 Shaft','5 Shaft','6 Shaft','7 Shaft','7A Shaft','8 Shaft','9 Shaft','10 Shaft','10D',
@@ -1542,20 +1531,17 @@ function updateHistoryUI(history) {
   });
 
 // ====================== FIXED SEARCH FUNCTION ======================
-// ====================== SEARCH FUNCTION ======================
 document.getElementById('search-form').addEventListener('submit', async e => {
   e.preventDefault();
 
-  const equipmentId = document.getElementById('s-loco').value.trim();
-  const dateFilter = document.getElementById('s-date').value;
-  const showAll = document.getElementById('show-all-history').checked;
+  let equipmentId = document.getElementById('s-loco').value.trim();
+  if (!equipmentId) equipmentId = document.getElementById('job-loco').value;
 
   if (!equipmentId) {
     alert("Please enter or select Equipment ID");
     return;
   }
 
-  // Save to recent searches
   await addToSearchHistory(equipmentId);
 
   const resultsContainer = document.getElementById('search-results');
@@ -1567,61 +1553,53 @@ document.getElementById('search-form').addEventListener('submit', async e => {
       where("equipmentId", "==", equipmentId),
       orderBy("date", "desc"),
       orderBy("time", "desc"),
-      limit(100)
+      limit(50)
     );
 
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
       resultsContainer.innerHTML = `<div class="alert alert-warning">No records found for <strong>${equipmentId}</strong></div>`;
-      return;
+    } else {
+      let html = `
+        <h5>Results for <strong>${equipmentId}</strong> (${snapshot.size} records)</h5>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead class="table-dark">
+              <tr>
+                <th>Date</th><th>Time</th><th>Status</th><th>Shift</th><th>Fault / Reason</th><th>Down Hrs</th><th>Failure</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        html += `
+          <tr>
+            <td>${d.date || '-'}</td>
+            <td>${d.time || '-'}</td>
+            <td><span class="badge bg-${d.status === 'Down' ? 'danger' : 'success'}">${d.status || 'N/A'}</span></td>
+            <td>${d.shift || '-'}</td>
+            <td>${d.reason || '-'}</td>
+            <td>${d.downtimeHours || '-'}</td>
+            <td>${d.isFailure === '1' ? 'Yes' : 'No'}</td>
+          </tr>`;
+      });
+
+      html += `</tbody></table></div>`;
+      resultsContainer.innerHTML = html;
     }
-
-    let filteredResults = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-
-    if (dateFilter && !showAll) {
-      filteredResults = filteredResults.filter(u => u.date === dateFilter);
-    }
-
-    let html = `
-      <h5>Results for <strong>${equipmentId}</strong> (${filteredResults.length} records)</h5>
-      <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse; background:white;">
-          <thead style="background:#0f172a; color:white;">
-            <tr>
-              <th style="padding:12px;text-align:left;">Date</th>
-              <th style="padding:12px;text-align:left;">Time</th>
-              <th style="padding:12px;text-align:left;">Status</th>
-              <th style="padding:12px;text-align:left;">Shift</th>
-              <th style="padding:12px;text-align:left;">Reason / Fault</th>
-              <th style="padding:12px;text-align:left;">Downtime (hrs)</th>
-              <th style="padding:12px;text-align:left;">Failure</th>
-            </tr>
-          </thead>
-          <tbody>`;
-
-    filteredResults.forEach(u => {
-      html += `
-        <tr style="border-bottom:1px solid #e2e8f0;">
-          <td style="padding:10px;">${u.date || '-'}</td>
-          <td style="padding:10px;">${u.time || '-'}</td>
-          <td style="padding:10px;">${u.status || '-'}</td>
-          <td style="padding:10px;">${u.shift || '-'}</td>
-          <td style="padding:10px;">${u.reason || '-'}</td>
-          <td style="padding:10px;">${u.downtimeHours || '0'}</td>
-          <td style="padding:10px;">${u.isFailure === '1' ? '✅ Yes' : 'No'}</td>
-        </tr>`;
-    });
-
-    html += `</tbody></table></div>`;
-    resultsContainer.innerHTML = html;
-
   } catch (error) {
     console.error("Search error:", error);
-    resultsContainer.innerHTML = `<div class="alert alert-danger">Search failed: ${error.message}</div>`;
+    resultsContainer.innerHTML = `
+      <div class="alert alert-danger">
+        ${error.message.includes('index') 
+          ? 'Index is still building. Please wait 1-2 minutes and try again.' 
+          : 'Search failed: ' + error.message}
+      </div>`;
   }
 });
-  
+
   // ── Theme toggle ────────────────────────────────────────────────
   function toggleTheme() {
     const html = document.documentElement;
@@ -1636,30 +1614,14 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     }
   }
 
-  // ── Final Initialization ────────────────────────────────────────
+  // ── Initial load ────────────────────────────────────────────────
   if (localStorage.getItem('theme') === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
     document.getElementById('theme-toggle').innerHTML = '🌙';
   }
 
-  function initializeApp() {
-    fillDatalist();
-    
-    // Force Dashboard on load/refresh
-    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    const dashboard = document.getElementById('dashboard');
-    if (dashboard) dashboard.classList.remove('hidden');
-    
-    // Set active menu item
-    document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
-    const dashboardMenu = document.querySelector('[data-section="dashboard"]');
-    if (dashboardMenu) dashboardMenu.classList.add('active');
-    
-    populateDashboard();
-  }
-
-  // Run initialization
-  window.addEventListener('load', initializeApp);
+  fillDatalist();
+  show('dashboard');
 </script>
 </body>
 </html>
