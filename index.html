@@ -1600,7 +1600,7 @@ document.getElementById('search-form').addEventListener('submit', async e => {
   }
 });
 
-  // ── Theme toggle ────────────────────────────────────────────────
+   // ── Theme toggle ────────────────────────────────────────────────
   function toggleTheme() {
     const html = document.documentElement;
     if (html.getAttribute('data-theme') === 'dark') {
@@ -1614,14 +1614,30 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     }
   }
 
-  // ── Initial load ────────────────────────────────────────────────
+  // ── Final Initialization ────────────────────────────────────────
   if (localStorage.getItem('theme') === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
     document.getElementById('theme-toggle').innerHTML = '🌙';
   }
 
-  fillDatalist();
-  show('dashboard');
+  function initializeApp() {
+    fillDatalist();
+    
+    // Force Dashboard on load/refresh
+    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+    const dashboard = document.getElementById('dashboard');
+    if (dashboard) dashboard.classList.remove('hidden');
+    
+    // Set active menu item
+    document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
+    const dashboardMenu = document.querySelector('[data-section="dashboard"]');
+    if (dashboardMenu) dashboardMenu.classList.add('active');
+    
+    populateDashboard();
+  }
+
+  // Run initialization
+  window.addEventListener('load', initializeApp);
 </script>
 </body>
 </html>
