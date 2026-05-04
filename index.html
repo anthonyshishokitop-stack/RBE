@@ -1637,29 +1637,30 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     }
   }
 
-  // ── Initial load ────────────────────────────────────────────────
+  // ── Final Initialization ────────────────────────────────────────
   if (localStorage.getItem('theme') === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
     document.getElementById('theme-toggle').innerHTML = '🌙';
   }
 
-  // ── Initial load ────────────────────────────────────────────────
   function initializeApp() {
     fillDatalist();
     
-    // Force show dashboard on refresh
+    // Force Dashboard on load/refresh
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-    document.getElementById('dashboard').classList.remove('hidden');
+    const dashboard = document.getElementById('dashboard');
+    if (dashboard) dashboard.classList.remove('hidden');
     
-    // Set active menu
+    // Set active menu item
     document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
-    document.querySelector('[data-section="dashboard"]').classList.add('active');
+    const dashboardMenu = document.querySelector('[data-section="dashboard"]');
+    if (dashboardMenu) dashboardMenu.classList.add('active');
     
-    populateDashboard();   // Make sure dashboard content loads
+    populateDashboard();
   }
 
-  // Run after everything is loaded
-  window.onload = initializeApp;
+  // Run initialization
+  window.addEventListener('load', initializeApp);
 </script>
 </body>
 </html>
