@@ -139,3 +139,98 @@ window.clearSearchHistory = async () => {
     console.log("🗑️ History cleared");
   }
 };
+
+// ====================== EXCEL IMPORT BREAKDOWN ======================
+
+let importedData = [];
+let mappedRows = [];
+
+// Handle file upload
+window.handleFileUpload = function() {
+    const fileInput = document.getElementById('excel-file');
+    if (!fileInput || !fileInput.files[0]) {
+        alert("Please select an Excel file first!");
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            // Find sheet with "breakdown" in name
+            let sheetName = workbook.SheetNames.find(name => 
+                name.toLowerCase().includes('breakdown')
+            ) || workbook.SheetNames[0];
+            
+            const worksheet = workbook.Sheets[sheetName];
+            importedData = XLSX.utils.sheet_to_json(worksheet);
+            
+            console.log(`✅ Loaded ${importedData.length} rows from sheet: ${sheetName}`);
+            
+            if (importedData.length === 0) {
+                alert("No data found in the Excel file.");
+                return;
+            }
+            
+            alert(`Successfully parsed ${importedData.length} rows from "${sheetName}" sheet.\n\nNow click "Start Mapping" if the button appears.`);
+            
+            // Auto start mapping
+            startColumnMapping();
+            
+        } catch (err) {
+            console.error(err);
+            alert("Error reading Excel file: " + err.message);
+        }
+    };
+    
+    reader.readAsArrayBuffer(file);
+};
+
+// Start column mapping
+window.startColumnMapping = function() {
+    if (importedData.length === 0) {
+        alert("Please upload and parse Excel file first.");
+        return;
+    }
+    
+    // Show mapping section (you can expand this later)
+    console.log("🔄 Starting column mapping...");
+    console.table(importedData.slice(0, 5)); // Show sample data
+    
+    // For now, just preview first 10 rows
+    previewImportedData();
+};
+
+// Simple preview
+function previewImportedData() {
+    console.log("%c📋 Preview of first 5 rows:", "color:orange; font-weight:bold");
+    console.table(importedData.slice(0, 5));
+    
+    alert(`✅ Parsed ${importedData.length} rows successfully!\n\nCheck console (F12) for preview.\n\nNext step: We need to create the mapping UI and import function.`);
+}
+
+// Optional: Import to Firebase (Breakdowns collection)
+window.importSelectedRows = async function() {
+    if (importedData.length === 0) return;
+    
+    try {
+        for (let row of importedData) {
+            await addDoc(collection(db, "breakdowns"), {
+                equipmentId: row["Equipment ID"] || row["Equipment"] || "Unknown",
+                date: row["Date"] || new Date(),
+                downtime: parseFloat(row["Downtime"] || row["Down Hrs"] || 0),
+                reason: row["Reason"] || row["Fault"] || row["Description"] || "",
+                shift: row["Shift"] || "",
+                timestamp: serverTimestamp()
+            });
+        }
+        alert("✅ Successfully imported all rows to Firebase!");
+    } catch (e) {
+        console.error(e);
+        alert("Error during import: " + e.message);
+    }
+};
