@@ -1340,7 +1340,7 @@ window.importSelectedRows = async function() {
             const equipmentId = String(row['Equipment ID'] || row.Equipment || row['Working Place'] || row.Loco || 'Unknown').trim();
             const dateVal = row.Date || row.date || new Date().toISOString().slice(0,10);
             const downtime = parseFloat(row.Downtime || row['Down Hrs'] || row.Hours || row['Total Downtime'] || 0);
-            const reason = String(row.Reason || row['Breakdown / Failure'] || row.Fault || row.Description || 'Imported Breakdown').trim();
+            const reason = String(row.Reason || row['Reason / Fault'] || row['Reason/Fault'] || row.Fault || row['Fault Description'] ||  row['Breakdown Reason'] || row['Problem'] || row.Description || row['Breakdown / Failure'] ||  'No reason provided').trim();
 
             await addDoc(collection(db, "status_updates"), {
                 equipmentId: equipmentId,
