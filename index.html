@@ -731,12 +731,11 @@ onAuthStateChanged(auth, user => {
   });
 
   // ── Utility functions ───────────────────────────────────────────
-  function fillDatalist() {
+function fillDatalist() {
     const dl = document.getElementById('loco-list');
     dl.innerHTML = equipment.map(e => `<option value="${e.id}"></option>`).join('');
 
-    const job = document.getElementById('job-loco');
-    job.innerHTML = '<option value="">Select Equipment</option>' + equipment.map(e => `<option value="${e.id}">${e.id}</option>`).join('');
+    // Removed job-loco since we no longer use the select
 
     const shafts = [
       '0 Shaft','1 Shaft','2 Shaft','3 Shaft','4 Shaft','5 Shaft','6 Shaft','7 Shaft','7A Shaft','8 Shaft','9 Shaft','10 Shaft','10D',
