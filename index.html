@@ -1496,29 +1496,24 @@ function updateHistoryUI(history) {
     }
   });
 
-// ====================== FIXED SEARCH FUNCTION (Modular Firebase) ======================
+// ====================== FIXED SEARCH FUNCTION ======================
 document.getElementById('search-form').addEventListener('submit', async e => {
   e.preventDefault();
 
   let equipmentId = document.getElementById('s-loco').value.trim();
-  if (!equipmentId) {
-    equipmentId = document.getElementById('job-loco').value;
-  }
+  if (!equipmentId) equipmentId = document.getElementById('job-loco').value;
 
   if (!equipmentId) {
-    alert("Please enter Equipment ID or select from dropdown");
+    alert("Please enter or select Equipment ID");
     return;
   }
 
   await addToSearchHistory(equipmentId);
 
-  console.log(`🔍 Searching for: ${equipmentId}`);
+  const resultsContainer = document.getElementById('search-results');
+  resultsContainer.innerHTML = `<p class="text-info"><strong>Searching for ${equipmentId}...</strong></p>`;
 
   try {
-    const resultsContainer = document.getElementById('search-results');
-    resultsContainer.innerHTML = `<p class="text-info"><strong>Searching for ${equipmentId}...</strong></p>`;
-
-    // Query
     const q = query(
       collection(db, "status_updates"),
       where("equipmentId", "==", equipmentId),
@@ -1530,10 +1525,7 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      resultsContainer.innerHTML = `
-        <div class="alert alert-warning">
-          No records found for Equipment <strong>${equipmentId}</strong>
-        </div>`;
+      resultsContainer.innerHTML = `<div class="alert alert-warning">No records found for <strong>${equipmentId}</strong></div>`;
     } else {
       let html = `
         <h5>Results for <strong>${equipmentId}</strong> (${snapshot.size} records)</h5>
@@ -1541,40 +1533,35 @@ document.getElementById('search-form').addEventListener('submit', async e => {
           <table class="table table-sm table-hover">
             <thead class="table-dark">
               <tr>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Status</th>
-                <th>Shift</th>
-                <th>Fault / Reason</th>
-                <th>Down Hrs</th>
-                <th>Failure</th>
+                <th>Date</th><th>Time</th><th>Status</th><th>Shift</th><th>Fault / Reason</th><th>Down Hrs</th><th>Failure</th>
               </tr>
             </thead>
             <tbody>`;
 
       snapshot.forEach(doc => {
-        const data = doc.data();
+        const d = doc.data();
         html += `
           <tr>
-            <td>${data.date || '-'}</td>
-            <td>${data.time || '-'}</td>
-            <td><span class="badge bg-${data.status === 'Down' ? 'danger' : 'success'}">${data.status || 'N/A'}</span></td>
-            <td>${data.shift || '-'}</td>
-            <td>${data.reason || data.fault || '-'}</td>
-            <td>${data.downtimeHours || data.downHours || '-'}</td>
-            <td>${data.isFailure === '1' ? 'Yes' : 'No'}</td>
+            <td>${d.date || '-'}</td>
+            <td>${d.time || '-'}</td>
+            <td><span class="badge bg-${d.status === 'Down' ? 'danger' : 'success'}">${d.status || 'N/A'}</span></td>
+            <td>${d.shift || '-'}</td>
+            <td>${d.reason || '-'}</td>
+            <td>${d.downtimeHours || '-'}</td>
+            <td>${d.isFailure === '1' ? 'Yes' : 'No'}</td>
           </tr>`;
       });
 
       html += `</tbody></table></div>`;
       resultsContainer.innerHTML = html;
     }
-
   } catch (error) {
-    console.error("Full Search Error:", error);
-    document.getElementById('search-results').innerHTML = `
+    console.error("Search error:", error);
+    resultsContainer.innerHTML = `
       <div class="alert alert-danger">
-        Search failed: ${error.message}
+        ${error.message.includes('index') 
+          ? 'Index is still building. Please wait 1-2 minutes and try again.' 
+          : 'Search failed: ' + error.message}
       </div>`;
   }
 });
