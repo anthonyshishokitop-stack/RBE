@@ -1308,10 +1308,11 @@ function previewImportedData() {
                 <td>${i+1}</td>
                 <td>${row.Date || row.date || row['Date '] || '-'}</td>
                 <td>${row['Equipment ID'] || row.Equipment || row['Working Place'] || row.Loco || '-'}</td>
-                <td>${row.Reason || row['Breakdown / Failure'] || row.Fault || row.Description || '-'}</td>
+                <td>${ row.Reason || row['Reason / Fault'] ||  row['Reason/Fault'] ||  row.Fault ||  row['Fault Description'] ||  row['Breakdown Reason'] ||  row['Problem'] ||  row.Description ||  row['Breakdown / Failure'] ||  '-' }</td>
                 <td>${row.Downtime || row['Down Hrs'] || row.Hours || row['Total Downtime'] || '-'}</td>
             </tr>`;
     });
+
 
     html += `</tbody>`;
     table.innerHTML = html;
