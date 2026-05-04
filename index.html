@@ -1496,7 +1496,7 @@ function updateHistoryUI(history) {
     }
   });
 
-// ====================== IMPROVED SEARCH FUNCTION (Modular Firebase) ======================
+// ====================== FIXED SEARCH FUNCTION (Modular Firebase) ======================
 document.getElementById('search-form').addEventListener('submit', async e => {
   e.preventDefault();
 
@@ -1510,7 +1510,6 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     return;
   }
 
-  // Save to search history
   await addToSearchHistory(equipmentId);
 
   console.log(`🔍 Searching for: ${equipmentId}`);
@@ -1519,7 +1518,7 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     const resultsContainer = document.getElementById('search-results');
     resultsContainer.innerHTML = `<p class="text-info"><strong>Searching for ${equipmentId}...</strong></p>`;
 
-    // === MODULAR FIRESTORE QUERY ===
+    // Query
     const q = query(
       collection(db, "status_updates"),
       where("equipmentId", "==", equipmentId),
@@ -1561,8 +1560,8 @@ document.getElementById('search-form').addEventListener('submit', async e => {
             <td>${data.time || '-'}</td>
             <td><span class="badge bg-${data.status === 'Down' ? 'danger' : 'success'}">${data.status || 'N/A'}</span></td>
             <td>${data.shift || '-'}</td>
-            <td>${data.reason || '-'}</td>
-            <td>${data.downtimeHours || '-'}</td>
+            <td>${data.reason || data.fault || '-'}</td>
+            <td>${data.downtimeHours || data.downHours || '-'}</td>
             <td>${data.isFailure === '1' ? 'Yes' : 'No'}</td>
           </tr>`;
       });
@@ -1572,7 +1571,7 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     }
 
   } catch (error) {
-    console.error("Search error:", error);
+    console.error("Full Search Error:", error);
     document.getElementById('search-results').innerHTML = `
       <div class="alert alert-danger">
         Search failed: ${error.message}
