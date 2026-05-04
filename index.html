@@ -1495,25 +1495,87 @@ function updateHistoryUI(history) {
     }
   });
 
+// ====================== IMPROVED SEARCH FUNCTION ======================
 document.getElementById('search-form').addEventListener('submit', async e => {
   e.preventDefault();
 
-  // Get the value the user searched for
-  let jobOrderNumber = document.getElementById('s-loco').value.trim();
-  if (!jobOrderNumber) {
-    jobOrderNumber = document.getElementById('job-loco').value;
+  let equipmentId = document.getElementById('s-loco').value.trim();
+  if (!equipmentId) {
+    equipmentId = document.getElementById('job-loco').value;
   }
 
-  if (jobOrderNumber) {
-    await addToSearchHistory(jobOrderNumber);   // ← SAVE TO FIREBASE
+  if (!equipmentId) {
+    alert("Please enter Equipment ID or select from dropdown");
+    return;
   }
 
-  // Keep your existing searchStatus function
-  searchStatus(
-    document.getElementById('s-loco').value,
-    document.getElementById('s-date').value,
-    document.getElementById('show-all-history').checked
-  );
+  // Save to search history
+  await addToSearchHistory(equipmentId);
+
+  console.log(`🔍 Searching for: ${equipmentId}`);
+
+  try {
+    const resultsContainer = document.getElementById('search-results');
+    
+    resultsContainer.innerHTML = `<p class="text-info"><strong>Searching for ${equipmentId}...</strong></p>`;
+
+    // Fetch from Firestore (real database search)
+    const snapshot = await db.collection('status_updates')
+      .where('equipmentId', '==', equipmentId)
+      .orderBy('date', 'desc')
+      .orderBy('time', 'desc')
+      .limit(50)
+      .get();
+
+    if (snapshot.empty) {
+      resultsContainer.innerHTML = `
+        <div class="alert alert-warning">
+          No records found for Equipment <strong>${equipmentId}</strong>
+        </div>`;
+    } else {
+      let html = `
+        <h5>Results for <strong>${equipmentId}</strong> (${snapshot.size} records)</h5>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead class="table-dark">
+              <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Status</th>
+                <th>Shift</th>
+                <th>Fault / Reason</th>
+                <th>Down Hrs</th>
+                <th>Failure</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        html += `
+          <tr>
+            <td>${data.date || '-'}</td>
+            <td>${data.time || '-'}</td>
+            <td><span class="badge bg-${data.status === 'Down' ? 'danger' : 'success'}">${data.status || 'N/A'}</span></td>
+            <td>${data.shift || '-'}</td>
+            <td>${data.reason || '-'}</td>
+            <td>${data.downtimeHours || '-'}</td>
+            <td>${data.isFailure === '1' ? 'Yes' : 'No'}</td>
+          </tr>`;
+      });
+
+      html += `</tbody></table></div>`;
+      resultsContainer.innerHTML = html;
+    }
+
+  } catch (error) {
+    console.error("Search error:", error);
+    document.getElementById('search-results').innerHTML = `
+      <div class="alert alert-danger">
+        Search failed: ${error.message}<br>
+        <small>Check browser console (F12) for details.</small>
+      </div>`;
+  }
 });
 
   // ── Theme toggle ────────────────────────────────────────────────
