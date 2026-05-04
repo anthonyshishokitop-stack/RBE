@@ -1532,17 +1532,21 @@ function updateHistoryUI(history) {
   });
 
 // ====================== FIXED SEARCH FUNCTION ======================
+
+
 document.getElementById('search-form').addEventListener('submit', async e => {
   e.preventDefault();
 
-  let equipmentId = document.getElementById('s-loco').value.trim();
-  if (!equipmentId) equipmentId = document.getElementById('job-loco').value;
+  const equipmentId = document.getElementById('s-loco').value.trim();
+  const dateFilter = document.getElementById('s-date').value;
+  const showAll = document.getElementById('show-all-history').checked;
 
   if (!equipmentId) {
     alert("Please enter or select Equipment ID");
     return;
   }
 
+  // Save to recent searches
   await addToSearchHistory(equipmentId);
 
   const resultsContainer = document.getElementById('search-results');
@@ -1554,53 +1558,63 @@ document.getElementById('search-form').addEventListener('submit', async e => {
       where("equipmentId", "==", equipmentId),
       orderBy("date", "desc"),
       orderBy("time", "desc"),
-      limit(50)
+      limit(100)
     );
 
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
       resultsContainer.innerHTML = `<div class="alert alert-warning">No records found for <strong>${equipmentId}</strong></div>`;
-    } else {
-      let html = `
-        <h5>Results for <strong>${equipmentId}</strong> (${snapshot.size} records)</h5>
-        <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead class="table-dark">
-              <tr>
-                <th>Date</th><th>Time</th><th>Status</th><th>Shift</th><th>Fault / Reason</th><th>Down Hrs</th><th>Failure</th>
-              </tr>
-            </thead>
-            <tbody>`;
-
-      snapshot.forEach(doc => {
-        const d = doc.data();
-        html += `
-          <tr>
-            <td>${d.date || '-'}</td>
-            <td>${d.time || '-'}</td>
-            <td><span class="badge bg-${d.status === 'Down' ? 'danger' : 'success'}">${d.status || 'N/A'}</span></td>
-            <td>${d.shift || '-'}</td>
-            <td>${d.reason || '-'}</td>
-            <td>${d.downtimeHours || '-'}</td>
-            <td>${d.isFailure === '1' ? 'Yes' : 'No'}</td>
-          </tr>`;
-      });
-
-      html += `</tbody></table></div>`;
-      resultsContainer.innerHTML = html;
+      return;
     }
+
+    let filteredResults = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+
+    if (dateFilter && !showAll) {
+      filteredResults = filteredResults.filter(u => u.date === dateFilter);
+    }
+
+    let html = `
+      <h5>Results for <strong>${equipmentId}</strong> (${filteredResults.length} records)</h5>
+      <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; background:white;">
+          <thead style="background:#0f172a; color:white;">
+            <tr>
+              <th style="padding:12px;text-align:left;">Date</th>
+              <th style="padding:12px;text-align:left;">Time</th>
+              <th style="padding:12px;text-align:left;">Status</th>
+              <th style="padding:12px;text-align:left;">Shift</th>
+              <th style="padding:12px;text-align:left;">Reason / Fault</th>
+              <th style="padding:12px;text-align:left;">Downtime (hrs)</th>
+              <th style="padding:12px;text-align:left;">Failure</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+    filteredResults.forEach(u => {
+      html += `
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px;">${u.date || '-'}</td>
+          <td style="padding:10px;">${u.time || '-'}</td>
+          <td style="padding:10px;">${u.status || '-'}</td>
+          <td style="padding:10px;">${u.shift || '-'}</td>
+          <td style="padding:10px;">${u.reason || '-'}</td>
+          <td style="padding:10px;">${u.downtimeHours || '0'}</td>
+          <td style="padding:10px;">${u.isFailure === '1' ? '✅ Yes' : 'No'}</td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    resultsContainer.innerHTML = html;
+
   } catch (error) {
     console.error("Search error:", error);
-    resultsContainer.innerHTML = `
-      <div class="alert alert-danger">
-        ${error.message.includes('index') 
-          ? 'Index is still building. Please wait 1-2 minutes and try again.' 
-          : 'Search failed: ' + error.message}
-      </div>`;
+    resultsContainer.innerHTML = `<div class="alert alert-danger">Search failed: ${error.message}</div>`;
   }
 });
+  
 
+  
   // ── Theme toggle ────────────────────────────────────────────────
  
   function toggleTheme() {
