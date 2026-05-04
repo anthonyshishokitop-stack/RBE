@@ -553,7 +553,8 @@
   // ────────────────────────────────────────────────
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-  import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, deleteDoc, updateDoc, where, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { getFirestore,collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy,  deleteDoc,  updateDoc,  where,  getDocs, limit          // ← ADD THIS   
+          } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCnDsQVhQxk9Q7axCPcMSpHDcqOonBbNMc",
