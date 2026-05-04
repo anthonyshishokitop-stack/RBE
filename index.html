@@ -1209,144 +1209,136 @@ if (user) {
     link.click();
   }
 
-  // ── Import Excel ────────────────────────────────────────────────
-  function handleFileUpload() {
-    const file = document.getElementById('excel-file').files[0];
-    if (!file) return alert('Select Excel file');
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, {type:'array'});
-      let sheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('breakdown')) || workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonRows = XLSX.utils.sheet_to_json(worksheet, {header:1, defval:''});
+// ====================== EXCEL IMPORT BREAKDOWN ======================
 
-      let headerIndex = jsonRows.findIndex(row => row.some(cell => typeof cell==='string' && cell.toLowerCase().includes('operator'))) || 3;
-      const rawHeader = jsonRows[headerIndex];
-      columnHeaders = rawHeader.map(h => (h||'').toString().trim()).filter(Boolean);
-      excelData = [];
-      for (let i = headerIndex + 1; i < jsonRows.length; i++) {
-        const row = jsonRows[i];
-        if (!row || row.every(c => c==='')) continue;
-        let obj = {};
-        rawHeader.forEach((key,j) => { if (key) obj[(key||'').toString().trim()] = row[j]!==undefined ? row[j] : ''; });
-        excelData.push(obj);
-      }
-      if (!excelData.length) return alert('No data found');
-      buildMappingForm();
-      document.getElementById('mapping-section').classList.remove('hidden');
-    };
-    reader.readAsArrayBuffer(file);
-  }
+let excelData = [];
 
-  function buildMappingForm() {
-    const container = document.getElementById('mapping-form');
-    container.innerHTML = '';
-    const maps = [
-      {id:'map-date', label:'Date', def:'Date'},
-      {id:'map-shift', label:'Shift', def:'Shift'},
-      {id:'map-equipment', label:'Equipment ID', def:'Working Place'},
-      {id:'map-reason', label:'Reason/Fault', def:'Breakdown / Failure'},
-      {id:'map-downtime', label:'Downtime Hours', def:'Total Downtime'},
-      {id:'map-time', label:'Time', def:'Time on'}
-    ];
-    maps.forEach(m => {
-      let html = `<div class="form-group"><label>${m.label}</label><select id="${m.id}">`;
-      columnHeaders.forEach(col => html += `<option value="${col}" ${col===m.def?'selected':''}>${col}</option>`);
-      html += '</select></div>';
-      container.innerHTML += html;
-    });
-  }
-
-  function previewImport() {
-    selectedMapping = {
-      date: document.getElementById('map-date').value,
-      shift: document.getElementById('map-shift').value,
-      equipment: document.getElementById('map-equipment').value,
-      reason: document.getElementById('map-reason').value,
-      downtime: document.getElementById('map-downtime').value,
-      time: document.getElementById('map-time').value
-    };
-
-    let html = `<table><thead><tr><th><input type="checkbox" onclick="toggleAllRows(this)" checked></th><th>Date</th><th>Shift</th><th>Equipment ID</th><th>Reason/Fault</th><th>Downtime (hrs)</th><th>Status</th></tr></thead><tbody>`;
-    excelData.forEach((row, idx) => {
-      let dateVal = row[selectedMapping.date] || '';
-      let shiftVal = row[selectedMapping.shift] || 'Night';
-      let equipVal = (row[selectedMapping.equipment]||'Unknown').toString().trim();
-      let reasonVal = (row[selectedMapping.reason]||'Imported Breakdown').toString().trim();
-      let dtRaw = row[selectedMapping.downtime]||0;
-      let downtimeHrs = (typeof dtRaw==='number' ? dtRaw : parseFloat(dtRaw)||0);
-      if (downtimeHrs < 50) downtimeHrs *= 24;
-      const action = row['Action Taken/Feedback'] || '';
-      const statusVal = (action && action.toString().trim() !== '') ? 'Fixed' : 'Down';
-
-      html += `<tr><td><input type="checkbox" class="row-select" data-index="${idx}" checked></td><td>${dateVal}</td><td>${shiftVal}</td><td>${equipVal}</td><td>${reasonVal}</td><td>${downtimeHrs.toFixed(1)}</td><td>${statusVal}</td></tr>`;
-    });
-    html += `</tbody></table>`;
-    document.getElementById('preview-table').innerHTML = html;
-    document.getElementById('preview-section').classList.remove('hidden');
-  }
-
-  function toggleAllRows(cb) {
-    document.querySelectorAll('.row-select').forEach(chk => chk.checked = cb.checked);
-  }
-
-  async function importSelectedRows() {
-    const checked = document.querySelectorAll('.row-select:checked');
-    if (!checked.length) return alert('No rows selected');
-    const selectedShaft = document.getElementById('import-shaft').value;
-    let count = 0;
-    for (let chk of checked) {
-      const idx = parseInt(chk.dataset.index);
-      const row = excelData[idx];
-
-      let date = row[selectedMapping.date] || new Date().toISOString().slice(0,10);
-      if (typeof date === 'number') {
-        const excelDate = new Date((date - 25569) * 86400 * 1000);
-        date = excelDate.toISOString().slice(0,10);
-      }
-
-      const shift = row[selectedMapping.shift] || 'Night';
-      const equipment = (row[selectedMapping.equipment]||'Imported').toString().trim();
-      const reason = (row[selectedMapping.reason]||'Imported Breakdown').toString().trim();
-      let dtRaw = row[selectedMapping.downtime]||0;
-      let downtimeHrs = (typeof dtRaw==='number' ? dtRaw : parseFloat(dtRaw)||0);
-      if (downtimeHrs < 50) downtimeHrs *= 24;
-      const timeStr = row[selectedMapping.time] || '00:00';
-      const status = (row['Action Taken/Feedback'] && row['Action Taken/Feedback'].toString().trim() !== '') ? 'Fixed' : 'Down';
-
-      const importedUpdate = {
-        equipmentId: equipment,
-        date: date,
-        time: timeStr,
-        status: status,
-        shift: shift,
-        reason: reason,
-        downtimeHours: parseFloat(downtimeHrs.toFixed(2)),
-        isFailure: '1',
-        source: 'Imported Breakdown Report',
-        shaft: selectedShaft || '',
-        createdAt: serverTimestamp()
-      };
-      await addDoc(collection(db, "status_updates"), importedUpdate);
-
-      // Auto-create equipment record if shaft is selected and equipment doesn't exist
-      if (selectedShaft && !equipment.some(e => e.id === equipment)) {
-        await setDoc(doc(db, "equipment", equipment), {
-          shaft: selectedShaft,
-          level: 'Imported',
-          locoSize: 'N/A',
-          section: 'Imported'
-        }, { merge: true });
-      }
-      count++;
+window.handleFileUpload = function() {
+    const fileInput = document.getElementById('excel-file');
+    const statusDiv = document.getElementById('import-status');
+    
+    if (!fileInput || !fileInput.files[0]) {
+        alert("Please select an Excel file first!");
+        return;
     }
 
-    alert(`Imported ${count} record(s)!`);
-    refreshCurrentView();
-    document.getElementById('preview-section').classList.add('hidden');
-    document.getElementById('mapping-section').classList.add('hidden');
-  }
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            let sheetName = workbook.SheetNames.find(name => 
+                name.toLowerCase().includes("breakdown")
+            ) || workbook.SheetNames[0];
+
+            const worksheet = workbook.Sheets[sheetName];
+            excelData = XLSX.utils.sheet_to_json(worksheet);
+
+            if (excelData.length === 0) {
+                alert("No data found in the Excel file.");
+                return;
+            }
+
+            statusDiv.innerHTML = `✅ Loaded <strong>${excelData.length}</strong> rows from sheet: <strong>${sheetName}</strong>`;
+            statusDiv.style.display = 'block';
+
+            document.getElementById('mapping-preview').style.display = 'block';
+            previewImportedData();
+
+            console.log(`✅ Excel loaded - ${excelData.length} rows`, excelData[0]);
+
+        } catch (err) {
+            console.error(err);
+            alert("Error reading Excel file:\n" + err.message);
+        }
+    };
+
+    reader.readAsArrayBuffer(file);
+};
+
+function previewImportedData() {
+    const table = document.getElementById('preview-table');
+    if (!excelData.length) return;
+
+    let html = `
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Equipment ID</th>
+                <th>Reason / Fault</th>
+                <th>Downtime (hrs)</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    excelData.slice(0, 15).forEach((row, i) => {
+        html += `
+            <tr>
+                <td>${i+1}</td>
+                <td>${row.Date || row.date || row['Date '] || '-'}</td>
+                <td>${row['Equipment ID'] || row.Equipment || row['Working Place'] || row.Loco || '-'}</td>
+                <td>${row.Reason || row['Breakdown / Failure'] || row.Fault || row.Description || '-'}</td>
+                <td>${row.Downtime || row['Down Hrs'] || row.Hours || row['Total Downtime'] || '-'}</td>
+            </tr>`;
+    });
+
+    html += `</tbody>`;
+    table.innerHTML = html;
+}
+
+window.startColumnMapping = function() {
+    if (excelData.length === 0) {
+        alert("Please click 'Parse Excel & Start Mapping' first");
+        return;
+    }
+    previewImportedData();
+};
+
+window.importSelectedRows = async function() {
+    if (excelData.length === 0) return alert("No data to import");
+
+    const statusDiv = document.getElementById('import-status');
+    statusDiv.innerHTML = `Importing ${excelData.length} records... Please wait.`;
+    statusDiv.className = "mt-3 alert alert-info";
+
+    let success = 0;
+
+    try {
+        for (let row of excelData) {
+            const equipmentId = String(row['Equipment ID'] || row.Equipment || row['Working Place'] || row.Loco || 'Unknown').trim();
+            const dateVal = row.Date || row.date || new Date().toISOString().slice(0,10);
+            const downtime = parseFloat(row.Downtime || row['Down Hrs'] || row.Hours || row['Total Downtime'] || 0);
+            const reason = String(row.Reason || row['Breakdown / Failure'] || row.Fault || row.Description || 'Imported Breakdown').trim();
+
+            await addDoc(collection(db, "status_updates"), {
+                equipmentId: equipmentId,
+                date: dateVal,
+                time: row.Time || row['Time on'] || '00:00',
+                status: 'Down',
+                shift: row.Shift || 'Night',
+                reason: reason,
+                downtimeHours: isNaN(downtime) ? 0 : downtime,
+                isFailure: '1',
+                source: 'Imported Breakdown Report',
+                createdAt: serverTimestamp()
+            });
+            success++;
+        }
+
+        statusDiv.innerHTML = `🎉 Successfully imported <strong>${success}</strong> records!`;
+        statusDiv.className = "mt-3 alert alert-success";
+        refreshCurrentView();
+
+    } catch (e) {
+        console.error(e);
+        statusDiv.innerHTML = `❌ Import failed: ${e.message}`;
+        statusDiv.className = "mt-3 alert alert-danger";
+    }
+};
 
 
 // ====================== SEARCH HISTORY (Recent Searches) ======================
