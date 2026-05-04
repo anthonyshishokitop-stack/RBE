@@ -1495,7 +1495,7 @@ function updateHistoryUI(history) {
     }
   });
 
-// ====================== IMPROVED SEARCH FUNCTION ======================
+// ====================== IMPROVED SEARCH FUNCTION (Modular Firebase) ======================
 document.getElementById('search-form').addEventListener('submit', async e => {
   e.preventDefault();
 
@@ -1516,16 +1516,18 @@ document.getElementById('search-form').addEventListener('submit', async e => {
 
   try {
     const resultsContainer = document.getElementById('search-results');
-    
     resultsContainer.innerHTML = `<p class="text-info"><strong>Searching for ${equipmentId}...</strong></p>`;
 
-    // Fetch from Firestore (real database search)
-    const snapshot = await db.collection('status_updates')
-      .where('equipmentId', '==', equipmentId)
-      .orderBy('date', 'desc')
-      .orderBy('time', 'desc')
-      .limit(50)
-      .get();
+    // === MODULAR FIRESTORE QUERY ===
+    const q = query(
+      collection(db, "status_updates"),
+      where("equipmentId", "==", equipmentId),
+      orderBy("date", "desc"),
+      orderBy("time", "desc"),
+      limit(50)
+    );
+
+    const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
       resultsContainer.innerHTML = `
@@ -1572,8 +1574,7 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     console.error("Search error:", error);
     document.getElementById('search-results').innerHTML = `
       <div class="alert alert-danger">
-        Search failed: ${error.message}<br>
-        <small>Check browser console (F12) for details.</small>
+        Search failed: ${error.message}
       </div>`;
   }
 });
