@@ -9,15 +9,23 @@ const firebaseConfig = {
     measurementId: "G-15E0HZJ2X6"
 };
 
-// Initialize Firebase
-
+// Initialize Firebase (Modular)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getFirestore, collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, limit, setDoc, doc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { 
+    getFirestore, 
+    collection, 
+    addDoc, 
+    serverTimestamp, 
+    onSnapshot, 
+    query, 
+    orderBy, 
+    limit 
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-console.log('%c✅ Firebase initialized successfully', 'color:#16a34a; font-weight:bold');
+console.log('%c✅ Firebase initialized successfully (Modular)', 'color:#16a34a; font-weight:bold');
 
 const HISTORY_COLLECTION = 'searchHistory';
 
@@ -25,10 +33,10 @@ const HISTORY_COLLECTION = 'searchHistory';
 async function addToSearchHistory(jobOrderNumber, pdfName = '') {
   if (!jobOrderNumber) return;
   try {
-    await db.collection(HISTORY_COLLECTION).add({
+    await addDoc(collection(db, HISTORY_COLLECTION), {
       jobOrder: jobOrderNumber.toString().trim(),
       pdfName: pdfName || `Job Order ${jobOrderNumber}`,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      timestamp: serverTimestamp(),
       searchedAt: new Date().toISOString()
     });
     console.log(`✅ Saved to history: ${jobOrderNumber}`);
@@ -43,23 +51,26 @@ let historyUnsubscribe = null;
 function startLiveSearchHistory() {
   if (historyUnsubscribe) historyUnsubscribe();
 
-  historyUnsubscribe = db.collection(HISTORY_COLLECTION)
-    .orderBy("timestamp", "desc")
-    .limit(30)
-    .onSnapshot(snapshot => {
-      const history = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        history.push({
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp ? data.timestamp.toDate() : new Date(data.searchedAt)
-        });
+  const q = query(
+    collection(db, HISTORY_COLLECTION),
+    orderBy("timestamp", "desc"),
+    limit(30)
+  );
+
+  historyUnsubscribe = onSnapshot(q, (snapshot) => {
+    const history = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      history.push({
+        id: doc.id,
+        ...data,
+        timestamp: data.timestamp ? data.timestamp.toDate() : new Date(data.searchedAt)
       });
-      updateHistoryUI(history);
-    }, error => {
-      console.error("History listener error:", error);
     });
+    updateHistoryUI(history);
+  }, (error) => {
+    console.error("History listener error:", error);
+  });
 }
 
 // Display history in the list
