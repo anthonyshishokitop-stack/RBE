@@ -220,14 +220,14 @@
         <li data-section="add-equipment"><i class="fas fa-plus-circle"></i><span>+ New Equipment</span></li>
         <li data-section="add-status"><i class="fas fa-edit"></i><span>Log Status Update</span></li>
         <li data-section="search-status"><i class="fas fa-search"></i><span>Search History</span></li>
-        <li data-section="status-log"><i class="fas fa-list"></i><span>Full Log</span></li>
+      
         <li data-section="summary"><i class="fas fa-chart-bar"></i><span>Fleet Summary</span></li>
         <li data-section="manage-equipment"><i class="fas fa-tools"></i><span>Equipment Register</span></li>
         <li data-section="maintenance-schedule"><i class="fas fa-calendar-check"></i><span>Maintenance Plan</span></li>
         <li data-section="calendar"><i class="fas fa-calendar"></i><span>Calendar</span></li>
         <li data-section="operations-report"><i class="fas fa-file-alt"></i><span>Operations Report</span></li>
         <li data-section="import-spreadsheet"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
-        <li data-section="control-room"><i class="fas fa-clipboard-list"></i><span>Control Room Report</span></li>
+       
       </ul>
     </aside>
 
@@ -346,7 +346,7 @@
   <div id="search-results" style="margin-top:2rem;">No results found.</div>
 </section>
 
-        <!-- FULL LOG -->
+                <!-- FULL LOG -->
         <section id="status-log" class="hidden">
           <div class="header-bar">
             <h1>Full Status Log</h1>
@@ -359,6 +359,7 @@
             </table>
           </div>
         </section>
+
 
         <!-- SUMMARY -->
         <section id="summary" class="hidden">
@@ -444,51 +445,55 @@
           </div>
         </section>
 
-       <!-- ==================== IMPORT BREAKDOWN SECTION ==================== -->
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">📤 Import Breakdown Report (Excel)</h5>
-    </div>
-    <div class="card-body">
-        
-        <!-- File Upload -->
-        <div class="mb-3">
-            <label class="form-label fw-bold">Select Excel File (.xlsx)</label>
-            <input type="file" id="excel-file" accept=".xlsx, .xls" class="form-control">
-            <small class="text-muted">Only the sheet containing "breakdown" will be used.</small>
-        </div>
 
-        <!-- Action Buttons -->
-        <div class="d-grid gap-2">
-            <button onclick="handleFileUpload()" class="btn btn-primary btn-lg">
-                📤 Parse Excel & Start Mapping
-            </button>
+<!-- ==================== IMPORT BREAKDOWN SECTION ==================== -->
+<section id="import-spreadsheet" class="hidden">
+    <div class="header-bar">
+        <h1>📤 Import Breakdown Report (Excel)</h1>
+    </div>
+    
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
             
-            <button onclick="startColumnMapping()" class="btn btn-outline-secondary">
-                🔄 Manual Mapping
+            <!-- File Upload -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Select Excel File (.xlsx)</label>
+                <input type="file" id="excel-file" accept=".xlsx, .xls" class="form-control">
+                <small class="text-muted">Only the sheet containing "breakdown" will be used.</small>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-grid gap-2">
+                <button onclick="handleFileUpload()" class="btn btn-primary btn-lg">
+                    📤 Parse Excel & Start Mapping
+                </button>
+                
+                <button onclick="startColumnMapping()" class="btn btn-outline-secondary">
+                    🔄 Manual Mapping
+                </button>
+            </div>
+
+            <!-- Status -->
+            <div id="import-status" class="mt-3 alert alert-info" style="display:none;"></div>
+            
+            <!-- Preview Area -->
+            <div id="mapping-preview" class="mt-4" style="display:none;">
+                <h6>Preview of Imported Data</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered" id="preview-table"></table>
+                </div>
+            </div>
+
+        </div>
+        <div class="card-footer">
+            <button onclick="importSelectedRows()" class="btn btn-success w-100">
+                ✅ Import to Database (Firebase)
             </button>
         </div>
-
-        <!-- Status -->
-        <div id="import-status" class="mt-3 alert alert-info" style="display:none;"></div>
-        
-        <!-- Preview Area -->
-        <div id="mapping-preview" class="mt-4" style="display:none;">
-            <h6>Preview of Imported Data</h6>
-            <div class="table-responsive">
-                <table class="table table-sm table-bordered" id="preview-table"></table>
-            </div>
-        </div>
-
     </div>
-    <div class="card-footer">
-        <button onclick="importSelectedRows()" class="btn btn-success w-100">
-            ✅ Import to Database (Firebase)
-        </button>
-    </div>
-</div>
+</section>
 
-        <!-- CONTROL ROOM REPORT -->
+                <!-- CONTROL ROOM REPORT -->
         <section id="control-room" class="hidden">
           <div class="header-bar">
             <h1>Control Room Report – Imported Breakdowns</h1>
@@ -557,7 +562,6 @@
   </div>
 
 </div>
-
 <script type="module">
   // ────────────────────────────────────────────────
   // Firebase v10 Modular
@@ -581,11 +585,13 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+
   let equipment = [];
   let updates = [];
   let maintenance = [];
   let delaysData = [];
   let currentShaftFilter = '';
+  let unsubscribeFunctions = [];
   let charts = {};
   let calendar = null;
   let excelData = [];
@@ -635,13 +641,12 @@
 
   document.getElementById('logout-btn').onclick = () => signOut(auth);
 
-  onAuthStateChanged(auth, user => {
-if (user) {
-  authSection.classList.add('hidden');
-  appDiv.classList.remove('hidden');
-  startRealtimeListeners();
-  startSearchHistoryListener();   // ← ADD THIS LINE
-
+onAuthStateChanged(auth, user => {
+    if (user) {
+      authSection.classList.add('hidden');
+      appDiv.classList.remove('hidden');
+      startRealtimeListeners();           // ← Should already be here
+      startSearchHistoryListener();
       
     } else {
       authSection.classList.remove('hidden');
@@ -649,30 +654,52 @@ if (user) {
     }
   });
 
+  
   // ── Real-time listeners ─────────────────────────────────────────
   function startRealtimeListeners() {
-    onSnapshot(collection(db, "equipment"), snap => {
+    // Clear previous listeners
+    if (unsubscribeFunctions) {
+      unsubscribeFunctions.forEach(unsub => unsub());
+    }
+    unsubscribeFunctions = [];
+
+    // Equipment
+    const unsubEq = onSnapshot(collection(db, "equipment"), snap => {
       equipment = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       fillDatalist();
       refreshCurrentView();
+      console.log(`✅ Equipment loaded: ${equipment.length}`);
     });
+    unsubscribeFunctions.push(unsubEq);
 
-    onSnapshot(query(collection(db, "status_updates"), orderBy("date","desc"), orderBy("time","desc")), snap => {
-      updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      refreshCurrentView();
-    });
+    // Status Updates (Main data for reports)
+    const unsubUpdates = onSnapshot(
+      query(collection(db, "status_updates"), 
+            orderBy("date","desc"), 
+            orderBy("time","desc")), 
+      snap => {
+        updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        refreshCurrentView();
+        console.log(`✅ Updates loaded: ${updates.length}`);
+      }
+    );
+    unsubscribeFunctions.push(unsubUpdates);
 
-    onSnapshot(collection(db, "maintenance"), snap => {
+    // Maintenance
+    const unsubMaint = onSnapshot(collection(db, "maintenance"), snap => {
       maintenance = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       refreshCurrentView();
     });
+    unsubscribeFunctions.push(unsubMaint);
 
-    onSnapshot(collection(db, "delays"), snap => {
+    // Delays
+    const unsubDelays = onSnapshot(collection(db, "delays"), snap => {
       delaysData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       refreshCurrentView();
     });
+    unsubscribeFunctions.push(unsubDelays);
   }
-
+  
   // ── Navigation & Refresh ────────────────────────────────────────
   function show(section) {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
@@ -686,13 +713,14 @@ if (user) {
   function refreshCurrentView() {
     const section = document.querySelector('section:not(.hidden)')?.id;
     if (!section) return;
+
     if (section === 'dashboard') populateDashboard();
     else if (section === 'status-log') populateLogTable();
     else if (section === 'summary') populateSummaryTable();
     else if (section === 'manage-equipment') populateEquipmentTable();
     else if (section === 'maintenance-schedule') populateMaintTable();
     else if (section === 'calendar') initCalendar();
-    else if (section === 'operations-report') populateOperationsReport();
+    else if (section === 'operations-report') populateOperationsReport();  // ← Important
     else if (section === 'control-room') populateControlRoom();
   }
 
@@ -1280,10 +1308,11 @@ function previewImportedData() {
                 <td>${i+1}</td>
                 <td>${row.Date || row.date || row['Date '] || '-'}</td>
                 <td>${row['Equipment ID'] || row.Equipment || row['Working Place'] || row.Loco || '-'}</td>
-                <td>${row.Reason || row['Breakdown / Failure'] || row.Fault || row.Description || '-'}</td>
+                <td>${ row.Reason || row['Reason / Fault'] ||  row['Reason/Fault'] ||  row.Fault ||  row['Fault Description'] ||  row['Breakdown Reason'] ||  row['Problem'] ||  row.Description ||  row['Breakdown / Failure'] ||  '-' }</td>
                 <td>${row.Downtime || row['Down Hrs'] || row.Hours || row['Total Downtime'] || '-'}</td>
             </tr>`;
     });
+
 
     html += `</tbody>`;
     table.innerHTML = html;
@@ -1311,7 +1340,7 @@ window.importSelectedRows = async function() {
             const equipmentId = String(row['Equipment ID'] || row.Equipment || row['Working Place'] || row.Loco || 'Unknown').trim();
             const dateVal = row.Date || row.date || new Date().toISOString().slice(0,10);
             const downtime = parseFloat(row.Downtime || row['Down Hrs'] || row.Hours || row['Total Downtime'] || 0);
-            const reason = String(row.Reason || row['Breakdown / Failure'] || row.Fault || row.Description || 'Imported Breakdown').trim();
+            const reason = String(row.Reason || row['Reason / Fault'] || row['Reason/Fault'] || row.Fault || row['Fault Description'] ||  row['Breakdown Reason'] || row['Problem'] || row.Description || row['Breakdown / Failure'] ||  'No reason provided').trim();
 
             await addDoc(collection(db, "status_updates"), {
                 equipmentId: equipmentId,
