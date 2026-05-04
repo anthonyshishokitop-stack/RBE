@@ -586,11 +586,13 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+
   let equipment = [];
   let updates = [];
   let maintenance = [];
   let delaysData = [];
   let currentShaftFilter = '';
+  let unsubscribeFunctions = [];
   let charts = {};
   let calendar = null;
   let excelData = [];
@@ -640,13 +642,12 @@
 
   document.getElementById('logout-btn').onclick = () => signOut(auth);
 
-  onAuthStateChanged(auth, user => {
-if (user) {
-  authSection.classList.add('hidden');
-  appDiv.classList.remove('hidden');
-  startRealtimeListeners();
-  startSearchHistoryListener();   // ← ADD THIS LINE
-
+onAuthStateChanged(auth, user => {
+    if (user) {
+      authSection.classList.add('hidden');
+      appDiv.classList.remove('hidden');
+      startRealtimeListeners();           // ← Should already be here
+      startSearchHistoryListener();
       
     } else {
       authSection.classList.remove('hidden');
@@ -654,30 +655,52 @@ if (user) {
     }
   });
 
+  
   // ── Real-time listeners ─────────────────────────────────────────
   function startRealtimeListeners() {
-    onSnapshot(collection(db, "equipment"), snap => {
+    // Clear previous listeners
+    if (unsubscribeFunctions) {
+      unsubscribeFunctions.forEach(unsub => unsub());
+    }
+    unsubscribeFunctions = [];
+
+    // Equipment
+    const unsubEq = onSnapshot(collection(db, "equipment"), snap => {
       equipment = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       fillDatalist();
       refreshCurrentView();
+      console.log(`✅ Equipment loaded: ${equipment.length}`);
     });
+    unsubscribeFunctions.push(unsubEq);
 
-    onSnapshot(query(collection(db, "status_updates"), orderBy("date","desc"), orderBy("time","desc")), snap => {
-      updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      refreshCurrentView();
-    });
+    // Status Updates (Main data for reports)
+    const unsubUpdates = onSnapshot(
+      query(collection(db, "status_updates"), 
+            orderBy("date","desc"), 
+            orderBy("time","desc")), 
+      snap => {
+        updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        refreshCurrentView();
+        console.log(`✅ Updates loaded: ${updates.length}`);
+      }
+    );
+    unsubscribeFunctions.push(unsubUpdates);
 
-    onSnapshot(collection(db, "maintenance"), snap => {
+    // Maintenance
+    const unsubMaint = onSnapshot(collection(db, "maintenance"), snap => {
       maintenance = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       refreshCurrentView();
     });
+    unsubscribeFunctions.push(unsubMaint);
 
-    onSnapshot(collection(db, "delays"), snap => {
+    // Delays
+    const unsubDelays = onSnapshot(collection(db, "delays"), snap => {
       delaysData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       refreshCurrentView();
     });
+    unsubscribeFunctions.push(unsubDelays);
   }
-
+  
   // ── Navigation & Refresh ────────────────────────────────────────
   function show(section) {
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
@@ -691,13 +714,14 @@ if (user) {
   function refreshCurrentView() {
     const section = document.querySelector('section:not(.hidden)')?.id;
     if (!section) return;
+
     if (section === 'dashboard') populateDashboard();
     else if (section === 'status-log') populateLogTable();
     else if (section === 'summary') populateSummaryTable();
     else if (section === 'manage-equipment') populateEquipmentTable();
     else if (section === 'maintenance-schedule') populateMaintTable();
     else if (section === 'calendar') initCalendar();
-    else if (section === 'operations-report') populateOperationsReport();
+    else if (section === 'operations-report') populateOperationsReport();  // ← Important
     else if (section === 'control-room') populateControlRoom();
   }
 
