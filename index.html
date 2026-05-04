@@ -1359,11 +1359,14 @@ async function addToSearchHistory(jobOrderNumber, pdfName = '') {
 // 2. Real-time listener for Recent Searches
 let historyUnsubscribe = null;
 
+// ====================== SEARCH HISTORY (Last 5 Only) ======================
 function startSearchHistoryListener() {
   if (historyUnsubscribe) historyUnsubscribe();
 
   historyUnsubscribe = onSnapshot(
-    query(collection(db, "searchHistory"), orderBy("timestamp", "desc"), limit(30)),
+    query(collection(db, "searchHistory"), 
+          orderBy("timestamp", "desc"), 
+          limit(5)),                    // ← Changed from 30 to 5
     (snapshot) => {
       const history = [];
       snapshot.forEach(doc => {
@@ -1379,7 +1382,7 @@ function startSearchHistoryListener() {
     (error) => console.error("History listener error:", error)
   );
 }
-
+  
 // 3. Display function
 function updateHistoryUI(history) {
   const container = document.getElementById('history-list');
