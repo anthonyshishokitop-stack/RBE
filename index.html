@@ -346,19 +346,7 @@
   <div id="search-results" style="margin-top:2rem;">No results found.</div>
 </section>
 
-        <!-- FULL LOG -->
-        <section id="status-log" class="hidden">
-          <div class="header-bar">
-            <h1>Full Status Log</h1>
-            <button class="btn btn-primary" onclick="exportLogCSV()"><i class="fas fa-file-csv"></i> Export Log (CSV)</button>
-          </div>
-          <div style="overflow-x:auto;">
-            <table id="log-table">
-              <thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Status</th><th>Shift</th><th>Fault</th><th>Down Hrs</th><th>Failure</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </section>
+
 
         <!-- SUMMARY -->
         <section id="summary" class="hidden">
@@ -492,31 +480,7 @@
     </div>
 </section>
 
-        <!-- CONTROL ROOM REPORT -->
-        <section id="control-room" class="hidden">
-          <div class="header-bar">
-            <h1>Control Room Report – Imported Breakdowns</h1>
-            <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
-              <div>
-                <label style="margin-right:8px;font-weight:600;color:white;">Filter by Shaft:</label>
-                <select id="cr-shaft-filter" onchange="filterControlRoomReport()">
-                  <option value="">All Shafts</option>
-                </select>
-              </div>
-              <div>
-                <label style="margin-right:8px;font-weight:600;color:white;">Filter by Date:</label>
-                <input type="date" id="cr-date-filter" onchange="filterControlRoomReport()" style="background:white;color:#0f172a;padding:0.6rem 1rem;border-radius:8px;border:1px solid #e2e8f0;">
-              </div>
-              <button class="btn btn-primary" onclick="exportControlRoomCSV()"><i class="fas fa-file-csv"></i> Export CSV</button>
-            </div>
-          </div>
-          <div style="overflow-x:auto;">
-            <table id="control-room-table">
-              <thead><tr><th>Date</th><th>Time</th><th>Equipment ID</th><th>Status</th><th>Shift</th><th>Reason/Fault</th><th>Downtime Hrs</th><th>Failure</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </section>
+
 
       </div>
     </main>
