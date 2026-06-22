@@ -937,19 +937,11 @@ function fillDatalist() {
       }
     }
 
-    const reasons = getFilteredDelays().reduce((acc,d)=>{acc[d.reason]=(acc[d.reason]||0)+d.hours;return acc;},{});
-    if (charts.delay) charts.delay.destroy();
-    charts.delay = new Chart(document.getElementById('delayChart'), {
-      type:'pie',
-      data:{ labels:Object.keys(reasons), datasets:[{data:Object.values(reasons), backgroundColor:['#1d4ed8','#16a34a','#ea580c','#dc2626','#8b5cf6']}] },
-      options:{ responsive:true, maintainAspectRatio:false }
-    });
 
-    const highRisk = locoIds.filter(id => getEquipmentStatus(id).downtime > 168).map(id => {
-      const st = getEquipmentStatus(id);
-      const lastDown = filteredUp.filter(u=>u.equipmentId===id && u.status==='Down').sort((a,b)=>new Date(b.date+' '+b.time)-new Date(a.date+' '+a.time))[0];
-      return `${id} — ${lastDown?.reason || 'Unknown'} (${st.downtime.toFixed(1)} hrs down)`;
-    });
+    const predictive = filteredMt.map(m => ({...m, days:calculateDaysLeft(m.lastDone, m.interval)})).filter(m => !isNaN(m.days) && m.days <= 7);
+    document.getElementById('predictive-list').innerHTML = predictive.map(p => `<li>${p.equipment} — ${p.task} (${p.days >= 0 ? 'due in '+p.days+' days' : Math.abs(p.days)+' days overdue'})</li>`).join('');
+
+    
     document.getElementById('high-risk-list').innerHTML = highRisk.map(s=>`<li>${s}</li>`).join('');
     document.getElementById('high-risk-alerts').classList.toggle('hidden', highRisk.length===0);
 
