@@ -881,12 +881,7 @@ function fillDatalist() {
     });
 
     
-    if (charts.failures) charts.failures.destroy();
-    charts.failures = new Chart(document.getElementById('failuresChart'), {
-      type:'bar',
-      data:{ labels:locoIds, datasets:[{data:failureData, backgroundColor:'#dc2626'}] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-    });
+
 
     if (charts.mttf) charts.mttf.destroy();
     charts.mttf = new Chart(document.getElementById('mttfChart'), {
