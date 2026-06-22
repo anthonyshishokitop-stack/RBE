@@ -1025,14 +1025,21 @@ function fillDatalist() {
     document.querySelector('#equipment-table tbody').innerHTML = getFilteredEquipment().map(e => `<tr><td>${e.shaft||'-'}</td><td>${e.level||'-'}</td><td>${e.locoSize||'-'}</td><td>${e.id}</td><td>${e.section||'-'}</td></tr>`).join('');
   }
 
-  function populateMaintTable() {
+function populateMaintTable() {
     const tbody = document.querySelector('#maint-table tbody');
     tbody.innerHTML = maintenance.map(m => {
       const days = calculateDaysLeft(m.lastDone, m.interval);
-      const disp = isNaN(days) ? '-' : (days>=0 ? days : Math.abs(days)+' overdue');
-      return `<tr><td>${m.equipment}</td><td>${m.task}</td><td>${m.interval}</td><td>${m.lastDone}</td><td>${calculateNextDue(m.lastDone,m.interval)||'-'}</td><td>${disp}</td><td><button onclick="editMaint('${m.id}')" class="btn btn-primary">Edit</button><button onclick="deleteMaint('${m.id}')" class="btn btn-danger">Delete</button></td></tr>`;
+      const disp = isNaN(days) ? '-' : (days >= 0 ? days : Math.abs(days) + ' overdue');
+      return `<tr>
+        <td>${m.equipment}</td>
+        <td>${m.task}</td>
+        <td>${m.interval}</td>
+        <td>${m.lastDone}</td>
+        <td>${calculateNextDue(m.lastDone, m.interval) || '-'}</td>
+        <td>${disp}</td>
+      </tr>`;
     }).join('');
-  }
+}
 
   function getMaintenanceEvents() {
     return maintenance.map(task => {
