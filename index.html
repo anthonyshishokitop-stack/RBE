@@ -817,12 +817,14 @@ function fillDatalist() {
   }
 
   // ── Dashboard ───────────────────────────────────────────────────
+   // ── Dashboard ───────────────────────────────────────────────────
   function populateDashboard() {
     const filteredEq = getFilteredEquipment();
     const locoIds = filteredEq.map(e => e.id);
     const filteredUp = getFilteredUpdates();
     const filteredMt = getFilteredMaintenance();
 
+    // KPIs
     let operational = 0, downLt7d = 0, downGt7d = 0, totalAvail = 0;
     locoIds.forEach(id => {
       const st = getEquipmentStatus(id);
@@ -840,76 +842,91 @@ function fillDatalist() {
       <div class="kpi-card blue"><i class="fas fa-percent"></i><h2>${avgAvail}</h2><p>Availability %</p></div>
     `;
 
+    // Charts Data
     const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
-    const failureData  = locoIds.map(id => filteredUp.filter(u=>u.equipmentId===id && u.isFailure==='1').length);
+    const failureData  = locoIds.map(id => filteredUp.filter(u => u.equipmentId === id && (u.isFailure === '1' || u.isFailure === 1)).length);
 
     const mttfData = locoIds.map(id => {
       const eu = filteredUp.filter(u => u.equipmentId === id);
-      const fails = eu.filter(u => u.isFailure === '1').length;
+      const fails = eu.filter(u => u.isFailure === '1' || u.isFailure === 1).length;
       if (fails === 0) return 0;
-      const uniqueDates = [...new Set(eu.map(u => u.date))];
+      const uniqueDates = [...new Set(eu.map(u => u.date).filter(Boolean))];
       if (uniqueDates.length === 0) return 0;
       const sortedDates = uniqueDates.sort();
       const minD = new Date(sortedDates[0]);
       const maxD = new Date(sortedDates[sortedDates.length - 1]);
-      const totalDays = Math.ceil((maxD - minD) / 86400000) + 1;
+      const totalDays = Math.max(1, Math.ceil((maxD - minD) / 86400000) + 1);
       const downH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
       const opDays = Math.max(0, totalDays - downH / 24);
       return parseFloat((opDays / fails).toFixed(1));
     });
 
-    if (charts.avail) charts.avail.destroy();
-    charts.avail = new Chart(document.getElementById('availabilityChart'), {
-      type:'bar',
-      data:{ labels:locoIds, datasets:[{data:availData, backgroundColor:'#1d4ed8'}] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,max:100}} }
-    });
+    // Create / Destroy Charts Safely
+    const createBarChart = (id, data, color, label) => {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      if (charts[id]) charts[id].destroy();
+      charts[id] = new Chart(canvas, {
+        type: 'bar',
+        data: { 
+          labels: locoIds, 
+          datasets: [{ 
+            label: label,
+            data: data, 
+            backgroundColor: color,
+            borderColor: color,
+            borderWidth: 1
+          }] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    };
 
-    if (charts.failures) charts.failures.destroy();
-    charts.failures = new Chart(document.getElementById('failuresChart'), {
-      type:'bar',
-      data:{ labels:locoIds, datasets:[{data:failureData, backgroundColor:'#dc2626'}] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-    });
+    createBarChart('availabilityChart', availData, '#1d4ed8', 'Availability %');
+    createBarChart('failuresChart', failureData, '#dc2626', 'Failures');
+    createBarChart('mttfChart', mttfData, '#ea580c', 'MTTF (Days)');
 
-    if (charts.mttf) charts.mttf.destroy();
-    charts.mttf = new Chart(document.getElementById('mttfChart'), {
-      type:'bar',
-      data:{ labels:locoIds, datasets:[{data:mttfData, backgroundColor:'#ea580c'}] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-    });
-
-    const reasons = getFilteredDelays().reduce((acc,d)=>{acc[d.reason]=(acc[d.reason]||0)+d.hours;return acc;},{});
+    // Delay Pie Chart
+    const reasons = getFilteredDelays().reduce((acc, d) => {
+      acc[d.reason] = (acc[d.reason] || 0) + (parseFloat(d.hours) || 0);
+      return acc;
+    }, {});
     if (charts.delay) charts.delay.destroy();
-    charts.delay = new Chart(document.getElementById('delayChart'), {
-      type:'pie',
-      data:{ labels:Object.keys(reasons), datasets:[{data:Object.values(reasons), backgroundColor:['#1d4ed8','#16a34a','#ea580c','#dc2626','#8b5cf6']}] },
-      options:{ responsive:true, maintainAspectRatio:false }
-    });
+    const delayCanvas = document.getElementById('delayChart');
+    if (delayCanvas) {
+      charts.delay = new Chart(delayCanvas, {
+        type: 'pie',
+        data: { 
+          labels: Object.keys(reasons), 
+          datasets: [{ 
+            data: Object.values(reasons), 
+            backgroundColor: ['#1d4ed8','#16a34a','#ea580c','#dc2626','#8b5cf6'] 
+          }] 
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
 
+    // Alerts
     const highRisk = locoIds.filter(id => getEquipmentStatus(id).downtime > 168).map(id => {
       const st = getEquipmentStatus(id);
-      const lastDown = filteredUp.filter(u=>u.equipmentId===id && u.status==='Down').sort((a,b)=>new Date(b.date+' '+b.time)-new Date(a.date+' '+a.time))[0];
-      return `${id} — ${lastDown?.reason || 'Unknown'} (${st.downtime.toFixed(1)} hrs down)`;
+      return `${id} — ${st.downtime.toFixed(1)} hrs down`;
     });
-    document.getElementById('high-risk-list').innerHTML = highRisk.map(s=>`<li>${s}</li>`).join('');
-    document.getElementById('high-risk-alerts').classList.toggle('hidden', highRisk.length===0);
+    document.getElementById('high-risk-list').innerHTML = highRisk.map(s => `<li>${s}</li>`).join('');
+    document.getElementById('high-risk-alerts').classList.toggle('hidden', highRisk.length === 0);
 
-    const predictive = filteredMt.map(m => ({...m, days:calculateDaysLeft(m.lastDone, m.interval)})).filter(m => !isNaN(m.days) && m.days <= 7);
-    document.getElementById('predictive-list').innerHTML = predictive.map(p => `<li>${p.equipment} — ${p.task} (${p.days >= 0 ? 'due in '+p.days+' days' : Math.abs(p.days)+' days overdue'})</li>`).join('');
-    document.getElementById('predictive-alerts').classList.toggle('hidden', predictive.length===0);
-
-    document.getElementById('maintenance-list').innerHTML = filteredMt.map(m => {
-      const days = calculateDaysLeft(m.lastDone, m.interval);
-      const color = days<0 ? 'red' : (days<=7 ? 'orange' : 'green');
-      const text = days>=0 ? `${days} days left` : `${Math.abs(days)} days overdue`;
-      return `<div style="color:var(--${color});font-weight:500;">${m.equipment} — ${m.task} — ${text}</div>`;
-    }).join('');
-  }
-
-  function filterDashboard() {
-    currentShaftFilter = document.getElementById('shaft-filter').value;
-    refreshCurrentView();
+    // Predictive maintenance (unchanged)
+    const predictive = filteredMt.map(m => ({...m, days: calculateDaysLeft(m.lastDone, m.interval)}))
+      .filter(m => !isNaN(m.days) && m.days <= 7);
+    document.getElementById('predictive-list').innerHTML = predictive.map(p => 
+      `<li>${p.equipment} — ${p.task} (${p.days >= 0 ? 'due in '+p.days+' days' : Math.abs(p.days)+' days overdue'})</li>`
+    ).join('');
+    document.getElementById('predictive-alerts').classList.toggle('hidden', predictive.length === 0);
   }
 
   // ── Other populate functions ────────────────────────────────────
