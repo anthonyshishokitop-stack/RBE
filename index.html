@@ -225,7 +225,7 @@
         <li data-section="manage-equipment"><i class="fas fa-tools"></i><span>Equipment Register</span></li>
         <li data-section="maintenance-schedule"><i class="fas fa-calendar-check"></i><span>Maintenance Plan</span></li>
         <li data-section="calendar"><i class="fas fa-calendar"></i><span>Calendar</span></li>
-        <li data-section="operations-report"><i class="fas fa-file-alt"></i><span>Operations Report</span></li>
+       
         <li data-section="import-spreadsheet"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
        
       </ul>
@@ -880,7 +880,12 @@ function fillDatalist() {
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,max:100}} }
     });
 
-    
+        if (charts.failures) charts.failures.destroy();
+    charts.failures = new Chart(document.getElementById('failuresChart'), {
+      type:'bar',
+      data:{ labels:locoIds, datasets:[{data:failureData, backgroundColor:'#dc2626'}] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+    });
 
 
     if (charts.mttf) charts.mttf.destroy();
@@ -1628,25 +1633,12 @@ document.getElementById('search-form').addEventListener('submit', async e => {
 
   
   // ── Theme toggle ────────────────────────────────────────────────
- 
-  function toggleTheme() {
-    const html = document.documentElement;
-    if (html.getAttribute('data-theme') === 'dark') {
-      html.removeAttribute('data-theme');
-      localStorage.setItem('theme', 'light');
-      document.getElementById('theme-toggle').innerHTML = '☀️';
-    } else {
-      html.setAttribute('data-theme', 'dark');
-      localStorage.setItem('theme', 'dark');
-      document.getElementById('theme-toggle').innerHTML = '🌙';
-    }
-  }
+
+
+  
 
   // ── Initial load ────────────────────────────────────────────────
-  if (localStorage.getItem('theme') === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    document.getElementById('theme-toggle').innerHTML = '🌙';
-  }
+
 
   fillDatalist();
   show('dashboard');
