@@ -840,29 +840,39 @@ function fillDatalist() {
       <div class="kpi-card blue"><i class="fas fa-percent"></i><h2>${avgAvail}</h2><p>Availability %</p></div>
     `;
 
-    const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
+      const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
 
-    // FIXED: Better failure detection
+    // FIXED: Robust failure detection (handles string, number, boolean)
     const failureData  = locoIds.map(id => {
-      return filteredUp.filter(u => u.equipmentId === id && 
-        (u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true)).length;
+      return filteredUp.filter(u => 
+        u.equipmentId === id && 
+        (u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true)
+      ).length;
     });
 
     const mttfData = locoIds.map(id => {
       const eu = filteredUp.filter(u => u.equipmentId === id);
-      const fails = eu.filter(u => u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true).length;
+      const fails = eu.filter(u => 
+        u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true
+      ).length;
       if (fails === 0) return 0;
+
       const uniqueDates = [...new Set(eu.map(u => u.date).filter(Boolean))];
       if (uniqueDates.length === 0) return 0;
+
       const sortedDates = uniqueDates.sort();
       const minD = new Date(sortedDates[0]);
       const maxD = new Date(sortedDates[sortedDates.length - 1]);
       const totalDays = Math.max(1, Math.ceil((maxD - minD) / 86400000) + 1);
+
       const downH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
       const opDays = Math.max(0, totalDays - downH / 24);
+
       return parseFloat((opDays / fails).toFixed(1));
     });
 
+
+    
     if (charts.avail) charts.avail.destroy();
     charts.avail = new Chart(document.getElementById('availabilityChart'), {
       type:'bar',
@@ -870,20 +880,70 @@ function fillDatalist() {
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,max:100}} }
     });
 
+
+    
+
+    // Failure Count Chart
     if (charts.failures) charts.failures.destroy();
-    charts.failures = new Chart(document.getElementById('failuresChart'), {
-      type:'bar',
-      data:{ labels:locoIds, datasets:[{data:failureData, backgroundColor:'#dc2626'}] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-    });
+    const failCanvas = document.getElementById('failuresChart');
+    if (failCanvas) {
+      charts.failures = new Chart(failCanvas, {
+        type: 'bar',
+        data: { 
+          labels: locoIds, 
+          datasets: [{ 
+            label: 'Failures', 
+            data: failureData, 
+            backgroundColor: '#dc2626',
+            borderColor: '#b91c1c',
+            borderWidth: 1 
+          }] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          plugins: { legend: { display: false } },
+          scales: { 
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+            x: { ticks: { maxRotation: 45, minRotation: 45 } }
+          }
+        }
+      });
+    }
 
+
+    
+    // MTTF Chart
     if (charts.mttf) charts.mttf.destroy();
-    charts.mttf = new Chart(document.getElementById('mttfChart'), {
-      type:'bar',
-      data:{ labels:locoIds, datasets:[{data:mttfData, backgroundColor:'#ea580c'}] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-    });
+    const mttfCanvas = document.getElementById('mttfChart');
+    if (mttfCanvas) {
+      charts.mttf = new Chart(mttfCanvas, {
+        type: 'bar',
+        data: { 
+          labels: locoIds, 
+          datasets: [{ 
+            label: 'MTTF (Days)', 
+            data: mttfData, 
+            backgroundColor: '#ea580c',
+            borderColor: '#c2410c',
+            borderWidth: 1 
+          }] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          plugins: { legend: { display: false } },
+          scales: { 
+            y: { beginAtZero: true },
+            x: { ticks: { maxRotation: 45, minRotation: 45 } }
+          }
+        }
+      });
+    }
 
+
+
+    
     const reasons = getFilteredDelays().reduce((acc,d)=>{acc[d.reason]=(acc[d.reason]||0)+d.hours;return acc;},{});
     if (charts.delay) charts.delay.destroy();
     charts.delay = new Chart(document.getElementById('delayChart'), {
