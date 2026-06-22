@@ -865,19 +865,61 @@ function fillDatalist() {
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,max:100}} }
     });
 
-    if (charts.failures) charts.failures.destroy();
-    charts.failures = new Chart(document.getElementById('failuresChart'), {
-      type:'bar',
-      data:{ labels:locoIds, datasets:[{data:failureData, backgroundColor:'#dc2626'}] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-    });
+    // === FAILURE COUNT CHART ===
+    const failuresCanvas = document.getElementById('failuresChart');
+    if (failuresCanvas) {
+      if (charts.failures) charts.failures.destroy();
+      charts.failures = new Chart(failuresCanvas, {
+        type: 'bar',
+        data: { 
+          labels: locoIds, 
+          datasets: [{ 
+            label: 'Failures',
+            data: failureData, 
+            backgroundColor: '#dc2626',
+            borderColor: '#b91c1c',
+            borderWidth: 1
+          }] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          plugins: { legend: { display: false } },
+          scales: { 
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+            x: { ticks: { maxRotation: 45, minRotation: 45 } }
+          }
+        }
+      });
+    }
 
-    if (charts.mttf) charts.mttf.destroy();
-    charts.mttf = new Chart(document.getElementById('mttfChart'), {
-      type:'bar',
-      data:{ labels:locoIds, datasets:[{data:mttfData, backgroundColor:'#ea580c'}] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
-    });
+    // === MTTF CHART ===
+    const mttfCanvas = document.getElementById('mttfChart');
+    if (mttfCanvas) {
+      if (charts.mttf) charts.mttf.destroy();
+      charts.mttf = new Chart(mttfCanvas, {
+        type: 'bar',
+        data: { 
+          labels: locoIds, 
+          datasets: [{ 
+            label: 'MTTF (Days)',
+            data: mttfData, 
+            backgroundColor: '#ea580c',
+            borderColor: '#c2410c',
+            borderWidth: 1
+          }] 
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          plugins: { legend: { display: false } },
+          scales: { 
+            y: { beginAtZero: true },
+            x: { ticks: { maxRotation: 45, minRotation: 45 } }
+          }
+        }
+      });
+    }
 
     const reasons = getFilteredDelays().reduce((acc,d)=>{acc[d.reason]=(acc[d.reason]||0)+d.hours;return acc;},{});
     if (charts.delay) charts.delay.destroy();
