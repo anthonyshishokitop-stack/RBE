@@ -953,9 +953,37 @@ function fillDatalist() {
     document.getElementById('high-risk-list').innerHTML = highRisk.map(s=>`<li>${s}</li>`).join('');
     document.getElementById('high-risk-alerts').classList.toggle('hidden', highRisk.length===0);
 
-    const predictive = filteredMt.map(m => ({...m, days:calculateDaysLeft(m.lastDone, m.interval)})).filter(m => !isNaN(m.days) && m.days <= 7);
-    document.getElementById('predictive-list').innerHTML = predictive.map(p => `<li>${p.equipment} — ${p.task} (${p.days >= 0 ? 'due in '+p.days+' days' : Math.abs(p.days)+' days overdue'})</li>`).join('');
-    document.getElementById('predictive-alerts').classList.toggle('hidden', predictive.length===0);
+    // === PREDICTIVE MAINTENANCE ALERTS (Fixed) ===
+    const filteredMt = getFilteredMaintenance();   // Make sure we have latest data
+
+    const predictive = filteredMt
+      .map(m => {
+        const days = calculateDaysLeft(m.lastDone, m.interval);
+        return { ...m, days: days };
+      })
+      .filter(m => !isNaN(m.days) && m.days <= 7)   // Show due in 7 days or overdue
+      .sort((a, b) => a.days - b.days);             // Sort by most urgent first
+
+    const predictiveHTML = predictive.length 
+      ? predictive.map(p => `
+          <div style="margin-bottom:8px; padding:8px; background:rgba(249, 115, 22, 0.1); border-left:4px solid #f97316; border-radius:4px;">
+            <strong>${p.equipment}</strong> — ${p.task} 
+            <span style="color:${p.days >= 0 ? '#f59e0b' : '#ef4444'}">
+              (${p.days >= 0 ? 'due in ' + p.days + ' days' : Math.abs(p.days) + ' days overdue'})
+            </span>
+          </div>`).join('')
+      : '<p style="color:#888; font-style:italic;">No upcoming maintenance due soon.</p>';
+
+    const predictiveContainer = document.getElementById('predictive-list') || document.getElementById('predictive-alerts');
+    if (predictiveContainer) {
+      predictiveContainer.innerHTML = predictiveHTML;
+    }
+
+    // Show/hide the whole alert box
+    const alertBox = document.getElementById('predictive-alerts') || document.querySelector('.predictive-alert');
+    if (alertBox) {
+      alertBox.style.display = predictive.length > 0 ? 'block' : 'none';
+    }
 
     document.getElementById('maintenance-list').innerHTML = filteredMt.map(m => {
       const days = calculateDaysLeft(m.lastDone, m.interval);
