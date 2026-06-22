@@ -259,21 +259,22 @@
           <div class="kpi-grid" id="kpi-grid"></div>
 
 
+
           <div class="card chart-wrapper">
             <div class="chart-title"><i class="fas fa-chart-bar"></i> Fleet Availability (%)</div>
             <div class="chart-container"><canvas id="availabilityChart"></canvas></div>
           </div>
 
-
-
-
-
-          
+          <div class="card chart-wrapper">
+            <div class="chart-title"><i class="fas fa-exclamation-triangle"></i> Failure Count by Equipment</div>
+            <div class="chart-container"><canvas id="failuresChart"></canvas></div>
+          </div>
 
           <div class="card chart-wrapper">
-            <div class="chart-title"><i class="fas fa-chart-pie"></i> Delay Reasons – Current Week</div>
-            <div class="chart-container"><canvas id="delayChart"></canvas></div>
+            <div class="chart-title"><i class="fas fa-clock"></i> Mean Time To Failure (Days)</div>
+            <div class="chart-container"><canvas id="mttfChart"></canvas></div>
           </div>
+
 
           <div class="card" style="border-left:6px solid var(--info);">
             <h2><i class="fas fa-wrench"></i> Upcoming &amp; Overdue Maintenance</h2>
