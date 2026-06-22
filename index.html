@@ -264,10 +264,6 @@
           </div>
 
 
-          <div class="card chart-wrapper">
-            <div class="chart-title"><i class="fas fa-chart-pie"></i> Delay Reasons – Current Week</div>
-            <div class="chart-container"><canvas id="delayChart"></canvas></div>
-          </div>
 
           <div class="card" style="border-left:6px solid var(--info);">
             <h2><i class="fas fa-wrench"></i> Upcoming &amp; Overdue Maintenance</h2>
@@ -707,14 +703,14 @@ onAuthStateChanged(auth, user => {
     const section = document.querySelector('section:not(.hidden)')?.id;
     if (!section) return;
 
-    if (section === 'dashboard') {populateDashboard(); } 
-    else if (section === 'status-log') {populateLogTable();} 
-    else if (section === 'summary') { populateSummaryTable(); } 
-    else if (section === 'manage-equipment') {populateEquipmentTable();} 
-    else if (section === 'maintenance-schedule') {populateMaintTable(); } 
-    else if (section === 'calendar') { initCalendar();} 
-    else if (section === 'operations-report') {populateOperationsReport();}
-    else if (section === 'control-room') { populateControlRoom();}
+    if (section === 'dashboard') populateDashboard();
+    else if (section === 'status-log') populateLogTable();
+    else if (section === 'summary') populateSummaryTable();
+    else if (section === 'manage-equipment') populateEquipmentTable();
+    else if (section === 'maintenance-schedule') populateMaintTable();
+    else if (section === 'calendar') initCalendar();
+    else if (section === 'operations-report') populateOperationsReport();  // ← Important
+    else if (section === 'control-room') populateControlRoom();
   }
 
   document.querySelectorAll('#sidebar-menu li').forEach(li => {
@@ -831,39 +827,24 @@ function fillDatalist() {
       <div class="kpi-card blue"><i class="fas fa-percent"></i><h2>${avgAvail}</h2><p>Availability %</p></div>
     `;
 
-      const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
-
-    // FIXED: Robust failure detection (handles string, number, boolean)
-    const failureData  = locoIds.map(id => {
-      return filteredUp.filter(u => 
-        u.equipmentId === id && 
-        (u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true)
-      ).length;
-    });
+    const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
+    const failureData  = locoIds.map(id => filteredUp.filter(u=>u.equipmentId===id && u.isFailure==='1').length);
 
     const mttfData = locoIds.map(id => {
       const eu = filteredUp.filter(u => u.equipmentId === id);
-      const fails = eu.filter(u => 
-        u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true
-      ).length;
+      const fails = eu.filter(u => u.isFailure === '1').length;
       if (fails === 0) return 0;
-
-      const uniqueDates = [...new Set(eu.map(u => u.date).filter(Boolean))];
+      const uniqueDates = [...new Set(eu.map(u => u.date))];
       if (uniqueDates.length === 0) return 0;
-
       const sortedDates = uniqueDates.sort();
       const minD = new Date(sortedDates[0]);
       const maxD = new Date(sortedDates[sortedDates.length - 1]);
-      const totalDays = Math.max(1, Math.ceil((maxD - minD) / 86400000) + 1);
-
+      const totalDays = Math.ceil((maxD - minD) / 86400000) + 1;
       const downH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
       const opDays = Math.max(0, totalDays - downH / 24);
-
       return parseFloat((opDays / fails).toFixed(1));
     });
 
-
-    
     if (charts.avail) charts.avail.destroy();
     charts.avail = new Chart(document.getElementById('availabilityChart'), {
       type:'bar',
@@ -871,13 +852,12 @@ function fillDatalist() {
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,max:100}} }
     });
 
-        if (charts.failures) charts.failures.destroy();
+    if (charts.failures) charts.failures.destroy();
     charts.failures = new Chart(document.getElementById('failuresChart'), {
       type:'bar',
       data:{ labels:locoIds, datasets:[{data:failureData, backgroundColor:'#dc2626'}] },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
     });
-
 
     if (charts.mttf) charts.mttf.destroy();
     charts.mttf = new Chart(document.getElementById('mttfChart'), {
@@ -886,7 +866,6 @@ function fillDatalist() {
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
     });
 
-    
     const reasons = getFilteredDelays().reduce((acc,d)=>{acc[d.reason]=(acc[d.reason]||0)+d.hours;return acc;},{});
     if (charts.delay) charts.delay.destroy();
     charts.delay = new Chart(document.getElementById('delayChart'), {
@@ -1624,12 +1603,25 @@ document.getElementById('search-form').addEventListener('submit', async e => {
 
   
   // ── Theme toggle ────────────────────────────────────────────────
-
-
-  
+ 
+  function toggleTheme() {
+    const html = document.documentElement;
+    if (html.getAttribute('data-theme') === 'dark') {
+      html.removeAttribute('data-theme');
+      localStorage.setItem('theme', 'light');
+      document.getElementById('theme-toggle').innerHTML = '☀️';
+    } else {
+      html.setAttribute('data-theme', 'dark');
+      localStorage.setItem('theme', 'dark');
+      document.getElementById('theme-toggle').innerHTML = '🌙';
+    }
+  }
 
   // ── Initial load ────────────────────────────────────────────────
-
+  if (localStorage.getItem('theme') === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('theme-toggle').innerHTML = '🌙';
+  }
 
   fillDatalist();
   show('dashboard');
