@@ -225,7 +225,7 @@
         <li data-section="manage-equipment"><i class="fas fa-tools"></i><span>Equipment Register</span></li>
         <li data-section="maintenance-schedule"><i class="fas fa-calendar-check"></i><span>Maintenance Plan</span></li>
         <li data-section="calendar"><i class="fas fa-calendar"></i><span>Calendar</span></li>
-       
+        <li data-section="operations-report"><i class="fas fa-file-alt"></i><span>Operations Report</span></li>
         <li data-section="import-spreadsheet"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
        
       </ul>
@@ -235,119 +235,55 @@
       <div class="container">
 
         <!-- DASHBOARD -->
-          // ── Dashboard ───────────────────────────────────────────────────
-  function populateDashboard() {
-    const filteredEq = getFilteredEquipment();
-    const locoIds = filteredEq.map(e => e.id);
-    const filteredUp = getFilteredUpdates();
-    const filteredMt = getFilteredMaintenance();
+        <section id="dashboard">
+          <div class="header-bar">
+            <h1>Real-time RBE Monitoring – Platinum Operations</h1>
+            <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+              <select id="shaft-filter" onchange="filterDashboard()">
+                <option value="">All Shafts</option>
+              </select>
+              <button class="btn btn-primary" onclick="exportDashboardPDF()"><i class="fas fa-file-pdf"></i> Export Dashboard PDF</button>
+            </div>
+          </div>
 
-    // KPIs
-    let operational = 0, downLt7d = 0, downGt7d = 0, totalAvail = 0;
-    locoIds.forEach(id => {
-      const st = getEquipmentStatus(id);
-      if (st.status === 'Up') operational++;
-      else if (st.downtime < 168) downLt7d++;
-      else downGt7d++;
-      totalAvail += parseFloat(st.availability);
-    });
-    const avgAvail = locoIds.length ? (totalAvail / locoIds.length).toFixed(1) : '0.0';
+          <div id="high-risk-alerts" class="alert-banner alert-high-risk hidden">
+            <strong><i class="fas fa-triangle-exclamation"></i> High Risk / Long Downtime Equipment</strong>
+            <ul id="high-risk-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
+          </div>
 
-    document.getElementById('kpi-grid').innerHTML = `
-      <div class="kpi-card green"><i class="fas fa-play-circle"></i><h2>${operational}</h2><p>Operational</p></div>
-      <div class="kpi-card orange"><i class="fas fa-clock"></i><h2>${downLt7d}</h2><p>Down <7d</p></div>
-      <div class="kpi-card red"><i class="fas fa-exclamation-circle"></i><h2>${downGt7d}</h2><p>Down >7d</p></div>
-      <div class="kpi-card blue"><i class="fas fa-percent"></i><h2>${avgAvail}</h2><p>Availability %</p></div>
-    `;
+          <div id="predictive-alerts" class="alert-banner alert-predictive hidden">
+            <strong><i class="fas fa-bell"></i> Predictive Maintenance – Due Soon / Overdue</strong>
+            <ul id="predictive-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
+          </div>
 
-    // Charts Data
-    const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
-    const failureData  = locoIds.map(id => filteredUp.filter(u => u.equipmentId === id && (u.isFailure === '1' || u.isFailure === 1)).length);
+          <div class="kpi-grid" id="kpi-grid"></div>
 
-    const mttfData = locoIds.map(id => {
-      const eu = filteredUp.filter(u => u.equipmentId === id);
-      const fails = eu.filter(u => u.isFailure === '1' || u.isFailure === 1).length;
-      if (fails === 0) return 0;
-      const uniqueDates = [...new Set(eu.map(u => u.date).filter(Boolean))];
-      if (uniqueDates.length === 0) return 0;
-      const sortedDates = uniqueDates.sort();
-      const minD = new Date(sortedDates[0]);
-      const maxD = new Date(sortedDates[sortedDates.length - 1]);
-      const totalDays = Math.max(1, Math.ceil((maxD - minD) / 86400000) + 1);
-      const downH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
-      const opDays = Math.max(0, totalDays - downH / 24);
-      return parseFloat((opDays / fails).toFixed(1));
-    });
+          <div class="card chart-wrapper">
+            <div class="chart-title"><i class="fas fa-chart-bar"></i> Fleet Availability (%)</div>
+            <div class="chart-container"><canvas id="availabilityChart"></canvas></div>
+          </div>
 
-    // Create / Destroy Charts Safely
-    const createBarChart = (id, data, color, label) => {
-      const canvas = document.getElementById(id);
-      if (!canvas) return;
-      if (charts[id]) charts[id].destroy();
-      charts[id] = new Chart(canvas, {
-        type: 'bar',
-        data: { 
-          labels: locoIds, 
-          datasets: [{ 
-            label: label,
-            data: data, 
-            backgroundColor: color,
-            borderColor: color,
-            borderWidth: 1
-          }] 
-        },
-        options: { 
-          responsive: true, 
-          maintainAspectRatio: false, 
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true } }
-        }
-      });
-    };
+          <div class="card chart-wrapper">
+            <div class="chart-title"><i class="fas fa-exclamation-triangle"></i> Failure Count by Equipment</div>
+            <div class="chart-container"><canvas id="failuresChart"></canvas></div>
+          </div>
 
-    createBarChart('availabilityChart', availData, '#1d4ed8', 'Availability %');
-    createBarChart('failuresChart', failureData, '#dc2626', 'Failures');
-    createBarChart('mttfChart', mttfData, '#ea580c', 'MTTF (Days)');
+          <div class="card chart-wrapper">
+            <div class="chart-title"><i class="fas fa-clock"></i> Mean Time To Failure (Days)</div>
+            <div class="chart-container"><canvas id="mttfChart"></canvas></div>
+          </div>
 
-    // Delay Pie Chart
-    const reasons = getFilteredDelays().reduce((acc, d) => {
-      acc[d.reason] = (acc[d.reason] || 0) + (parseFloat(d.hours) || 0);
-      return acc;
-    }, {});
-    if (charts.delay) charts.delay.destroy();
-    const delayCanvas = document.getElementById('delayChart');
-    if (delayCanvas) {
-      charts.delay = new Chart(delayCanvas, {
-        type: 'pie',
-        data: { 
-          labels: Object.keys(reasons), 
-          datasets: [{ 
-            data: Object.values(reasons), 
-            backgroundColor: ['#1d4ed8','#16a34a','#ea580c','#dc2626','#8b5cf6'] 
-          }] 
-        },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
-    }
+          <div class="card chart-wrapper">
+            <div class="chart-title"><i class="fas fa-chart-pie"></i> Delay Reasons – Current Week</div>
+            <div class="chart-container"><canvas id="delayChart"></canvas></div>
+          </div>
 
-    // Alerts
-    const highRisk = locoIds.filter(id => getEquipmentStatus(id).downtime > 168).map(id => {
-      const st = getEquipmentStatus(id);
-      return `${id} — ${st.downtime.toFixed(1)} hrs down`;
-    });
-    document.getElementById('high-risk-list').innerHTML = highRisk.map(s => `<li>${s}</li>`).join('');
-    document.getElementById('high-risk-alerts').classList.toggle('hidden', highRisk.length === 0);
+          <div class="card" style="border-left:6px solid var(--info);">
+            <h2><i class="fas fa-wrench"></i> Upcoming &amp; Overdue Maintenance</h2>
+            <div id="maintenance-list" style="display:grid;gap:1rem;font-size:0.98rem;"></div>
+          </div>
+        </section>
 
-    // Predictive maintenance (unchanged)
-    const predictive = filteredMt.map(m => ({...m, days: calculateDaysLeft(m.lastDone, m.interval)}))
-      .filter(m => !isNaN(m.days) && m.days <= 7);
-    document.getElementById('predictive-list').innerHTML = predictive.map(p => 
-      `<li>${p.equipment} — ${p.task} (${p.days >= 0 ? 'due in '+p.days+' days' : Math.abs(p.days)+' days overdue'})</li>`
-    ).join('');
-    document.getElementById('predictive-alerts').classList.toggle('hidden', predictive.length === 0);
-  }
-
-        
         <!-- ADD EQUIPMENT -->
         <section id="add-equipment" class="hidden">
           <div class="header-bar"><h1>Add New Equipment</h1></div>
