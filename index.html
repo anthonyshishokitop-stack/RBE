@@ -985,7 +985,7 @@ function fillDatalist() {
       alertBox.style.display = predictive.length > 0 ? 'block' : 'none';
     }
 
-    document.getElementById('high-risk-alerts').classList.toggle('hidden', highRisk.length===0);
+    document.getElementById('predictive-alerts').classList.toggle('hidden', predictive.length===0);
     document.getElementById('maintenance-list').innerHTML = filteredMt.map(m => {
       const days = calculateDaysLeft(m.lastDone, m.interval);
       const color = days<0 ? 'red' : (days<=7 ? 'orange' : 'green');
