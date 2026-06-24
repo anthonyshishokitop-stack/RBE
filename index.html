@@ -444,53 +444,87 @@
         </section>
 
 
-<!-- ==================== IMPORT BREAKDOWN SECTION ==================== -->
-<section id="import-spreadsheet" class="hidden">
-    <div class="header-bar">
-        <h1>📤 Import Breakdown Report (Excel)</h1>
+
+        
+<!-- ====================== IMPORT BREAKDOWN REPORT SECTION ====================== -->
+<div class="max-w-3xl mx-auto my-12">
+  <!-- Header -->
+  <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white rounded-3xl p-8 shadow-2xl mb-8">
+    <div class="flex items-center gap-4">
+      <div class="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center flex-shrink-0">
+        <i class="fa-solid fa-file-excel text-4xl"></i>
+      </div>
+      <div>
+        <h2 class="text-3xl font-bold tracking-tight">Import Breakdown Report (Excel)</h2>
+        <p class="text-blue-100 mt-1">Upload and process equipment breakdown data</p>
+      </div>
     </div>
-    
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            
-            <!-- File Upload -->
-            <div class="mb-3">
-                <label class="form-label fw-bold">Select Excel File (.xlsx)</label>
-                <input type="file" id="excel-file" accept=".xlsx, .xls" class="form-control">
-                <small class="text-muted">Only the sheet containing "breakdown" will be used.</small>
-            </div>
+  </div>
 
-            <!-- Action Buttons -->
-            <div class="d-grid gap-2">
-                <button onclick="handleFileUpload()" class="btn btn-primary btn-lg">
-                    📤 Parse Excel & Start Mapping
-                </button>
-                
-                <button onclick="startColumnMapping()" class="btn btn-outline-secondary">
-                    🔄 Manual Mapping
-                </button>
-            </div>
+  <!-- Main Card -->
+  <div class="bg-gray-900 border border-gray-700 rounded-3xl shadow-xl p-10">
+    <div class="space-y-10">
 
-            <!-- Status -->
-            <div id="import-status" class="mt-3 alert alert-info" style="display:none;"></div>
-            
-            <!-- Preview Area -->
-            <div id="mapping-preview" class="mt-4" style="display:none;">
-                <h6>Preview of Imported Data</h6>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered" id="preview-table"></table>
-                </div>
-            </div>
-
+      <!-- File Upload -->
+      <div>
+        <label class="block text-sm font-semibold text-gray-400 mb-3">Select Excel File (.xlsx)</label>
+        <div id="dropZone" 
+             class="border-2 border-dashed border-gray-600 hover:border-blue-500 rounded-3xl p-12 text-center transition-all cursor-pointer group">
+          <input type="file" id="excelFile" accept=".xlsx" class="hidden">
+          
+          <div class="mx-auto w-20 h-20 bg-gray-800 rounded-3xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-cloud-arrow-up text-5xl text-blue-400"></i>
+          </div>
+          
+          <button onclick="document.getElementById('excelFile').click()" 
+                  class="px-8 py-4 bg-gray-800 hover:bg-gray-700 rounded-2xl text-white font-medium inline-flex items-center gap-3 transition-colors">
+            <i class="fa-solid fa-folder-open"></i>
+            Choose File
+          </button>
+          
+          <p id="selectedFile" class="mt-4 text-sm text-gray-400">No file chosen</p>
         </div>
-        <div class="card-footer">
-            <button onclick="importSelectedRows()" class="btn btn-success w-100">
-                ✅ Import to Database (Firebase)
-            </button>
-        </div>
+      </div>
+
+      <!-- Info Box -->
+      <div class="bg-gray-800/70 border border-gray-700 rounded-2xl p-5 flex items-start gap-4">
+        <i class="fa-solid fa-circle-info text-blue-400 mt-1 text-xl"></i>
+        <p class="text-gray-300 text-sm">
+          Only the sheet containing <span class="font-mono bg-gray-900 px-2 py-0.5 rounded text-amber-400">"breakdown"</span> will be used.
+        </p>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5 pt-4">
+        <!-- Primary Button -->
+        <button onclick="parseExcelFile()" 
+                class="md:col-span-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-6 rounded-3xl text-lg shadow-lg shadow-blue-500/30 flex items-center justify-center gap-4 transition-all active:scale-95">
+          <i class="fa-solid fa-file-lines"></i>
+          Parse Excel & Start Mapping
+        </button>
+
+        <!-- Secondary -->
+        <button onclick="manualMapping()" 
+                class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-medium py-6 rounded-3xl flex items-center justify-center gap-3 transition-all">
+          <i class="fa-solid fa-keyboard"></i>
+          Manual Mapping
+        </button>
+      </div>
+
+      <!-- Import Button -->
+      <button onclick="importToDatabase()" 
+              class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-6 rounded-3xl text-lg shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-4 transition-all active:scale-95">
+        <i class="fa-solid fa-check-circle"></i>
+        Import to Database (Firebase)
+      </button>
     </div>
-</section>
+  </div>
+</div>
+<!-- ====================== END IMPORT SECTION ====================== -->
 
+
+
+        
                 <!-- CONTROL ROOM REPORT -->
         <section id="control-room" class="hidden">
           <div class="header-bar">
