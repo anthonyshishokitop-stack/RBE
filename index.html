@@ -823,6 +823,8 @@ function fillDatalist() {
     return Math.ceil((new Date(due) - new Date()) / 86400000);
   }
 
+  
+
 // ── Real-time Predictive Maintenance & Notifications ─────────────────────
 function updatePredictiveNotifications() {
   const dashboard = document.getElementById('dashboard');
@@ -841,7 +843,7 @@ function updatePredictiveNotifications() {
     return !isNaN(days) && days >= 0 && days <= 7;
   });
 
-  // Create/Update alert banner (dynamic)
+  // Create/Update alert banner
   let alertContainer = document.getElementById('predictive-alert');
   if (!alertContainer) {
     alertContainer = document.createElement('div');
@@ -855,14 +857,22 @@ function updatePredictiveNotifications() {
     alertContainer.innerHTML = `
       <strong>⚠️ Predictive Maintenance Alert:</strong> 
       ${overdue.length} Overdue | ${dueSoon.length} Due Soon (≤7 days)
-      <button onclick="show('maintenance-schedule')" class="btn btn-danger" style="margin-left:12px; font-size:0.9rem;">View Full Schedule</button>
+      <button id="view-schedule-btn" class="btn btn-danger" style="margin-left:12px; font-size:0.9rem;">View Full Schedule</button>
     `;
     alertContainer.style.display = 'block';
+
+    // Attach event listener properly (works for dynamic buttons)
+    const viewBtn = document.getElementById('view-schedule-btn');
+    if (viewBtn) {
+      viewBtn.onclick = () => {
+        show('maintenance-schedule');
+      };
+    }
   } else {
     alertContainer.style.display = 'none';
   }
 
-  // Also ensure dashboard lists update
+  // Ensure dashboard lists update
   populateDashboard();
 }
 
