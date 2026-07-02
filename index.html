@@ -1214,94 +1214,95 @@ function populateMaintTable() {
     }
   }
 
-  // ── Export functions ────────────────────────────────────────────
-// ── Export functions (Made global for onclick handlers) ─────────────
-window.exportDashboardPDF = function() {
-  const dashboardEl = document.getElementById('dashboard');
-  if (!dashboardEl) return alert("Dashboard section not found");
+
   
-  html2canvas(dashboardEl, {scale:2}).then(canvas => {
-    const {jsPDF} = window.jspdf;
-    const doc = new jsPDF('p','mm','a4');
-    const img = canvas.toDataURL('image/png');
-    const w = doc.internal.pageSize.getWidth();
-    const h = (canvas.height * w) / canvas.width;
-    doc.addImage(img, 'PNG', 0, 0, w, h > 280 ? 280 : h);
+// ── Export functions (Global + Error Handling) ─────────────────────────────
+window.exportDashboardPDF = function() {
+  const el = document.getElementById('dashboard');
+  if (!el) return alert("❌ Dashboard section not visible. Switch to Dashboard first.");
+  
+  html2canvas(el, { scale: 2, useCORS: true }).then(canvas => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const imgData = canvas.toDataURL('image/png');
+    const pdfWidth = doc.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight > 280 ? 280 : pdfHeight);
     doc.save('RBE_Dashboard.pdf');
-  }).catch(err => alert("Export failed: " + err.message));
+  }).catch(err => {
+    console.error(err);
+    alert("❌ Dashboard PDF export failed. Check console (F12) for details.");
+  });
 };
 
 window.exportSummaryPDF = function() {
-  const summaryEl = document.getElementById('summary');
-  if (!summaryEl) return alert("Summary section not found");
+  const el = document.getElementById('summary');
+  if (!el) return alert("❌ Switch to Fleet Summary tab first.");
   
-  html2canvas(summaryEl, {scale:2}).then(canvas => {
-    const {jsPDF} = window.jspdf;
-    const doc = new jsPDF('p','mm','a4');
-    const img = canvas.toDataURL('image/png');
-    const w = doc.internal.pageSize.getWidth();
-    const h = (canvas.height * w) / canvas.width;
-    doc.addImage(img, 'PNG', 0, 0, w, h > 280 ? 280 : h);
+  html2canvas(el, { scale: 2, useCORS: true }).then(canvas => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const imgData = canvas.toDataURL('image/png');
+    const pdfWidth = doc.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight > 280 ? 280 : pdfHeight);
     doc.save('Fleet_Summary.pdf');
   }).catch(err => alert("Export failed: " + err.message));
 };
 
+window.exportOperationsReportPDF = function() {
+  const el = document.getElementById('operations-report');
+  if (!el) return alert("❌ Switch to Operations Report tab first.");
+  
+  html2canvas(el, { scale: 2, useCORS: true }).then(canvas => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const imgData = canvas.toDataURL('image/png');
+    const pdfWidth = doc.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight > 280 ? 280 : pdfHeight);
+    doc.save('Operations_Report.pdf');
+  }).catch(err => alert("Export failed: " + err.message));
+};
+
+// Other exports (kept short)
 window.exportEquipmentPDF = function() {
-  const {jsPDF} = window.jspdf;
+  const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.text("Equipment Register", 20, 20);
-  const data = getFilteredEquipment().map(e => [e.shaft||'', e.level||'', e.locoSize||'', e.id, e.section||'']);
-  doc.autoTable({head:[['Shaft','Level','Loco Size','Loco Number','SECTION']], body:data, startY:35});
+  const data = getFilteredEquipment().map(e => [e.shaft||'-', e.level||'-', e.locoSize||'-', e.id, e.section||'-']);
+  doc.autoTable({ head: [['Shaft','Level','Loco Size','Equipment ID','SECTION']], body: data, startY: 35 });
   doc.save('Equipment_Register.pdf');
+};
+
+window.exportMaintPDF = function() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.text("Maintenance Schedule", 20, 20);
+  const data = maintenance.map(m => [
+    m.equipment, m.task, m.interval, m.lastDone, 
+    calculateNextDue(m.lastDone, m.interval)||'-', 
+    calculateDaysLeft(m.lastDone, m.interval)
+  ]);
+  doc.autoTable({ 
+    head: [['Equipment','Task','Interval','Last Done','Due','Days Left']], 
+    body: data, startY: 35 
+  });
+  doc.save('Maintenance_Schedule.pdf');
 };
 
 window.exportLogCSV = function() {
   let csv = "Date,Time,ID,Status,Shift,Fault,Down Hrs,Failure\n";
   getFilteredUpdates().forEach(u => {
-    csv += `"${u.date || ''}","${u.time || ''}","${u.equipmentId || ''}","${u.status || ''}","${u.shift || ''}","${(u.reason||'').replace(/"/g,'""')}",${u.downtimeHours||0},${u.isFailure||''}\n`;
+    csv += `"${u.date||''}","${u.time||''}","${u.equipmentId||''}","${u.status||''}","${u.shift||''}","${(u.reason||'').replace(/"/g,'""')}",${u.downtimeHours||0},${u.isFailure||''}\n`;
   });
-  const blob = new Blob([csv], {type:'text/csv'});
+  const blob = new Blob([csv], { type: 'text/csv' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = 'RBE_Full_Log.csv';
   link.click();
 };
-
-window.exportMaintPDF = function() {
-  const {jsPDF} = window.jspdf;
-  const doc = new jsPDF();
-  doc.text("Maintenance Schedule", 20, 20);
-  const data = maintenance.map(m => [m.equipment, m.task, m.interval, m.lastDone, calculateNextDue(m.lastDone,m.interval)||'-', calculateDaysLeft(m.lastDone,m.interval)]);
-  doc.autoTable({head:[['Equipment','Task','Interval','Last Done','Due','Days Left']], body:data, startY:35});
-  doc.save('Maintenance_Schedule.pdf');
-};
-
-window.exportOperationsReportPDF = function() {
-  const reportEl = document.getElementById('operations-report');
-  if (!reportEl) return alert("Operations Report section not found");
-  
-  html2canvas(reportEl, {scale:2}).then(canvas => {
-    const {jsPDF} = window.jspdf;
-    const doc = new jsPDF('p','mm','a4');
-    const img = canvas.toDataURL('image/png');
-    const w = doc.internal.pageSize.getWidth();
-    const h = (canvas.height * w) / canvas.width;
-    doc.addImage(img, 'PNG', 0, 0, w, h > 280 ? 280 : h);
-    doc.save('Operations_Report.pdf');
-  }).catch(err => alert("Export failed: " + err.message));
-};
-
-window.exportControlRoomCSV = function() {   let csv = "Date,Time,ID,Status,Shift,Fault,Down Hrs,Failure\n";
-    const filtered = updates.filter(u => u.source === 'Imported Breakdown Report')
-      .sort((a,b) => new Date(b.date + ' ' + b.time) - new Date(a.date + ' ' + a.time));
-    filtered.forEach(u => {
-      csv += `"${u.date || ''}","${u.time || ''}","${u.equipmentId || ''}","${u.status || ''}","${u.shift || ''}","${(u.reason||'').replace(/"/g,'""')}","${u.downtimeHours||0}","${u.isFailure||'0'}"\n`;
-    });
-    const blob = new Blob([csv], {type:'text/csv'});
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'Control_Room_Report.csv';
-    link.click(); };
   
 
 // ====================== EXCEL IMPORT BREAKDOWN ======================
