@@ -785,29 +785,49 @@ function fillDatalist() {
     return delaysData.filter(d => ids.includes(d.equipment));
   }
 
-  function getEquipmentStatus(id) {
-    const eu = updates.filter(u => u.equipmentId === id).sort((a,b) => new Date(b.date+' '+b.time) - new Date(a.date+' '+a.time));
-    if (!eu.length) return {status:'Up', downtime:0, availability:'100.0', lastUpdate:'-', color:'green'};
 
-    const last = eu[0];
-    if (last.status === 'Fixed') return {status:'Up', downtime:0, availability:'100.0', lastUpdate:`${last.date} ${last.time}`, color:'green'};
-
-    const totalDowntimeH = eu.reduce((s,u) => s + (parseFloat(u.downtimeHours)||0), 0);
-    const datesForCalc = [...new Set(eu.map(u=>u.date))].sort();
-    const minD = datesForCalc[0] || new Date().toISOString().slice(0,10);
-    const maxD = datesForCalc[datesForCalc.length-1] || new Date().toISOString().slice(0,10);
-    const totalDays = Math.ceil((new Date(maxD) - new Date(minD)) / 86400000) + 1;
-    const avail = totalDays > 0 ? Math.max(0, Math.min(100, (totalDays - totalDowntimeH/24) / totalDays * 100)) : 100;
-
-    return {
-      status: 'Down',
-      downtime: totalDowntimeH,
-      availability: avail.toFixed(1),
-      lastUpdate: `${last.date} ${last.time}`,
-      color: totalDowntimeH > 168 ? 'red' : 'orange'
+  
+function getEquipmentStatus(id) {
+  const eu = updates.filter(u => u.equipmentId === id);
+  
+  if (eu.length === 0) {
+    return { 
+      status: 'Up', 
+      downtime: 0, 
+      availability: '100.0', 
+      lastUpdate: '-', 
+      color: 'green',
+      totalEntries: 0,
+      failures: 0
     };
   }
 
+  const last = eu.sort((a,b) => new Date(b.date+' '+b.time) - new Date(a.date+' '+b.time))[0];
+  
+  const totalEntries = eu.length;
+  const downEntries = eu.filter(u => u.status === 'Down').length;
+  const failures = eu.filter(u => u.isFailure === '1' || u.isFailure === 1).length;
+
+  // New Availability based on number of entries
+  const availability = totalEntries > 0 
+    ? ((totalEntries - downEntries) / totalEntries * 100).toFixed(1) 
+    : '100.0';
+
+  const status = downEntries > 0 && (last.status === 'Down') ? 'Down' : 'Up';
+
+  return {
+    status: status,
+    downtime: eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0), // keep hours for reference
+    availability: availability,
+    lastUpdate: `${last.date} ${last.time}`,
+    color: parseFloat(availability) < 70 ? 'red' : (parseFloat(availability) < 90 ? 'orange' : 'green'),
+    totalEntries: totalEntries,
+    failures: failures
+  };
+}
+
+
+  
   function calculateNextDue(last, interval) {
     if (!last) return null;
     const d = new Date(last);
@@ -906,21 +926,16 @@ function updatePredictiveNotifications() {
     const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
     const failureData  = locoIds.map(id => filteredUp.filter(u=>u.equipmentId===id && u.isFailure==='1').length);
 
-    const mttfData = locoIds.map(id => {
-      const eu = filteredUp.filter(u => u.equipmentId === id);
-      const fails = eu.filter(u => u.isFailure === '1').length;
-      if (fails === 0) return 0;
-      const uniqueDates = [...new Set(eu.map(u => u.date))];
-      if (uniqueDates.length === 0) return 0;
-      const sortedDates = uniqueDates.sort();
-      const minD = new Date(sortedDates[0]);
-      const maxD = new Date(sortedDates[sortedDates.length - 1]);
-      const totalDays = Math.ceil((maxD - minD) / 86400000) + 1;
-      const downH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
-      const opDays = Math.max(0, totalDays - downH / 24);
-      return parseFloat((opDays / fails).toFixed(1));
-    });
 
+const mttfData = locoIds.map(id => {
+  const eu = filteredUp.filter(u => u.equipmentId === id);
+  const fails = eu.filter(u => u.isFailure === '1' || u.isFailure === 1).length;
+  
+  if (fails === 0 || eu.length === 0) return 0;
+  
+  // New MTTF: Total entries / failures
+  return parseFloat((eu.length / fails).toFixed(1));
+});
     if (charts.avail) charts.avail.destroy();
     charts.avail = new Chart(document.getElementById('availabilityChart'), {
       type:'bar',
@@ -1058,23 +1073,18 @@ function populateOperationsReport() {
       problemRows.push([id, 'Down', color, lastDown?.reason || '-', st.downtime.toFixed(1)]);
     }
 
-    const fails = updates.filter(u => u.equipmentId === id && u.isFailure === '1').length;
-    if (fails >= 3 || parseFloat(st.availability) < 92) {
+    // Updated for entry-based calculation
+    const fails = updates.filter(u => u.equipmentId === id && (u.isFailure === '1' || u.isFailure === 1)).length;
+    const avail = parseFloat(st.availability);
+
+    if (fails >= 3 || avail < 85) {   // Adjusted threshold for new logic
       let mttfVal = 'N/A';
       const eu = updates.filter(u => u.equipmentId === id);
       if (fails > 0) {
-        const uniqueDates = [...new Set(eu.map(u => u.date))];
-        if (uniqueDates.length > 0) {
-          const sortedDates = uniqueDates.sort();
-          const minD = new Date(sortedDates[0]);
-          const maxD = new Date(sortedDates[sortedDates.length - 1]);
-          const totalDays = Math.ceil((maxD - minD) / 86400000) + 1;
-          const downH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
-          const opDays = Math.max(0, totalDays - downH / 24);
-          mttfVal = (opDays / fails).toFixed(1);
-        }
+        // New MTTF: Total entries / failures
+        mttfVal = (eu.length / fails).toFixed(1);
       }
-      highRiskRows.push([id, fails, mttfVal, st.availability]);
+      highRiskRows.push([id, fails, mttfVal, avail]);
     }
   });
 
