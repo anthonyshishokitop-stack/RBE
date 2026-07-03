@@ -670,12 +670,12 @@ function startRealtimeListeners() {
     equipment = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     fillDatalist();
     refreshCurrentView();
-    updatePredictiveNotifications();  // NEW
+    updatePredictiveNotifications();
     console.log(`✅ Equipment loaded: ${equipment.length}`);
   });
   unsubscribeFunctions.push(unsubEq);
 
-  // Status Updates - Enhanced for live dashboard
+  // Status Updates - Enhanced
   const unsubUpdates = onSnapshot(
     query(collection(db, "status_updates"), 
           orderBy("date","desc"), 
@@ -683,21 +683,21 @@ function startRealtimeListeners() {
     snap => {
       updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       refreshCurrentView();
-      updatePredictiveNotifications();  // NEW - triggers predictive alerts
+      updatePredictiveNotifications();
       console.log(`✅ Updates loaded: ${updates.length}`);
     }
   );
   unsubscribeFunctions.push(unsubUpdates);
 
-  // Maintenance - Critical for predictive maintenance
+  // Maintenance
   const unsubMaint = onSnapshot(collection(db, "maintenance"), snap => {
     maintenance = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     refreshCurrentView();
-    updatePredictiveNotifications();  // NEW
+    updatePredictiveNotifications();
   });
   unsubscribeFunctions.push(unsubMaint);
 
-  // Delays
+  // Delays - Important for Operations Report
   const unsubDelays = onSnapshot(collection(db, "delays"), snap => {
     delaysData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     refreshCurrentView();
@@ -722,14 +722,14 @@ function refreshCurrentView() {
 
   if (section === 'dashboard') {
     populateDashboard();
-    updatePredictiveNotifications();  // Ensure notifications refresh
+    updatePredictiveNotifications();
   }
   else if (section === 'status-log') populateLogTable();
   else if (section === 'summary') populateSummaryTable();
   else if (section === 'manage-equipment') populateEquipmentTable();
   else if (section === 'maintenance-schedule') populateMaintTable();
   else if (section === 'calendar') initCalendar();
-  else if (section === 'operations-report') populateOperationsReport();
+  else if (section === 'operations-report') populateOperationsReport();  // ← Now reliably called
   else if (section === 'control-room') populateControlRoom();
 }
 
@@ -1040,54 +1040,65 @@ function updatePredictiveNotifications() {
 
   
   // ── Other populate functions ────────────────────────────────────
-  function populateOperationsReport() {
-    const allIds = equipment.map(e => e.id);
-    const statusSummary = {Up:0, Down:0};
-    const problemRows = [];
-    const highRiskRows = [];
+function populateOperationsReport() {
+  const allIds = equipment.map(e => e.id);
+  const statusSummary = {Up:0, Down:0};
+  const problemRows = [];
+  const highRiskRows = [];
 
-    allIds.forEach(id => {
-      const st = getEquipmentStatus(id);
-      statusSummary[st.status] = (statusSummary[st.status]||0) + 1;
+  allIds.forEach(id => {
+    const st = getEquipmentStatus(id);
+    statusSummary[st.status] = (statusSummary[st.status]||0) + 1;
 
-      if (st.status === 'Down') {
-        const eu = updates.filter(u => u.equipmentId === id).sort((a,b)=>new Date(b.date+' '+b.time)-new Date(a.date+' '+a.time));
-        const lastDown = eu.find(u => u.status === 'Down');
-        const color = st.downtime>168?'RED':'ORANGE';
-        problemRows.push([id, 'Down', color, lastDown?.reason||'-', st.downtime.toFixed(1)]);
-      }
+    if (st.status === 'Down') {
+      const eu = updates.filter(u => u.equipmentId === id)
+                       .sort((a,b) => new Date(b.date+' '+b.time) - new Date(a.date+' '+b.time));
+      const lastDown = eu.find(u => u.status === 'Down');
+      const color = st.downtime > 168 ? 'RED' : 'ORANGE';
+      problemRows.push([id, 'Down', color, lastDown?.reason || '-', st.downtime.toFixed(1)]);
+    }
 
-      const fails = updates.filter(u => u.equipmentId===id && u.isFailure==='1').length;
-      if (fails >= 3 || parseFloat(st.availability) < 92) {
-        let mttfVal = 'N/A';
-        const eu = updates.filter(u => u.equipmentId === id);
-        if (fails > 0) {
-          const uniqueDates = [...new Set(eu.map(u => u.date))];
-          if (uniqueDates.length > 0) {
-            const sortedDates = uniqueDates.sort();
-            const minD = new Date(sortedDates[0]);
-            const maxD = new Date(sortedDates[sortedDates.length - 1]);
-            const totalDays = Math.ceil((maxD - minD) / 86400000) + 1;
-            const downH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
-            const opDays = Math.max(0, totalDays - downH / 24);
-            mttfVal = (opDays / fails).toFixed(1);
-          }
+    const fails = updates.filter(u => u.equipmentId === id && u.isFailure === '1').length;
+    if (fails >= 3 || parseFloat(st.availability) < 92) {
+      let mttfVal = 'N/A';
+      const eu = updates.filter(u => u.equipmentId === id);
+      if (fails > 0) {
+        const uniqueDates = [...new Set(eu.map(u => u.date))];
+        if (uniqueDates.length > 0) {
+          const sortedDates = uniqueDates.sort();
+          const minD = new Date(sortedDates[0]);
+          const maxD = new Date(sortedDates[sortedDates.length - 1]);
+          const totalDays = Math.ceil((maxD - minD) / 86400000) + 1;
+          const downH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
+          const opDays = Math.max(0, totalDays - downH / 24);
+          mttfVal = (opDays / fails).toFixed(1);
         }
-        highRiskRows.push([id, fails, mttfVal, st.availability]);
       }
-    });
+      highRiskRows.push([id, fails, mttfVal, st.availability]);
+    }
+  });
 
-    const total = allIds.length;
-    const opBody = [
-      ['Up (Green)', statusSummary.Up, total ? ((statusSummary.Up/total)*100).toFixed(2)+'%' : '0.00%'],
-      ['Down', statusSummary.Down, total ? ((statusSummary.Down/total)*100).toFixed(2)+'%' : '0.00%'],
-      ['Total', total, '100.00%']
-    ];
+  const total = allIds.length;
+  const opBody = [
+    ['Up (Green)', statusSummary.Up, total ? ((statusSummary.Up/total)*100).toFixed(2)+'%' : '0.00%'],
+    ['Down', statusSummary.Down, total ? ((statusSummary.Down/total)*100).toFixed(2)+'%' : '0.00%'],
+    ['Total', total, '100.00%']
+  ];
 
-    document.getElementById('op-status-tbody').innerHTML = opBody.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
-    document.getElementById('problem-equipment-tbody').innerHTML = problemRows.length ? problemRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:20px;">No problem equipment</td></tr>';
-    document.getElementById('high-risk-tbody').innerHTML = highRiskRows.length ? highRiskRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}%</td></tr>`).join('') : '<tr><td colspan="4" style="text-align:center;padding:20px;">No high-risk equipment</td></tr>';
-  }
+  // Update tables
+  document.getElementById('op-status-tbody').innerHTML = 
+    opBody.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+
+  document.getElementById('problem-equipment-tbody').innerHTML = 
+    problemRows.length 
+      ? problemRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`).join('') 
+      : '<tr><td colspan="5" style="text-align:center;padding:20px;">No problem equipment</td></tr>';
+
+  document.getElementById('high-risk-tbody').innerHTML = 
+    highRiskRows.length 
+      ? highRiskRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}%</td></tr>`).join('') 
+      : '<tr><td colspan="4" style="text-align:center;padding:20px;">No high-risk equipment</td></tr>';
+}
 
   function searchStatus(loco, date, all) {
     let results = updates.filter(u => u.equipmentId === loco);
