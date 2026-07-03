@@ -729,7 +729,9 @@ function refreshCurrentView() {
   else if (section === 'manage-equipment') populateEquipmentTable();
   else if (section === 'maintenance-schedule') populateMaintTable();
   else if (section === 'calendar') initCalendar();
-  else if (section === 'operations-report') populateOperationsReport();  // ← Now reliably called
+  else if (section === 'operations-report') {
+    populateOperationsReport();   // Force full refresh
+  }
   else if (section === 'control-room') populateControlRoom();
 }
 
@@ -1073,15 +1075,14 @@ function populateOperationsReport() {
       problemRows.push([id, 'Down', color, lastDown?.reason || '-', st.downtime.toFixed(1)]);
     }
 
-    // Updated for entry-based calculation
+    // Entry-based High Risk
     const fails = updates.filter(u => u.equipmentId === id && (u.isFailure === '1' || u.isFailure === 1)).length;
     const avail = parseFloat(st.availability);
 
-    if (fails >= 3 || avail < 85) {   // Adjusted threshold for new logic
+    if (fails >= 3 || avail < 85) {
       let mttfVal = 'N/A';
       const eu = updates.filter(u => u.equipmentId === id);
       if (fails > 0) {
-        // New MTTF: Total entries / failures
         mttfVal = (eu.length / fails).toFixed(1);
       }
       highRiskRows.push([id, fails, mttfVal, avail]);
@@ -1095,7 +1096,6 @@ function populateOperationsReport() {
     ['Total', total, '100.00%']
   ];
 
-  // Update tables
   document.getElementById('op-status-tbody').innerHTML = 
     opBody.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
 
