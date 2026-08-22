@@ -209,6 +209,7 @@
 <div id="app" class="hidden">
 
   <button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+  
   <button id="logout-btn" style="position:fixed;bottom:16px;left:70px;z-index:1102;padding:0.6rem 1.2rem;background:none;color:black;border:none;border-radius:999px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(220,38,38,0.4);">Logout</button>
 
   <div class="wrapper">
@@ -219,6 +220,8 @@
 
         
         <button onclick="document.getElementById('sidebar').classList.remove('open')" style="background:none;border:none;color:white;font-size:2.3rem;cursor:pointer;">×</button>
+
+        
       </div>
       <ul id="sidebar-menu">
         <li class="active" data-section="dashboard"><i class="fas fa-tachometer-alt"></i><span>Dashboard</span></li>
