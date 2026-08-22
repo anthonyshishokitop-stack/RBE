@@ -172,6 +172,22 @@
       .main { padding-top: 74px; }
       .header-bar { flex-direction: column; align-items: flex-start; gap: 0.9rem; }
     }
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+}
+#sidebar-menu {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+#sidebar-menu li#logout-btn:hover {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+
+    
     @media (max-width: 640px) {
       .kpi-grid { grid-template-columns: 1fr; gap: 0.9rem; }
       .chart-container { height: 240px; }
@@ -181,6 +197,9 @@
       .btn { padding: 0.65rem 1.25rem; }
       .modal-content { padding: 1.2rem; }
     }
+
+
+    
   </style>
 </head>
 <body>
@@ -209,8 +228,6 @@
 <div id="app" class="hidden">
 
   <button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
-  
-  <button id="logout-btn" style="position:fixed;bottom:16px;left:70px;z-index:1102;padding:0.6rem 1.2rem;background:none;color:black;border:none;border-radius:999px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(220,38,38,0.4);">Logout</button>
 
   <div class="wrapper">
     <aside class="sidebar" id="sidebar">
@@ -235,6 +252,8 @@
         <li data-section="calendar"><i class="fas fa-calendar"></i><span>Calendar</span></li>
         <li data-section="operations-report"><i class="fas fa-file-alt"></i><span>Operations Report</span></li>
         <li data-section="import-spreadsheet"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
+
+        <li id="logout-btn" style="margin-top:auto; color:#fca5a5; border-top:1px solid #334155; margin-top:1rem; padding-top:1rem;"> <i class="fas fa-sign-out-alt"></i><span>Logout</span></li>
        
       </ul>
     </aside>
