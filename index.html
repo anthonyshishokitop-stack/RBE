@@ -763,9 +763,12 @@ function refreshCurrentView() {
   else if (section === 'control-room') populateControlRoom();
 }
 
-  document.querySelectorAll('#sidebar-menu li').forEach(li => {
-    li.addEventListener('click', () => show(li.dataset.section));
+document.querySelectorAll('#sidebar-menu li').forEach(li => {
+  li.addEventListener('click', () => {
+    if (li.id === 'logout-btn') return; // let the logout handler do its job
+    show(li.dataset.section);
   });
+});
 
   // ── Utility functions ───────────────────────────────────────────
 function fillDatalist() {
