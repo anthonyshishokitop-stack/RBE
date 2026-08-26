@@ -198,6 +198,19 @@
       .modal-content { padding: 1.2rem; }
     }
 
+    /* Import steps */
+.import-step {
+  flex:1; min-width:140px; padding:0.65rem 1rem; background:var(--surface-2);
+  border-radius:8px; font-size:0.88rem; font-weight:600; color:var(--text-2);
+  display:flex; align-items:center; gap:8px;
+}
+.import-step span {
+  width:22px; height:22px; border-radius:50%; background:#94a3b8; color:white;
+  display:flex; align-items:center; justify-content:center; font-size:0.75rem;
+}
+.import-step.active { background:rgba(29,78,216,0.12); color:var(--primary); }
+.import-step.active span { background:var(--primary); }
+
 
     
   </style>
@@ -479,58 +492,79 @@
     <h1><i class="fas fa-file-excel" style="margin-right:10px;"></i>Import Breakdown Report</h1>
   </div>
 
-
   <div class="card" style="width:100%;">
     <!-- Step indicator -->
-    <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;">
-      <div style="flex:1;min-width:140px;padding:0.65rem 1rem;background:var(--surface-2);border-radius:8px;font-size:0.88rem;font-weight:600;color:var(--text-2);display:flex;align-items:center;gap:8px;">
-        <span style="width:22px;height:22px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:0.75rem;">1</span>
-        Select File
+    <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;" id="import-steps">
+      <div class="import-step active" data-step="1">
+        <span>1</span> Select File
       </div>
-      <div style="flex:1;min-width:140px;padding:0.65rem 1rem;background:var(--surface-2);border-radius:8px;font-size:0.88rem;font-weight:600;color:var(--text-2);display:flex;align-items:center;gap:8px;">
-        <span style="width:22px;height:22px;border-radius:50%;background:#94a3b8;color:white;display:flex;align-items:center;justify-content:center;font-size:0.75rem;">2</span>
-        Parse & Map
+      <div class="import-step" data-step="2">
+        <span>2</span> Auto-Detect & Map
       </div>
-      <div style="flex:1;min-width:140px;padding:0.65rem 1rem;background:var(--surface-2);border-radius:8px;font-size:0.88rem;font-weight:600;color:var(--text-2);display:flex;align-items:center;gap:8px;">
-        <span style="width:22px;height:22px;border-radius:50%;background:#94a3b8;color:white;display:flex;align-items:center;justify-content:center;font-size:0.75rem;">3</span>
-        Import
+      <div class="import-step" data-step="3">
+        <span>3</span> Preview & Import
       </div>
     </div>
 
     <!-- File upload -->
     <div class="form-group">
-      <label for="excel-file">Select Excel File (.xlsx / .xls)</label>
+      <label for="excel-file">Select Excel File (.xlsx / .xls) — any layout, any sheets</label>
       <div style="position:relative;">
         <input type="file" id="excel-file" accept=".xlsx,.xls"
                style="padding:0.85rem 1rem;border:2px dashed var(--border);border-radius:var(--radius-md);background:var(--surface-2);cursor:pointer;width:100%;">
       </div>
       <p style="margin-top:0.5rem;font-size:0.88rem;color:var(--text-3);">
         <i class="fas fa-info-circle" style="margin-right:4px;"></i>
-        Only the sheet whose name contains <strong>“breakdown”</strong> will be used.
+        The system will automatically scan <strong>all sheets</strong>, find header rows, map columns intelligently, and ignore titles / empty rows.
       </p>
+    </div>
+
+    <!-- Optional shaft override -->
+    <div class="form-group" style="margin-top:1rem;">
+      <label for="import-shaft">Force Shaft (optional – leave empty to auto-detect from sheet name or “Working Place”)</label>
+      <select id="import-shaft" style="max-width:320px;">
+        <option value="">Auto-detect</option>
+
+
+        
+      </select>
     </div>
 
     <!-- Action buttons -->
     <div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin:1.5rem 0 1rem;">
-      <button onclick="handleFileUpload()" class="btn btn-primary" style="flex:1;min-width:200px;justify-content:center;">
-        <i class="fas fa-file-import"></i> Parse Excel &amp; Start Mapping
+      <button onclick="handleFileUpload()" class="btn btn-primary" style="flex:1;min-width:220px;justify-content:center;">
+        <i class="fas fa-magic"></i> Smart Parse &amp; Auto-Map
       </button>
-      <button onclick="startColumnMapping()" class="btn" style="flex:1;min-width:160px;justify-content:center;background:var(--surface-2);color:var(--text);border:1px solid var(--border);">
-        <i class="fas fa-columns"></i> Manual Mapping
+      <button onclick="showManualMapping()" class="btn" style="flex:1;min-width:160px;justify-content:center;background:var(--surface-2);color:var(--text);border:1px solid var(--border);">
+        <i class="fas fa-columns"></i> Manual Column Mapping
       </button>
     </div>
 
-    <!-- Status message -->
+    <!-- Status -->
     <div id="import-status" style="display:none;margin:1rem 0;padding:1rem 1.25rem;border-radius:var(--radius-md);font-weight:500;"></div>
+
+    <!-- Sheet selector (appears when multiple sheets found) -->
+    <div id="sheet-selector" style="display:none;margin:1rem 0;"></div>
+
+    <!-- Manual mapping panel -->
+    <div id="manual-mapping-panel" style="display:none;margin-top:1.5rem;padding:1.25rem;background:var(--surface-2);border-radius:var(--radius-md);border:1px solid var(--border);">
+      <h3 style="margin:0 0 1rem;font-size:1.05rem;color:var(--primary);">Manual Column Mapping</h3>
+      <div id="mapping-fields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;"></div>
+      <button onclick="applyManualMapping()" class="btn btn-primary" style="margin-top:1.25rem;">Apply Mapping & Preview</button>
+    </div>
 
     <!-- Preview -->
     <div id="mapping-preview" style="display:none;margin-top:1.5rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.75rem;">
         <h3 style="font-size:1.05rem;font-weight:700;color:var(--primary);margin:0;">
           <i class="fas fa-table" style="margin-right:6px;"></i> Data Preview
+          <span id="preview-count" style="font-weight:500;color:var(--text-2);font-size:0.9rem;"></span>
         </h3>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.9rem;cursor:pointer;">
+          <input type="checkbox" id="select-all-rows" checked onchange="toggleAllRows(this.checked)"> Select all rows
+        </label>
       </div>
-      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-md);">
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-md);max-height:420px;">
         <table id="preview-table" style="margin:0;"></table>
       </div>
     </div>
@@ -538,12 +572,11 @@
     <!-- Import button -->
     <div style="margin-top:1.75rem;padding-top:1.25rem;border-top:1px solid var(--border);">
       <button onclick="importSelectedRows()" class="btn btn-success" style="width:100%;justify-content:center;padding:0.9rem 1.4rem;font-size:1.05rem;">
-        <i class="fas fa-cloud-upload-alt"></i> Import to Database (Firebase)
+        <i class="fas fa-cloud-upload-alt"></i> Import Selected Rows to Database
       </button>
     </div>
   </div>
 </section>
-
 
         
                 <!-- CONTROL ROOM REPORT -->
@@ -818,10 +851,14 @@ function fillDatalist() {
     const crShaftFilter = document.getElementById('cr-shaft-filter');
     crShaftFilter.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
 
-    const importShaft = document.getElementById('import-shaft');
-    importShaft.innerHTML = '<option value="">Do not set shaft (use equipment lookup)</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+const importShaft = document.getElementById('import-shaft');
+if (importShaft) {
+  importShaft.innerHTML = '<option value="">Auto-detect</option>' 
+    + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
   }
 
+
+  
   function getFilteredEquipment() {
     return currentShaftFilter ? equipment.filter(e => (e.shaft || '') === currentShaftFilter) : equipment;
   }
@@ -1380,137 +1417,458 @@ window.exportLogCSV = function() {
 };
   
 
-// ====================== EXCEL IMPORT BREAKDOWN ======================
+// ====================== SMART EXCEL IMPORT (format-agnostic) ======================
 
+let excelData = [];          // final cleaned rows ready for import
+let rawSheetData = {};       // all sheets: { sheetName: {headers, rows, headerRowIndex} }
+let currentSheetName = '';
+let selectedMapping = {};    // { targetField: sourceColumnName }
+let availableColumns = [];   // columns found in current sheet
 
-window.handleFileUpload = function() {
-    const fileInput = document.getElementById('excel-file');
-    const statusDiv = document.getElementById('import-status');
-    
-    if (!fileInput || !fileInput.files[0]) {
-        alert("Please select an Excel file first!");
-        return;
-    }
-
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            
-            let sheetName = workbook.SheetNames.find(name => 
-                name.toLowerCase().includes("breakdown")
-            ) || workbook.SheetNames[0];
-
-            const worksheet = workbook.Sheets[sheetName];
-            excelData = XLSX.utils.sheet_to_json(worksheet);
-
-            if (excelData.length === 0) {
-                alert("No data found in the Excel file.");
-                return;
-            }
-
-            statusDiv.innerHTML = `✅ Loaded <strong>${excelData.length}</strong> rows from sheet: <strong>${sheetName}</strong>`;
-            statusDiv.style.display = 'block';
-
-            document.getElementById('mapping-preview').style.display = 'block';
-            previewImportedData();
-
-            console.log(`✅ Excel loaded - ${excelData.length} rows`, excelData[0]);
-
-        } catch (err) {
-            console.error(err);
-            alert("Error reading Excel file:\n" + err.message);
-        }
-    };
-
-    reader.readAsArrayBuffer(file);
+// Target fields the system understands
+const TARGET_FIELDS = {
+  date:          ['date', 'other date', 'report date', 'failure date'],
+  time:          ['time reported', 'time stat working', 'time on', 'time', 'start time'],
+  equipmentId:   ['working place', 'equipment id', 'equipment', 'loco', 'machine', 'winch', 'asset', 'location'],
+  reason:        ['breakdown / failure', 'breakdown/failure', 'breakdown', 'failure', 'reason', 'fault', 'problem', 'description', 'fault description'],
+  downtime:      ['total downtime', 'downtime', 'down hrs', 'hours', 'downtime hours', 'total hours'],
+  shift:         ['shift'],
+  timeOff:       ['time off', 'time off ', 'end time', 'time finished'],
+  timeStart:     ['time stat working', 'time start', 'start time', 'time on'],
+  operator:      ['operator', 'reported by'],
+  action:        ['actiontaken/feedback', 'action taken', 'feedback', 'action'],
+  shaft:         ['shaft', 'section', 'area']
 };
 
-function previewImportedData() {
-    const table = document.getElementById('preview-table');
-    if (!excelData.length) return;
-
-    let html = `
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Date</th>
-                <th>Equipment ID</th>
-                <th>Reason / Fault</th>
-                <th>Downtime (hrs)</th>
-            </tr>
-        </thead>
-        <tbody>`;
-
-    excelData.slice(0, 15).forEach((row, i) => {
-        html += `
-            <tr>
-                <td>${i+1}</td>
-                <td>${row.Date || row.date || row['Date '] || '-'}</td>
-                <td>${row['Equipment ID'] || row.Equipment || row['Working Place'] || row.Loco || '-'}</td>
-                <td>${ row.Reason || row['Reason / Fault'] ||  row['Reason/Fault'] ||  row.Fault ||  row['Fault Description'] ||  row['Breakdown Reason'] ||  row['Problem'] ||  row.Description ||  row['Breakdown / Failure'] ||  '-' }</td>
-                <td>${row.Downtime || row['Down Hrs'] || row.Hours || row['Total Downtime'] || '-'}</td>
-            </tr>`;
-    });
-
-
-    html += `</tbody>`;
-    table.innerHTML = html;
+// ---------- Utility helpers ----------
+function normalizeHeader(h) {
+  return String(h || '').toLowerCase().replace(/[\s_\-\/\\:]+/g, ' ').trim();
 }
 
-window.startColumnMapping = function() {
-    if (excelData.length === 0) {
-        alert("Please click 'Parse Excel & Start Mapping' first");
-        return;
+function fuzzyMatch(header, candidates) {
+  const n = normalizeHeader(header);
+  return candidates.some(c => n === c || n.includes(c) || c.includes(n));
+}
+
+function findBestColumn(headers, fieldKey) {
+  const candidates = TARGET_FIELDS[fieldKey] || [];
+  for (const h of headers) {
+    if (fuzzyMatch(h, candidates)) return h;
+  }
+  return null;
+}
+
+function parseExcelDate(val) {
+  if (val == null || val === '') return null;
+  if (val instanceof Date) return val.toISOString().slice(0,10);
+  if (typeof val === 'number') {
+    // Excel serial date
+    const d = XLSX.SSF.parse_date_code(val);
+    if (d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+  }
+  const s = String(val).trim();
+  // dd.mm.yyyy or dd/mm/yyyy
+  const m = s.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  // yyyy-mm-dd already
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  return s;
+}
+
+function parseExcelTime(val) {
+  if (val == null || val === '') return '00:00';
+  if (val instanceof Date) {
+    return val.toTimeString().slice(0,5);
+  }
+  if (typeof val === 'number') {
+    // Excel time fraction
+    const totalMinutes = Math.round(val * 24 * 60);
+    const h = Math.floor(totalMinutes / 60) % 24;
+    const m = totalMinutes % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  }
+  const s = String(val).trim();
+  const m = s.match(/(\d{1,2}):(\d{2})/);
+  if (m) return `${m[1].padStart(2,'0')}:${m[2]}`;
+  return '00:00';
+}
+
+function timeToMinutes(t) {
+  const [h, m] = (t || '00:00').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function calcDowntimeHours(startStr, endStr) {
+  let start = timeToMinutes(startStr);
+  let end   = timeToMinutes(endStr);
+  if (end < start) end += 24 * 60; // crossed midnight
+  return Math.round(((end - start) / 60) * 100) / 100;
+}
+
+// ---------- Core parser ----------
+function detectHeaderRow(sheet) {
+  const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+  let bestRow = 0;
+  let bestScore = -1;
+
+  for (let r = range.s.r; r <= Math.min(range.e.r, 15); r++) {
+    let score = 0;
+    let nonEmpty = 0;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      if (cell && cell.v != null && String(cell.v).trim()) {
+        nonEmpty++;
+        const n = normalizeHeader(cell.v);
+        // Bonus points for known keywords
+        if (TARGET_FIELDS.date.some(k => n.includes(k))) score += 3;
+        if (TARGET_FIELDS.reason.some(k => n.includes(k))) score += 3;
+        if (TARGET_FIELDS.equipmentId.some(k => n.includes(k))) score += 3;
+        if (TARGET_FIELDS.downtime.some(k => n.includes(k))) score += 2;
+        if (TARGET_FIELDS.shift.some(k => n.includes(k))) score += 1;
+      }
     }
-    previewImportedData();
-};
+    if (nonEmpty >= 4 && score > bestScore) {
+      bestScore = score;
+      bestRow = r;
+    }
+  }
+  return bestRow;
+}
 
-window.importSelectedRows = async function() {
-    if (excelData.length === 0) return alert("No data to import");
+function parseSheet(workbook, sheetName) {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet || !sheet['!ref']) return null;
 
-    const statusDiv = document.getElementById('import-status');
-    statusDiv.innerHTML = `Importing ${excelData.length} records... Please wait.`;
-    statusDiv.className = "mt-3 alert alert-info";
+  const headerRowIndex = detectHeaderRow(sheet);
+  const range = XLSX.utils.decode_range(sheet['!ref']);
 
-    let success = 0;
+  // Extract headers
+  const headers = [];
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = sheet[XLSX.utils.encode_cell({r: headerRowIndex, c})];
+    headers.push(cell && cell.v != null ? String(cell.v).trim() : `Col${c}`);
+  }
 
+  // Extract data rows
+  const rows = [];
+  for (let r = headerRowIndex + 1; r <= range.e.r; r++) {
+    const rowObj = {};
+    let hasData = false;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      const val = cell ? cell.v : null;
+      if (val != null && String(val).trim() !== '') hasData = true;
+      rowObj[headers[c - range.s.c]] = val;
+    }
+    // Skip completely empty rows and pure formula rows that produce nothing
+    if (hasData) rows.push(rowObj);
+  }
+
+  return { headers, rows, headerRowIndex, sheetName };
+}
+
+// ---------- Auto mapping ----------
+function autoMapColumns(headers) {
+  const mapping = {};
+  for (const field of Object.keys(TARGET_FIELDS)) {
+    const col = findBestColumn(headers, field);
+    if (col) mapping[field] = col;
+  }
+  return mapping;
+}
+
+// ---------- Main upload handler ----------
+window.handleFileUpload = function() {
+  const fileInput = document.getElementById('excel-file');
+  const statusDiv = document.getElementById('import-status');
+  const sheetSel  = document.getElementById('sheet-selector');
+
+  if (!fileInput?.files?.[0]) {
+    alert('Please select an Excel file first!');
+    return;
+  }
+
+  statusDiv.style.display = 'block';
+  statusDiv.innerHTML = 'Reading file…';
+  statusDiv.style.background = 'rgba(29,78,216,0.08)';
+  statusDiv.style.color = 'var(--primary)';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
     try {
-        for (let row of excelData) {
-            const equipmentId = String(row['Equipment ID'] || row.Equipment || row['Working Place'] || row.Loco || 'Unknown').trim();
-            const dateVal = row.Date || row.date || new Date().toISOString().slice(0,10);
-            const downtime = parseFloat(row.Downtime || row['Down Hrs'] || row.Hours || row['Total Downtime'] || 0);
-            const reason = String(row.Reason || row['Reason / Fault'] || row['Reason/Fault'] || row.Fault || row['Fault Description'] ||  row['Breakdown Reason'] || row['Problem'] || row.Description || row['Breakdown / Failure'] ||  'No reason provided').trim();
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array', cellDates: true });
 
-            await addDoc(collection(db, "status_updates"), {
-                equipmentId: equipmentId,
-                date: dateVal,
-                time: row.Time || row['Time on'] || '00:00',
-                status: 'Down',
-                shift: row.Shift || 'Night',
-                reason: reason,
-                downtimeHours: isNaN(downtime) ? 0 : downtime,
-                isFailure: '1',
-                source: 'Imported Breakdown Report',
-                createdAt: serverTimestamp()
-            });
-            success++;
+      rawSheetData = {};
+      let totalRows = 0;
+
+      workbook.SheetNames.forEach(name => {
+        const parsed = parseSheet(workbook, name);
+        if (parsed && parsed.rows.length > 0) {
+          rawSheetData[name] = parsed;
+          totalRows += parsed.rows.length;
         }
+      });
 
-        statusDiv.innerHTML = `🎉 Successfully imported <strong>${success}</strong> records!`;
-        statusDiv.className = "mt-3 alert alert-success";
-        refreshCurrentView();
+      if (Object.keys(rawSheetData).length === 0) {
+        statusDiv.innerHTML = '❌ No usable data found in any sheet.';
+        statusDiv.style.background = 'rgba(220,38,38,0.1)';
+        statusDiv.style.color = 'var(--danger)';
+        return;
+      }
 
-    } catch (e) {
-        console.error(e);
-        statusDiv.innerHTML = `❌ Import failed: ${e.message}`;
-        statusDiv.className = "mt-3 alert alert-danger";
+      // Build sheet selector if >1 sheet
+      const sheetNames = Object.keys(rawSheetData);
+      if (sheetNames.length > 1) {
+        sheetSel.style.display = 'block';
+        sheetSel.innerHTML = `
+          <label style="font-weight:600;margin-right:8px;">Choose sheet to import:</label>
+          <select id="active-sheet" onchange="switchSheet(this.value)" style="padding:0.5rem 1rem;border-radius:8px;border:1px solid var(--border);">
+            ${sheetNames.map(n => `<option value="${n}">${n} (${rawSheetData[n].rows.length} rows)</option>`).join('')}
+          </select>
+          <span style="margin-left:12px;font-size:0.9rem;color:var(--text-3);">All sheets will be available</span>
+        `;
+        currentSheetName = sheetNames[0];
+      } else {
+        sheetSel.style.display = 'none';
+        currentSheetName = sheetNames[0];
+      }
+
+      processCurrentSheet();
+
+      statusDiv.innerHTML = `✅ Found <strong>${sheetNames.length}</strong> sheet(s) with data. Total rows: <strong>${totalRows}</strong>. Auto-mapping applied.`;
+      statusDiv.style.background = 'rgba(22,163,74,0.1)';
+      statusDiv.style.color = 'var(--success)';
+
+      // Update step indicators
+      document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
+      document.querySelector('.import-step[data-step="2"]').classList.add('active');
+
+    } catch (err) {
+      console.error(err);
+      statusDiv.innerHTML = `❌ Error reading file: ${err.message}`;
+      statusDiv.style.background = 'rgba(220,38,38,0.1)';
+      statusDiv.style.color = 'var(--danger)';
     }
+  };
+  reader.readAsArrayBuffer(fileInput.files[0]);
 };
 
+function switchSheet(name) {
+  currentSheetName = name;
+  processCurrentSheet();
+}
+
+function processCurrentSheet() {
+  const sheet = rawSheetData[currentSheetName];
+  if (!sheet) return;
+
+  availableColumns = sheet.headers;
+  selectedMapping = autoMapColumns(sheet.headers);
+
+  // Build clean excelData
+  excelData = sheet.rows.map((row, idx) => {
+    const get = (field) => {
+      const col = selectedMapping[field];
+      return col ? row[col] : null;
+    };
+
+    let dateVal = parseExcelDate(get('date'));
+    // fallback: try to pull date from sheet name (e.g. "19.08.2026" or "2026-08-19")
+    if (!dateVal) {
+      const m = currentSheetName.match(/(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})/);
+      if (m) dateVal = `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    }
+
+    const timeStart = parseExcelTime(get('timeStart') || get('time'));
+    const timeOff   = parseExcelTime(get('timeOff'));
+    let downtime = parseFloat(get('downtime'));
+    if (isNaN(downtime) || downtime === 0) {
+      downtime = calcDowntimeHours(timeStart, timeOff);
+    }
+
+    // Equipment ID – prefer Working Place, then try to extract loco/winch number from reason
+    let equip = String(get('equipmentId') || '').trim();
+    if (!equip || equip.toLowerCase() === 'unknown') {
+      const reason = String(get('reason') || '');
+      const locoMatch = reason.match(/(?:loco|winch|train)\s*([0-9a-z\-]+)/i);
+      if (locoMatch) equip = locoMatch[0];
+    }
+
+    // Shaft detection
+    let shaft = document.getElementById('import-shaft')?.value || '';
+    if (!shaft) {
+      // from sheet name
+      const sm = currentSheetName.match(/(0?\d)\s*shaft|shaft\s*(0?\d)/i);
+      if (sm) shaft = (sm[1] || sm[2]) + ' Shaft';
+      // or from first cell of original sheet title (we already lost it, so leave empty)
+    }
+
+    return {
+      _rawIndex: idx,
+      date: dateVal || new Date().toISOString().slice(0,10),
+      time: timeStart,
+      equipmentId: equip || 'Unknown',
+      reason: String(get('reason') || 'No reason provided').trim(),
+      downtimeHours: isNaN(downtime) ? 0 : downtime,
+      shift: String(get('shift') || 'Night').trim(),
+      operator: String(get('operator') || '').trim(),
+      action: String(get('action') || '').trim(),
+      shaft: shaft,
+      sourceSheet: currentSheetName,
+      selected: true
+    };
+  }).filter(r => r.reason && r.reason !== 'No reason provided' || r.equipmentId !== 'Unknown');
+
+  renderPreview();
+  document.getElementById('mapping-preview').style.display = 'block';
+  document.getElementById('manual-mapping-panel').style.display = 'none';
+}
+
+// ---------- Preview ----------
+function renderPreview() {
+  const table = document.getElementById('preview-table');
+  const countEl = document.getElementById('preview-count');
+  if (!excelData.length) {
+    table.innerHTML = '<tr><td colspan="8">No valid rows after cleaning</td></tr>';
+    return;
+  }
+
+  countEl.textContent = `(${excelData.filter(r=>r.selected).length} of ${excelData.length} rows selected)`;
+
+  let html = `
+    <thead>
+      <tr>
+        <th style="width:40px;"><input type="checkbox" id="hdr-check" checked onchange="toggleAllRows(this.checked)"></th>
+        <th>#</th>
+        <th>Date</th>
+        <th>Time</th>
+        <th>Equipment / Working Place</th>
+        <th>Reason / Fault</th>
+        <th>Downtime (hrs)</th>
+        <th>Shift</th>
+        <th>Sheet</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  excelData.forEach((row, i) => {
+    html += `
+      <tr style="${row.selected ? '' : 'opacity:0.45;'}">
+        <td><input type="checkbox" ${row.selected ? 'checked' : ''} onchange="excelData[${i}].selected=this.checked; renderPreview();"></td>
+        <td>${i+1}</td>
+        <td>${row.date}</td>
+        <td>${row.time}</td>
+        <td>${row.equipmentId}</td>
+        <td style="max-width:280px;white-space:normal;">${row.reason}</td>
+        <td>${row.downtimeHours}</td>
+        <td>${row.shift}</td>
+        <td>${row.sourceSheet}</td>
+      </tr>`;
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+
+window.toggleAllRows = function(checked) {
+  excelData.forEach(r => r.selected = checked);
+  renderPreview();
+};
+
+// ---------- Manual mapping UI ----------
+window.showManualMapping = function() {
+  if (!availableColumns.length) {
+    alert('Please parse a file first');
+    return;
+  }
+  const panel = document.getElementById('manual-mapping-panel');
+  const container = document.getElementById('mapping-fields');
+  panel.style.display = 'block';
+
+  const fields = [
+    {key:'date', label:'Date'},
+    {key:'time', label:'Time Reported / Start'},
+    {key:'equipmentId', label:'Equipment / Working Place'},
+    {key:'reason', label:'Breakdown / Failure Reason'},
+    {key:'downtime', label:'Total Downtime'},
+    {key:'shift', label:'Shift'},
+    {key:'timeOff', label:'Time Off / End Time'},
+    {key:'operator', label:'Operator / Reported By'}
+  ];
+
+  container.innerHTML = fields.map(f => `
+    <div>
+      <label style="font-size:0.9rem;font-weight:600;">${f.label}</label>
+      <select id="map-${f.key}" style="width:100%;padding:0.55rem;border-radius:8px;border:1px solid var(--border);">
+        <option value="">— not mapped —</option>
+        ${availableColumns.map(c => `<option value="${c}" ${selectedMapping[f.key]===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
+  `).join('');
+};
+
+window.applyManualMapping = function() {
+  ['date','time','equipmentId','reason','downtime','shift','timeOff','operator'].forEach(k => {
+    const sel = document.getElementById('map-' + k);
+    if (sel) selectedMapping[k] = sel.value || null;
+  });
+  processCurrentSheet(); // re-process with new mapping
+  document.getElementById('manual-mapping-panel').style.display = 'none';
+};
+
+// ---------- Final import ----------
+window.importSelectedRows = async function() {
+  const toImport = excelData.filter(r => r.selected);
+  if (toImport.length === 0) return alert('No rows selected');
+
+  const statusDiv = document.getElementById('import-status');
+  statusDiv.style.display = 'block';
+  statusDiv.innerHTML = `Importing ${toImport.length} records… Please wait.`;
+  statusDiv.style.background = 'rgba(29,78,216,0.08)';
+  statusDiv.style.color = 'var(--primary)';
+
+  let success = 0;
+  try {
+    for (const row of toImport) {
+      await addDoc(collection(db, "status_updates"), {
+        equipmentId: row.equipmentId,
+        date: row.date,
+        time: row.time,
+        status: 'Down',
+        shift: row.shift,
+        reason: row.reason,
+        downtimeHours: row.downtimeHours,
+        isFailure: '1',
+        operator: row.operator || '',
+        actionTaken: row.action || '',
+        shaft: row.shaft || '',
+        source: 'Imported Breakdown Report',
+        sourceSheet: row.sourceSheet,
+        createdAt: serverTimestamp()
+      });
+      success++;
+    }
+
+    statusDiv.innerHTML = `🎉 Successfully imported <strong>${success}</strong> records into Firebase!`;
+    statusDiv.style.background = 'rgba(22,163,74,0.12)';
+    statusDiv.style.color = 'var(--success)';
+
+    // Move step indicator
+    document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
+    document.querySelector('.import-step[data-step="3"]').classList.add('active');
+
+    if (typeof refreshCurrentView === 'function') refreshCurrentView();
+
+  } catch (e) {
+    console.error(e);
+    statusDiv.innerHTML = `❌ Import failed: ${e.message}`;
+    statusDiv.style.background = 'rgba(220,38,38,0.1)';
+    statusDiv.style.color = 'var(--danger)';
+  }
+};
+
+// Keep old function names working
+window.startColumnMapping = window.showManualMapping;
 
 // ====================== SEARCH HISTORY (Recent Searches) ======================
 
