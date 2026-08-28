@@ -1888,42 +1888,60 @@ window.exportLogCSV = function() {
 
 // ====================== SMART EXCEL IMPORT (RBE Monitor) ======================
 
-
+let excelData = [];
 let rawSheetData = {};
 let currentSheetName = '';
+let selectedMapping = {};
 let availableColumns = [];
 
 // Columns the system understands (includes All_loco_breakdowns + control-room styles)
 const TARGET_FIELDS = {
-  date:        ['date reported', 'date', 'other date', 'report date', 'failure date', 'date fixed'],
+  date:        ['date reported', 'date fixed', 'date', 'report date', 'failure date'],
   time:        ['time reported', 'time stat working', 'time on', 'time', 'start time'],
-  equipmentId: ['loco number', 'equipment id', 'equipment', 'loco', 'machine', 'winch', 'asset', 'working place', 'location'],
-  reason:      ['breakdown reported', 'breakdown / failure', 'breakdown/failure', 'breakdown', 'failure',
-                'reason', 'fault', 'problem', 'description', 'fault description', 'actual fault found by'],
-  downtime:    ['total downtime', 'downtime', 'down hrs', 'hours', 'downtime hours', 'total hours'],
+  equipmentId: ['loco number', 'equipment id', 'equipment', 'loco', 'machine', 'winch', 'asset'],
+
+  workplace:   ['working place', 'location', 'level'],
+
+  reason: [ 'breakdown reported', 'breakdown / failure', 'breakdown/failure', 'breakdown', 'fault', 'failure', 'fault description', 'problem', 'description', 'reason' ],
+
+  actualFault: ['actual fault found by', 'actual fault found', 'fault found'],
+  downtime:    ['total downtime', 'downtime', 'down hrs', 'hours', 'downtime hours'],
   shift:       ['shift'],
-  timeOff:     ['time finished', 'time off', 'end time', 'time finished '],
-  timeStart:   ['time reported', 'time stat working', 'time start', 'start time', 'time on'],
-  operator:    ['reported by', 'operator', 'reported by '],
-  action:      ['actual fault found by', 'actiontaken/feedback', 'action taken', 'feedback', 'action', 'fixed y/n'],
+  timeOff:     ['time finished', 'time off', 'end time'],
+  timeStart:   ['time reported', 'time start', 'start time', 'time on'],
+  operator:    ['reported by', 'operator'],
+  action:      ['actual fault found by', 'action taken', 'feedback', 'action', 'fixed y/n'],
   shaft:       ['conventional', 'shaft', 'section', 'area']
 };
-
+  
 function normalizeHeader(h) {
   return String(h || '').toLowerCase().replace(/[\s_\-\/\\:]+/g, ' ').trim();
 }
 
-function fuzzyMatch(header, candidates) {
+function fuzzyMatchScore(header, candidate) {
   const n = normalizeHeader(header);
-  return candidates.some(c => n === c || n.includes(c) || c.includes(n));
+  const c = normalizeHeader(candidate);
+  if (!n || !c) return 0;
+  if (n === c) return 100;                    // exact
+  if (n.startsWith(c) || c.startsWith(n)) return 80;
+  if (n.includes(c) && c.length >= 5) return 50; // only long substrings
+  return 0;
 }
 
 function findBestColumn(headers, fieldKey) {
   const candidates = TARGET_FIELDS[fieldKey] || [];
+  let best = null;
+  let bestScore = 0;
   for (const h of headers) {
-    if (fuzzyMatch(h, candidates)) return h;
+    for (const c of candidates) {
+      const score = fuzzyMatchScore(h, c);
+      if (score > bestScore) {
+        bestScore = score;
+        best = h;
+      }
+    }
   }
-  return null;
+  return bestScore >= 50 ? best : null;
 }
 
 function parseExcelDate(val) {
@@ -1944,15 +1962,14 @@ function parseExcelDate(val) {
 
 function parseExcelTime(val) {
   if (val == null || val === '') return '00:00';
-  if (val instanceof Date && !isNaN(val)) return val.toTimeString().slice(0, 5);
-  if (typeof val === 'number') {
-    // Excel fraction of day OR already hours like 15.04 misread — treat as day fraction if < 1
-    if (val >= 0 && val < 1) {
-      const totalMinutes = Math.round(val * 24 * 60);
-      const h = Math.floor(totalMinutes / 60) % 24;
-      const m = totalMinutes % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    }
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return val.toTimeString().slice(0, 5);
+  }
+  if (typeof val === 'number' && val >= 0 && val < 1) {
+    const totalMinutes = Math.round(val * 24 * 60);
+    const h = Math.floor(totalMinutes / 60) % 24;
+    const m = totalMinutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
   const s = String(val).trim().toUpperCase().replace(/H/g, ':');
   const m = s.match(/(\d{1,2})[:.](\d{2})/);
@@ -2032,10 +2049,42 @@ function parseSheet(workbook, sheetName) {
 
 function autoMapColumns(headers) {
   const mapping = {};
-  for (const field of Object.keys(TARGET_FIELDS)) {
-    const col = findBestColumn(headers, field);
-    if (col) mapping[field] = col;
+  const norm = {};
+  headers.forEach(h => { norm[normalizeHeader(h)] = h; });
+
+  // Force exact Control Room Breakdown Report columns when present
+  const exact = {
+    date:        ['date reported'],
+    time:        ['time reported'],
+    timeStart:   ['time reported'],
+    timeOff:     ['time finished'],
+    equipmentId: ['loco number'],
+    reason:      ['breakdown reported'],
+    actualFault: ['actual fault found by'],
+    workplace:   ['working place'],
+    operator:    ['reported by'],
+    shaft:       ['conventional'],
+    action:      ['actual fault found by', 'fixed y/n']
+  };
+
+  for (const [field, names] of Object.entries(exact)) {
+    for (const name of names) {
+      if (norm[name]) {
+        mapping[field] = norm[name];
+        break;
+      }
+    }
   }
+
+  // Fill any remaining fields with scored fuzzy match
+  for (const field of Object.keys(TARGET_FIELDS)) {
+    if (!mapping[field]) {
+      const col = findBestColumn(headers, field);
+      if (col) mapping[field] = col;
+    }
+  }
+
+  console.log('Column mapping:', mapping);
   return mapping;
 }
 
@@ -2153,43 +2202,43 @@ function processCurrentSheet() {
   selectedMapping = autoMapColumns(sheet.headers);
 
   excelData = sheet.rows.map((row, idx) => {
-    const get = (field) => {
+       const get = (field) => {
       const col = selectedMapping[field];
       return col != null ? row[col] : null;
     };
 
+    // Date: DATE REPORTED (dd/mm/yyyy)
     let dateVal = parseExcelDate(get('date'));
-    if (!dateVal) {
-      const m = String(currentSheetName).match(/(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})/);
-      if (m) dateVal = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-    }
 
+    // Time: TIME REPORTED e.g. 15H04
     const timeStart = parseExcelTime(get('timeStart') || get('time'));
-    const timeOff = parseExcelTime(get('timeOff'));
+    const timeOff   = parseExcelTime(get('timeOff'));
     let downtime = parseFloat(get('downtime'));
     if (isNaN(downtime) || downtime === 0) {
       const calc = calcDowntimeHours(timeStart, timeOff);
-      if (calc > 0) downtime = calc;
-      else downtime = 0;
+      downtime = calc > 0 ? calc : 0;
     }
 
-    // Prefer LOCO NUMBER; fallback extract from reason
+    // Equipment: LOCO NUMBER only (e.g. "LOCO 3260" → "3260")
     let equip = String(get('equipmentId') || '').trim();
-    const reasonStr = String(get('reason') || '').trim();
-    if (!equip || equip.toLowerCase() === 'unknown') {
-      const locoMatch = reasonStr.match(/(?:loco|winch|train)\s*[#:]?\s*([0-9a-z\-]+)/i);
-      if (locoMatch) equip = locoMatch[0].trim();
+    equip = equip.replace(/^LOCO\s+/i, '').trim();
+
+    // Reason: prefer BREAKDOWN REPORTED; append actual fault if useful
+    let reason = String(get('reason') || '').trim();
+    const actual = String(get('actualFault') || get('action') || '').trim();
+    if (!reason && actual) reason = actual;
+    else if (reason && actual && actual.length > 3 && !/serviceman|electrician/i.test(actual)) {
+      reason = reason + ' | ' + actual;
     }
-    // Normalise "LOCO 519" style
-    equip = equip.replace(/^LOCO\s+/i, '').trim() || equip;
+    if (!reason) reason = 'No reason provided';
+
+    // Level from WORKING PLACE (optional store in reason/shaft context)
+    const workplace = String(get('workplace') || '').trim();
 
     let shaft = document.getElementById('import-shaft')?.value || '';
     if (!shaft) {
       const conv = String(get('shaft') || '');
       if (/trackless/i.test(conv)) shaft = 'TRACKLESS-20 LEVEL';
-      else if (/conventional/i.test(conv)) shaft = '';
-      const sm = String(currentSheetName).match(/(0?\d)\s*shaft|shaft\s*(0?\d)/i);
-      if (!shaft && sm) shaft = (sm[1] || sm[2]) + ' Shaft';
     }
 
     return {
@@ -2197,21 +2246,28 @@ function processCurrentSheet() {
       date: dateVal || new Date().toISOString().slice(0, 10),
       time: timeStart,
       equipmentId: equip || 'Unknown',
-      reason: reasonStr || 'No reason provided',
+      reason: reason,
       downtimeHours: isNaN(downtime) ? 0 : downtime,
       shift: String(get('shift') || 'Night').trim() || 'Night',
       operator: String(get('operator') || '').trim(),
-      action: String(get('action') || '').trim(),
+      action: actual,
+      workplace: workplace,
       shaft: shaft,
       sourceSheet: currentSheetName,
       selected: true
     };
+
+    
   }).filter(r => {
-    const hasReason = r.reason && r.reason !== 'No reason provided';
-    const hasEquip = r.equipmentId && r.equipmentId !== 'Unknown';
-    return hasReason || hasEquip;
+    const hasReason = r.reason && r.reason !== 'No reason provided'
+      && !/serviceman|electrician/i.test(r.reason);
+    const hasEquip = r.equipmentId && r.equipmentId !== 'Unknown'
+      && !/level|trackless|conventional/i.test(r.equipmentId);
+    // must look like a real breakdown row (skips subtitle / blank header rows)
+    return hasEquip && hasReason;
   });
 
+  
   renderPreview();
   const mp = document.getElementById('mapping-preview');
   if (mp) mp.style.display = 'block';
@@ -2381,6 +2437,7 @@ window.importSelectedRows = async function () {
 // Aliases so existing buttons keep working
 window.startColumnMapping = window.showManualMapping;
 window.handleFileUpload = window.handleFileUpload;
+
 
   
 // ====================== SEARCH HISTORY (Recent Searches) ======================
