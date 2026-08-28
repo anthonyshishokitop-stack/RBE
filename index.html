@@ -959,13 +959,12 @@ function refreshCurrentView() {
   else if (section === 'maintenance-schedule') populateMaintTable();
   else if (section === 'calendar') initCalendar();
   else if (section === 'operations-report') {
-    populateOperationsReport();   // Force full refresh
+    populateOperationsReport();
   }
-    
   else if (section === 'control-room') populateControlRoom();
-}
-
-  else if (section === 'text-mining') { refreshTextMiningInsights();
+  else if (section === 'text-mining') {
+    refreshTextMiningInsights();
+  }
 }
 
 document.querySelectorAll('#sidebar-menu li').forEach(li => {
