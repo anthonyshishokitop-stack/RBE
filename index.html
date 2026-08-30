@@ -166,30 +166,12 @@
                         .hamburger, #theme-toggle { display: none; }
                         .main { padding: 1.5rem 2rem; }
                       }
-
-                      
-@media (max-width: 1024px) {
-  .sidebar { position: fixed; inset: 0 auto 0 0; width: min(86vw, 300px); max-width: 300px; transform: translateX(-100%); }
-  .sidebar.open { transform: translateX(0); }
-  .main { padding: 0.75rem; padding-top: 70px; }
-  .header-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.75rem;
-    margin: -0.75rem -0.75rem 1rem;
-    padding: 1rem;
-    border-radius: var(--radius-md);
-  }
-  .header-bar > div { width: 100%; display: flex; flex-wrap: wrap; gap: 0.5rem; }
-  .header-bar select,
-  .header-bar .btn { width: 100%; justify-content: center; }
-  .card { padding: 1rem; margin-bottom: 1rem; }
-  .live-indicator { bottom: 10px; right: 10px; font-size: 0.78rem; padding: 0.4rem 0.85rem; }
-}
-
-
-
-                      
+                      @media (max-width: 1024px) {
+                        .sidebar { position: fixed; inset: 0 auto 0 0; width: 82vw; max-width: 300px; transform: translateX(-100%); }
+                        .sidebar.open { transform: translateX(0); }
+                        .main { padding-top: 74px; }
+                        .header-bar { flex-direction: column; align-items: flex-start; gap: 0.9rem; }
+                      }
                   
                   .sidebar {
                     display: flex;
@@ -220,185 +202,17 @@
                   .import-step.active span { background:var(--primary); }
                       
                       
-/* Phones ≤640px */
-@media (max-width: 640px) {
-  html, body { overflow-x: hidden; }
-  .main { padding: 0.6rem; padding-top: 68px; }
-  .container { max-width: 100%; }
-
-  .header-bar {
-    margin: -0.6rem -0.6rem 0.9rem;
-    padding: 0.9rem;
-    gap: 0.65rem;
-  }
-  .header-bar h1 { font-size: 1.2rem; line-height: 1.25; }
-  .header-bar select,
-  .header-bar .btn,
-  .header-bar input[type="date"] {
-    width: 100%;
-    min-height: 44px;
-    font-size: 0.95rem;
-  }
-
-  .kpi-grid {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-    margin: 0.9rem 0;
-  }
-  .kpi-card { padding: 1.1rem 0.85rem; }
-  .kpi-card i { font-size: 1.9rem; margin-bottom: 0.4rem; }
-  .kpi-card h2 { font-size: 1.85rem; }
-  .kpi-card p { font-size: 0.88rem; }
-
-  .chart-wrapper { padding: 0.9rem; }
-  .chart-title { font-size: 1rem; margin-bottom: 0.75rem; }
-  .chart-container { height: 220px; }
-
-  .card { padding: 0.9rem; margin-bottom: 0.9rem; border-radius: 12px; }
-
-  /* Tables: readable + horizontal scroll */
-  .card > div[style*="overflow"],
-  div[style*="overflow-x"] {
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -0.25rem;
-  }
-  table {
-    font-size: 0.8rem;
-    min-width: 520px;
-  }
-  th, td {
-    padding: 8px 7px;
-    white-space: nowrap;
-  }
-  th { font-size: 0.78rem; }
-
-  .btn {
-    padding: 0.7rem 1.1rem;
-    min-height: 44px;
-    font-size: 0.95rem;
-    justify-content: center;
-  }
-  .btn-primary, .btn-success, .btn-danger { width: 100%; }
-
-  .modal { padding: 0.5rem; }
-  .modal-content {
-    padding: 1rem;
-    max-width: 100%;
-    max-height: 94vh;
-    border-radius: 12px;
-  }
-
-  .alert-banner {
-    padding: 0.85rem 1rem;
-    font-size: 0.9rem;
-  }
-  .alert-banner ul li {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 6px !important;
-  }
-  .alert-banner .btn {
-    width: auto;
-    min-height: 36px;
-    padding: 0.35rem 0.7rem;
-    font-size: 0.8rem;
-  }
-
-  /* Auth */
-  .auth-card {
-    margin: 0.75rem;
-    padding: 1.5rem 1.15rem;
-    max-width: 100%;
-  }
-  .auth-card img { max-width: 140px; margin-bottom: 1rem; }
-  .auth-card h2 { font-size: 1.25rem; margin-bottom: 1.2rem; }
-
-  /* Sidebar touch targets */
-  #sidebar-menu li {
-    padding: 0.95rem 1rem;
-    font-size: 0.98rem;
-  }
-  .hamburger {
-    top: 10px;
-    left: 10px;
-    width: 44px;
-    height: 44px;
-    font-size: 1.3rem;
-  }
-
-  /* Import steps → stack */
-  #import-steps {
-    flex-direction: column !important;
-    gap: 0.4rem !important;
-  }
-  .import-step {
-    min-width: 0;
-    width: 100%;
-    font-size: 0.85rem;
-    padding: 0.55rem 0.85rem;
-  }
-
-  /* Text-mining & other 2-col grids → 1 col */
-  #tm-content > div[style*="grid-template-columns"],
-  .card + div[style*="grid"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Forms */
-  .form-group { margin-bottom: 1rem; }
-  input, select, textarea {
-    font-size: 16px; /* prevents iOS zoom */
-    min-height: 44px;
-    padding: 0.7rem 0.85rem;
-  }
-  textarea { min-height: 88px; }
-
-  /* Live pill */
-  .live-indicator {
-    bottom: 8px;
-    right: 8px;
-    left: 8px;
-    width: auto;
-    justify-content: center;
-    font-size: 0.75rem;
-    padding: 0.4rem 0.7rem;
-  }
-}
-
-/* Smallest phones ≤380px */
-@media (max-width: 380px) {
-  .main { padding: 0.5rem; padding-top: 64px; }
-  .header-bar { padding: 0.75rem; margin: -0.5rem -0.5rem 0.75rem; }
-  .header-bar h1 { font-size: 1.1rem; }
-  .kpi-card h2 { font-size: 1.65rem; }
-  .kpi-card i { font-size: 1.7rem; }
-  .chart-container { height: 200px; }
-  table { font-size: 0.75rem; min-width: 480px; }
-  th, td { padding: 7px 5px; }
-  .auth-card { padding: 1.25rem 0.9rem; margin: 0.5rem; }
-  .card { padding: 0.75rem; }
-  .btn { font-size: 0.9rem; padding: 0.65rem 0.9rem; }
-  #sidebar-menu li span { font-size: 0.92rem; }
-  .sidebar { width: 88vw; }
-}
-
-
-                      
-                  /* Prevent accidental horizontal scroll on any device */
-body, .wrapper, .main, .container {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-.main { overflow-x: hidden; }
-section { overflow-x: hidden; }
-/* Tables keep their own scroll */
-div[style*="overflow-x"], .card > div[style*="overflow"] {
-  overflow-x: auto;
-  max-width: 100%;
-}
-
-
-                      
+                      @media (max-width: 640px) {
+                        .kpi-grid { grid-template-columns: 1fr; gap: 0.9rem; }
+                        .chart-container { height: 240px; }
+                        .header-bar h1 { font-size: 1.32rem; }
+                        table { font-size: 0.85rem; }
+                        th, td { padding: 9px 8px; }
+                        .btn { padding: 0.65rem 1.25rem; }
+                        .modal-content { padding: 1.2rem; }
+                      }
+                  
+                  
                       
                     </style>
                   </head>
