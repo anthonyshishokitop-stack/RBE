@@ -1374,10 +1374,22 @@
                     return currentShaftFilter ? equipment.filter(e => (e.shaft || '') === currentShaftFilter) : equipment;
                   }
                   
-                  function getFilteredUpdates() {
-                    const ids = getFilteredEquipment().map(e => e.id);
-                    return updates.filter(u => ids.includes(u.equipmentId));
-                  }
+function getFilteredUpdates() {
+  const eqList = getFilteredEquipment();
+  // No equipment registered yet → show all updates (so imports still appear)
+  if (!eqList.length) {
+    if (!currentShaftFilter) return updates || [];
+    return (updates || []).filter(u => String(u.shaft || '') === currentShaftFilter);
+  }
+  const ids = new Set(eqList.map(e => String(e.id)));
+  return (updates || []).filter(u => {
+    const id = String(u.equipmentId || u.locoNumber || '');
+    if (ids.has(id)) return true;
+    // Include updates for unknown IDs when no shaft filter, or shaft matches
+    if (!currentShaftFilter) return true;
+    return String(u.shaft || '') === currentShaftFilter;
+  });
+}
                   
                   function getFilteredMaintenance() {
                     const ids = getFilteredEquipment().map(e => e.id);
@@ -1728,11 +1740,30 @@
                   
                     
                     // ── Dashboard ───────────────────────────────────────────────────
-                    function populateDashboard() {
-                      const filteredEq = getFilteredEquipment();
-                      const locoIds = filteredEq.map(e => e.id);
-                      const filteredUp = getFilteredUpdates();
-                      const filteredMt = getFilteredMaintenance();
+function populateDashboard() {
+  const filteredEq = getFilteredEquipment();
+  const filteredUp = getFilteredUpdates();
+  const filteredMt = getFilteredMaintenance();
+
+  // Include equipment from register AND from status/import updates
+  const idSet = new Set();
+  filteredEq.forEach(e => { if (e.id) idSet.add(String(e.id)); });
+  (filteredUp.length ? filteredUp : (updates || [])).forEach(u => {
+    const id = String(u.equipmentId || u.locoNumber || u['Loco Number'] || '').trim();
+    if (id && id !== 'Unknown') idSet.add(id);
+  });
+  // If shaft filter is on, only keep updates that match filtered equipment
+  // OR equipment that has no shaft restriction when filter is empty
+  let locoIds = Array.from(idSet).filter(Boolean).sort();
+  if (currentShaftFilter) {
+    const allowed = new Set(filteredEq.map(e => String(e.id)));
+    // Also allow update IDs whose shaft field matches the filter
+    (updates || []).forEach(u => {
+      const id = String(u.equipmentId || '').trim();
+      if (id && String(u.shaft || '') === currentShaftFilter) allowed.add(id);
+    });
+    locoIds = locoIds.filter(id => allowed.has(id) || !filteredEq.length);
+  }
                   
                       let operational = 0, downLt7d = 0, downGt7d = 0, totalAvail = 0;
                       locoIds.forEach(id => {
@@ -2815,25 +2846,40 @@
                   
                     let success = 0;
                     try {
-                      for (const row of toImport) {
-                        await addDoc(collection(db, 'status_updates'), {
-                          equipmentId: row.equipmentId,
-                          date: row.date,
-                          time: row.time,
-                          status: 'Down',
-                          shift: row.shift,
-                          reason: row.reason,
-                          downtimeHours: row.downtimeHours,
-                          isFailure: '1',
-                          operator: row.operator || '',
-                          actionTaken: row.action || '',
-                          shaft: row.shaft || '',
-                          source: 'Imported Breakdown Report',
-                          sourceSheet: row.sourceSheet || '',
-                          createdAt: serverTimestamp()
-                        });
-                        success++;
-                      }
+for (const row of toImport) {
+  const equipId = String(row.equipmentId || '').trim();
+  if (!equipId || equipId === 'Unknown') continue;
+
+  await addDoc(collection(db, 'status_updates'), {
+    equipmentId: equipId,
+    date: row.date,
+    time: row.time,
+    status: 'Down',
+    shift: row.shift,
+    reason: row.reason,
+    downtimeHours: row.downtimeHours,
+    isFailure: '1',
+    operator: row.operator || '',
+    actionTaken: row.action || '',
+    shaft: row.shaft || '',
+    workplace: row.workplace || '',
+    source: 'Imported Breakdown Report',
+    sourceSheet: row.sourceSheet || '',
+    createdAt: serverTimestamp()
+  });
+
+  // Auto-register so it appears on Availability / Fleet charts
+  await setDoc(doc(db, 'equipment', equipId), {
+    shaft: row.shaft || '',
+    level: row.workplace || '',
+    locoSize: '',
+    section: '',
+    source: 'Imported Breakdown Report',
+    updatedAt: new Date().toISOString()
+  }, { merge: true });
+
+  success++;
+}
                   
                       statusDiv.innerHTML =
                         `🎉 Successfully imported <strong>${success}</strong> records into Firebase!`;
