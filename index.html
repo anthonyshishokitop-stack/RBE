@@ -290,13 +290,22 @@
           </div>
 
           <div id="high-risk-alerts" class="alert-banner alert-high-risk hidden">
-            <strong><i class="fas fa-triangle-exclamation"></i> High Risk / Long Downtime Equipment</strong>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <strong><i class="fas fa-triangle-exclamation"></i> High Risk / Long Downtime Equipment</strong>
+              <button type="button" class="btn btn-primary" style="padding:0.35rem 0.8rem;font-size:0.85rem;" onclick="clearAllDismissedAlerts()">Reset dismissed</button>
+            </div>
             <ul id="high-risk-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
           </div>
 
           <div id="predictive-alerts" class="alert-banner alert-predictive hidden">
             <strong><i class="fas fa-bell"></i> Predictive Maintenance – Due Soon / Overdue</strong>
             <ul id="predictive-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
+          </div>
+
+          <!-- NEW: Failure-pattern predictions from breakdown history -->
+          <div id="failure-pattern-alerts" class="alert-banner alert-high-risk hidden" style="border-color:#7c3aed;color:#5b21b6;background:rgba(124,58,237,0.08);">
+            <strong><i class="fas fa-chart-line"></i> Failure Pattern Alerts (from breakdown history)</strong>
+            <ul id="failure-pattern-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
           </div>
 
           <div class="kpi-grid" id="kpi-grid"></div>
@@ -446,7 +455,9 @@
           </div>
           <div style="overflow-x:auto;">
             <table id="maint-table">
-              <thead><tr><th>Equipment</th><th>Task</th><th>Interval</th><th>Last Done</th><th>Due</th><th>Days Left</th></tr></thead>
+              
+              <thead><tr><th>Equipment</th><th>Task</th><th>Interval</th><th>Last Done</th><th>Due</th><th>Days Left</th><th>Source</th><th>Actions</th></tr></thead>
+              
               <tbody></tbody>
             </table>
           </div>
@@ -1420,44 +1431,213 @@ function getEquipmentStatus(id) {
 
 
   
-  function calculateNextDue(last, interval) {
+  function calculateNextDue(last, interval, explicitDue) {
+    if (explicitDue) return explicitDue;
     if (!last) return null;
     const d = new Date(last);
-    if (interval==='weekly')      d.setDate(d.getDate()+7);
-    else if (interval==='monthly')   d.setMonth(d.getMonth()+1);
-    else if (interval==='quarterly') d.setMonth(d.getMonth()+3);
-    return d.toISOString().slice(0,10);
+    if (interval === 'weekly')       d.setDate(d.getDate() + 7);
+    else if (interval === 'monthly') d.setMonth(d.getMonth() + 1);
+    else if (interval === 'quarterly') d.setMonth(d.getMonth() + 3);
+    else if (typeof interval === 'number') d.setDate(d.getDate() + interval);
+    else return null; // custom without dueDate
+    return d.toISOString().slice(0, 10);
   }
 
-  function calculateDaysLeft(last, interval) {
-    const due = calculateNextDue(last, interval);
+  function calculateDaysLeft(last, interval, explicitDue) {
+    const due = calculateNextDue(last, interval, explicitDue);
     if (!due) return NaN;
     return Math.ceil((new Date(due) - new Date()) / 86400000);
   }
 
+
   
 
-// ── Real-time Predictive Maintenance & Notifications ─────────────────────
+// ====================== FAILURE PATTERN + DISMISS ALERTS ======================
+
+const DISMISSED_KEY = 'rbe_dismissed_alerts';
+
+function getDismissedAlerts() {
+  try { return JSON.parse(localStorage.getItem(DISMISSED_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+
+function setDismissedAlert(key) {
+  const d = getDismissedAlerts();
+  d[key] = Date.now();
+  localStorage.setItem(DISMISSED_KEY, JSON.stringify(d));
+}
+
+function isAlertDismissed(key) {
+  return !!getDismissedAlerts()[key];
+}
+
+window.dismissAlert = function(key) {
+  setDismissedAlert(key);
+  updatePredictiveNotifications();
+  if (typeof populateDashboard === 'function') populateDashboard();
+};
+
+window.clearAllDismissedAlerts = function() {
+  localStorage.removeItem(DISMISSED_KEY);
+  updatePredictiveNotifications();
+  if (typeof populateDashboard === 'function') populateDashboard();
+  alert('All dismissed alerts restored.');
+};
+
+/** Analyse breakdown frequency per equipment → predicted next failure */
+function analyseFailurePatterns() {
+  const byEquip = {};
+  (updates || []).forEach(u => {
+    const id = String(u.equipmentId || u.locoNumber || u['Loco Number'] || '').trim();
+    if (!id) return;
+    const isFail = u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
+                   String(u.status || '').toLowerCase() === 'down';
+    if (!isFail) return;
+    if (!byEquip[id]) byEquip[id] = [];
+    if (u.date) byEquip[id].push(u.date);
+  });
+
+  const patterns = [];
+  Object.entries(byEquip).forEach(([id, dates]) => {
+    const unique = [...new Set(dates)].sort();
+    if (unique.length < 2) return; // need at least 2 breakdown dates
+
+    // Average days between consecutive breakdowns
+    let totalGap = 0, gaps = 0;
+    for (let i = 1; i < unique.length; i++) {
+      const d1 = new Date(unique[i - 1]);
+      const d2 = new Date(unique[i]);
+      const gap = (d2 - d1) / 86400000;
+      if (gap > 0 && gap < 365) { totalGap += gap; gaps++; }
+    }
+    if (gaps === 0) return;
+
+    const avgDays = totalGap / gaps;
+    const lastDate = new Date(unique[unique.length - 1]);
+    const nextDate = new Date(lastDate);
+    nextDate.setDate(nextDate.getDate() + Math.round(avgDays));
+
+    const daysUntil = Math.ceil((nextDate - new Date()) / 86400000);
+
+    patterns.push({
+      equipment: id,
+      failures: unique.length,
+      avgDaysBetween: Math.round(avgDays * 10) / 10,
+      lastBreakdown: unique[unique.length - 1],
+      predictedNext: nextDate.toISOString().slice(0, 10),
+      daysUntil,
+      task: `Predictive inspection (avg every ${Math.round(avgDays)} days)`
+    });
+  });
+
+  // Sort: most urgent first
+  patterns.sort((a, b) => a.daysUntil - b.daysUntil);
+  return patterns;
+}
+
+/** Auto-create / update maintenance tasks from failure patterns */
+async function syncPredictiveMaintenanceTasks(patterns) {
+  if (!patterns || !patterns.length) return;
+  for (const p of patterns) {
+    // Only auto-add if predicted within next 30 days or overdue
+    if (p.daysUntil > 30) continue;
+
+    const existing = (maintenance || []).find(m =>
+      m.equipment === p.equipment &&
+      (m.source === 'failure-pattern' || (m.task || '').includes('Predictive inspection'))
+    );
+
+    const data = {
+      equipment: p.equipment,
+      task: p.task,
+      interval: 'custom',
+      lastDone: p.lastBreakdown,
+      dueDate: p.predictedNext,          // explicit due date
+      source: 'failure-pattern',
+      avgDaysBetween: p.avgDaysBetween,
+      failureCount: p.failures,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      if (existing) {
+        await updateDoc(doc(db, 'maintenance', existing.id), data);
+      } else {
+        await addDoc(collection(db, 'maintenance'), data);
+      }
+    } catch (err) {
+      console.warn('Could not sync predictive task for', p.equipment, err);
+    }
+  }
+}
+
+window.markEquipmentFixed = async function(equipmentId, maintId) {
+  // 1. Dismiss alert
+  dismissAlert('fail-' + equipmentId);
+  dismissAlert('maint-' + (maintId || equipmentId));
+
+  // 2. If there is a maintenance task, set lastDone = today (marks it done)
+  if (maintId) {
+    try {
+      await updateDoc(doc(db, 'maintenance', maintId), {
+        lastDone: new Date().toISOString().slice(0, 10),
+        fixedAt: new Date().toISOString()
+      });
+    } catch (e) { console.warn(e); }
+  } else {
+    // Find predictive task for this equipment
+    const m = (maintenance || []).find(x =>
+      x.equipment === equipmentId && x.source === 'failure-pattern'
+    );
+    if (m) {
+      try {
+        await updateDoc(doc(db, 'maintenance', m.id), {
+          lastDone: new Date().toISOString().slice(0, 10),
+          fixedAt: new Date().toISOString()
+        });
+      } catch (e) { console.warn(e); }
+    }
+  }
+  alert(equipmentId + ' marked as attended / fixed. Alert cleared.');
+  refreshCurrentView();
+};
+
+
+
+  
+
 function updatePredictiveNotifications() {
   const dashboard = document.getElementById('dashboard');
-  if (!dashboard || dashboard.classList.contains('hidden')) return;
+  // Still compute even if dashboard is hidden so lists are ready
+  const filteredMt = (typeof getFilteredMaintenance === 'function')
+    ? getFilteredMaintenance() : (maintenance || []);
 
-  const filteredMt = getFilteredMaintenance();
-
-  // Overdue & Due Soon
   const overdue = filteredMt.filter(m => {
-    const days = calculateDaysLeft(m.lastDone, m.interval);
-    return !isNaN(days) && days < 0;
+    const days = m.dueDate
+      ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
+      : calculateDaysLeft(m.lastDone, m.interval);
+    return !isNaN(days) && days < 0 && !isAlertDismissed('maint-' + m.id);
   });
 
   const dueSoon = filteredMt.filter(m => {
-    const days = calculateDaysLeft(m.lastDone, m.interval);
-    return !isNaN(days) && days >= 0 && days <= 7;
+    const days = m.dueDate
+      ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
+      : calculateDaysLeft(m.lastDone, m.interval);
+    return !isNaN(days) && days >= 0 && days <= 7 && !isAlertDismissed('maint-' + m.id);
   });
 
-  // Create/Update alert banner
+  // Failure-pattern alerts (next 14 days or overdue)
+  const patterns = analyseFailurePatterns().filter(p =>
+    p.daysUntil <= 14 && !isAlertDismissed('fail-' + p.equipment)
+  );
+
+  // Optional: auto-sync predictive tasks into maintenance collection
+  // Uncomment the next line if you want automatic task creation:
+  // syncPredictiveMaintenanceTasks(analyseFailurePatterns());
+
+  // --- Banner that is dynamically created ---
   let alertContainer = document.getElementById('predictive-alert');
-  if (!alertContainer) {
+  if (!alertContainer && dashboard) {
     alertContainer = document.createElement('div');
     alertContainer.id = 'predictive-alert';
     alertContainer.className = 'alert-banner alert-predictive';
@@ -1465,29 +1645,70 @@ function updatePredictiveNotifications() {
     container.insertBefore(alertContainer, dashboard.querySelector('.kpi-grid') || dashboard.firstElementChild);
   }
 
-  if (overdue.length > 0 || dueSoon.length > 0) {
-    alertContainer.innerHTML = `
-      <strong>⚠️ Predictive Maintenance Alert:</strong> 
-      ${overdue.length} Overdue | ${dueSoon.length} Due Soon (≤7 days)
-      <button id="view-schedule-btn" class="btn btn-danger" style="margin-left:12px; font-size:0.9rem;">View Full Schedule</button>
-    `;
-    alertContainer.style.display = 'block';
-
-    // Attach event listener properly (works for dynamic buttons)
-    const viewBtn = document.getElementById('view-schedule-btn');
-    if (viewBtn) {
-      viewBtn.onclick = () => {
-        show('maintenance-schedule');
-      };
+  if (alertContainer) {
+    if (overdue.length > 0 || dueSoon.length > 0 || patterns.length > 0) {
+      alertContainer.innerHTML = `
+        <strong>⚠️ Alerts:</strong>
+        ${overdue.length} Overdue | ${dueSoon.length} Due Soon | ${patterns.length} Failure-pattern
+        <button id="view-schedule-btn" class="btn btn-danger" style="margin-left:12px;font-size:0.9rem;">View Schedule</button>
+      `;
+      alertContainer.style.display = 'block';
+      const viewBtn = document.getElementById('view-schedule-btn');
+      if (viewBtn) viewBtn.onclick = () => show('maintenance-schedule');
+    } else {
+      alertContainer.style.display = 'none';
     }
-  } else {
-    alertContainer.style.display = 'none';
   }
 
-  // Ensure dashboard lists update
-  populateDashboard();
-}
+  // --- Existing HTML lists on dashboard ---
+  const predList = document.getElementById('predictive-list');
+  const predBox  = document.getElementById('predictive-alerts');
+  if (predList && predBox) {
+    const items = [...overdue, ...dueSoon];
+    predList.innerHTML = items.map(p => {
+      const days = p.dueDate
+        ? Math.ceil((new Date(p.dueDate) - new Date()) / 86400000)
+        : calculateDaysLeft(p.lastDone, p.interval);
+      const label = days >= 0 ? `due in ${days} days` : `${Math.abs(days)} days overdue`;
+      return `<li style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0;">
+        <span>${p.equipment} — ${p.task} (${label})</span>
+        <span>
+          <button class="btn btn-success" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
+            onclick="markEquipmentFixed('${p.equipment}','${p.id}')">Fixed</button>
+          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
+            onclick="dismissAlert('maint-${p.id}')">Dismiss</button>
+        </span>
+      </li>`;
+    }).join('');
+    predBox.classList.toggle('hidden', items.length === 0);
+  }
 
+  // --- NEW failure-pattern list ---
+  const fpList = document.getElementById('failure-pattern-list');
+  const fpBox  = document.getElementById('failure-pattern-alerts');
+  if (fpList && fpBox) {
+    fpList.innerHTML = patterns.map(p => {
+      const label = p.daysUntil >= 0
+        ? `likely in ${p.daysUntil} days (${p.predictedNext})`
+        : `${Math.abs(p.daysUntil)} days overdue (was ${p.predictedNext})`;
+      return `<li style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0;">
+        <span><strong>${p.equipment}</strong> — ${p.failures} breakdowns, avg every ${p.avgDaysBetween} days → ${label}</span>
+        <span>
+          <button class="btn btn-success" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
+            onclick="markEquipmentFixed('${p.equipment}')">Fixed</button>
+          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
+            onclick="dismissAlert('fail-${p.equipment}')">Dismiss</button>
+        </span>
+      </li>`;
+    }).join('');
+    fpBox.classList.toggle('hidden', patterns.length === 0);
+  }
+
+  if (typeof populateDashboard === 'function' && dashboard && !dashboard.classList.contains('hidden')) {
+    // avoid infinite loop – populateDashboard already calls some of this;
+    // only refresh the maintenance-list block if needed
+  }
+}
 
 
   
@@ -1860,31 +2081,90 @@ function populateOperationsReport() {
   }
 
 function populateMaintTable() {
-    const tbody = document.querySelector('#maint-table tbody');
-    tbody.innerHTML = maintenance.map(m => {
-      const days = calculateDaysLeft(m.lastDone, m.interval);
-      const disp = isNaN(days) ? '-' : (days >= 0 ? days : Math.abs(days) + ' overdue');
-      return `<tr>
-        <td>${m.equipment}</td>
-        <td>${m.task}</td>
-        <td>${m.interval}</td>
-        <td>${m.lastDone}</td>
-        <td>${calculateNextDue(m.lastDone, m.interval) || '-'}</td>
-        <td>${disp}</td>
-      </tr>`;
-    }).join('');
+  const tbody = document.querySelector('#maint-table tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = (maintenance || []).map(m => {
+    const days = m.dueDate
+      ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
+      : calculateDaysLeft(m.lastDone, m.interval);
+    const disp = isNaN(days) ? '-' : (days >= 0 ? days : Math.abs(days) + ' overdue');
+    const source = m.source === 'failure-pattern' ? '🧠 Pattern' : 'Manual';
+    return `<tr>
+      <td>${m.equipment}</td>
+      <td>${m.task}</td>
+      <td>${m.interval || '-'}</td>
+      <td>${m.lastDone || '-'}</td>
+      <td>${m.dueDate || calculateNextDue(m.lastDone, m.interval) || '-'}</td>
+      <td>${disp}</td>
+      <td>${source}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-success" style="padding:0.3rem 0.6rem;font-size:0.8rem;"
+          onclick="markEquipmentFixed('${m.equipment}','${m.id}')">Fixed</button>
+        <button class="btn btn-primary" style="padding:0.3rem 0.6rem;font-size:0.8rem;"
+          onclick="dismissAlert('maint-${m.id}')">Dismiss</button>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" style="text-align:center;padding:16px;">No maintenance tasks yet</td></tr>';
 }
 
+
+
+  
   function getMaintenanceEvents() {
-    return maintenance.map(task => {
-      if (!task.lastDone) return null;
-      const due = calculateNextDue(task.lastDone, task.interval);
-      const days = calculateDaysLeft(task.lastDone, task.interval);
+    const events = [];
+
+    // Normal + predictive maintenance tasks
+    (maintenance || []).forEach(task => {
+      if (isAlertDismissed('maint-' + task.id)) return;
+      let due = task.dueDate || calculateNextDue(task.lastDone, task.interval);
+      if (!due) return;
+      const days = task.dueDate
+        ? Math.ceil((new Date(task.dueDate) - new Date()) / 86400000)
+        : calculateDaysLeft(task.lastDone, task.interval);
       let color = '#16a34a';
       if (days < 0) color = '#dc2626';
       else if (days <= 7) color = '#ea580c';
-      return {title: `${task.equipment} - ${task.task}`, start: due, allDay: true, backgroundColor: color, borderColor: color, extendedProps: {daysLeft: days}};
-    }).filter(Boolean);
+      if (task.source === 'failure-pattern') color = '#7c3aed'; // purple for pattern-based
+
+      events.push({
+        title: `${task.equipment} - ${task.task}`,
+        start: due,
+        allDay: true,
+        backgroundColor: color,
+        borderColor: color,
+        extendedProps: { daysLeft: days, source: task.source || 'manual' }
+      });
+    });
+
+    // Live failure-pattern predictions (even if not yet written to maintenance)
+    analyseFailurePatterns().forEach(p => {
+      if (isAlertDismissed('fail-' + p.equipment)) return;
+      // Avoid duplicate if already in maintenance
+      const already = events.some(e =>
+        e.title.startsWith(p.equipment) && e.extendedProps.source === 'failure-pattern'
+      );
+      if (already) return;
+
+      let color = '#7c3aed';
+      if (p.daysUntil < 0) color = '#dc2626';
+      else if (p.daysUntil <= 7) color = '#ea580c';
+
+      events.push({
+        title: `${p.equipment} - Predicted failure`,
+        start: p.predictedNext,
+        allDay: true,
+        backgroundColor: color,
+        borderColor: color,
+        extendedProps: {
+          daysLeft: p.daysUntil,
+          source: 'failure-pattern',
+          avgDays: p.avgDaysBetween
+        }
+      });
+    });
+
+    return events;
   }
 
   function initCalendar() {
@@ -1919,6 +2199,8 @@ function populateMaintTable() {
   }
 
 
+
+  
   
 // ── Export functions (Global + Error Handling) ─────────────────────────────
 window.exportDashboardPDF = function() {
