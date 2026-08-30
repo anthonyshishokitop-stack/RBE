@@ -1648,56 +1648,149 @@ const mttfData = locoIds.map(id => {
   
   // ── Other populate functions ────────────────────────────────────
 function populateOperationsReport() {
-  const allIds = equipment.map(e => e.id);
-  const statusSummary = {Up:0, Down:0};
+  // --- helpers (same style as text-mining fix) ---
+  function getReason(u) {
+    return String(
+      u.reason || u.fault || u.description || u['Reason/Fault'] ||
+      u.breakdown || u['Breakdown Reported'] || u.problem || ''
+    ).trim();
+  }
+  function getEquipId(u) {
+    return String(
+      u.equipmentId || u.locoNumber || u['Loco Number'] ||
+      u.loco || u.equipment || u.id || ''
+    );
+  }
+  function getDowntime(u) {
+    return Number(u.downtimeHours || u.downtime || u.hours || u['Down Hrs'] || 0) || 0;
+  }
+  function isFailure(u) {
+    return u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true || u.isFailure === 'Yes';
+  }
+  function isDown(u) {
+    const s = String(u.status || '').toLowerCase();
+    return s === 'down' || s === 'offline' || s === 'failed' || s === 'broken';
+  }
+
+  // Use all equipment IDs that appear either in the register or in updates
+  const idSet = new Set();
+  (equipment || []).forEach(e => {
+    if (e.id) idSet.add(String(e.id));
+    if (e['Loco Number']) idSet.add(String(e['Loco Number']));
+  });
+  (updates || []).forEach(u => {
+    const id = getEquipId(u);
+    if (id) idSet.add(id);
+  });
+  const allIds = Array.from(idSet).filter(Boolean).sort();
+
+  const statusSummary = { Up: 0, Down: 0 };
   const problemRows = [];
   const highRiskRows = [];
 
   allIds.forEach(id => {
-    const st = getEquipmentStatus(id);
-    statusSummary[st.status] = (statusSummary[st.status]||0) + 1;
+    const eu = (updates || []).filter(u => getEquipId(u) === id)
+      .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
 
-    if (st.status === 'Down') {
-      const eu = updates.filter(u => u.equipmentId === id)
-                       .sort((a,b) => new Date(b.date+' '+b.time) - new Date(a.date+' '+b.time));
-      const lastDown = eu.find(u => u.status === 'Down');
-      const color = st.downtime > 168 ? 'RED' : 'ORANGE';
-      problemRows.push([id, 'Down', color, lastDown?.reason || '-', st.downtime.toFixed(1)]);
+    const st = (typeof getEquipmentStatus === 'function')
+      ? getEquipmentStatus(id)
+      : { status: 'Up', downtime: 0, availability: '100.0' };
+
+    // Safer status: if last entry is Down → Down, else use getEquipmentStatus
+    const last = eu[0];
+    const currentStatus = (last && isDown(last)) ? 'Down' : (st.status || 'Up');
+    statusSummary[currentStatus] = (statusSummary[currentStatus] || 0) + 1;
+
+    const totalDownHrs = eu.reduce((s, u) => s + getDowntime(u), 0);
+    const fails = eu.filter(isFailure).length;
+    const downEntries = eu.filter(isDown).length;
+    const lastDown = eu.find(isDown);
+    const lastReason = lastDown ? getReason(lastDown) : (last ? getReason(last) : '-');
+
+    // ---------- PROBLEM EQUIPMENT ----------
+    // Show if: currently Down  OR  has any downtime  OR  has failures
+    if (currentStatus === 'Down' || totalDownHrs > 0 || fails > 0 || downEntries > 0) {
+      let color = 'GREEN';
+      if (currentStatus === 'Down' || totalDownHrs > 168) color = 'RED';
+      else if (totalDownHrs > 24 || fails >= 2) color = 'ORANGE';
+
+      problemRows.push([
+        id,
+        currentStatus,
+        color,
+        lastReason || '-',
+        totalDownHrs.toFixed(1)
+      ]);
     }
 
-    // Entry-based High Risk
-    const fails = updates.filter(u => u.equipmentId === id && (u.isFailure === '1' || u.isFailure === 1)).length;
-    const avail = parseFloat(st.availability);
-
-    if (fails >= 3 || avail < 85) {
+    // ---------- HIGH RISK EQUIPMENT ----------
+    // Show if: 2+ failures  OR  availability < 90%  OR  downtime > 48h  OR  currently Down with downtime
+    const avail = parseFloat(st.availability) || 100;
+    if (fails >= 2 || avail < 90 || totalDownHrs > 48 || (currentStatus === 'Down' && totalDownHrs > 0)) {
+      // Simple MTTF approximation (days between failures if we have dates)
       let mttfVal = 'N/A';
-      const eu = updates.filter(u => u.equipmentId === id);
-      if (fails > 0) {
-        mttfVal = (eu.length / fails).toFixed(1);
+      if (fails >= 1 && eu.length > 0) {
+        // Prefer real day-span if dates exist
+        const dates = eu.map(u => u.date).filter(Boolean).sort();
+        if (dates.length >= 2) {
+          const first = new Date(dates[0]);
+          const lastD = new Date(dates[dates.length - 1]);
+          const days = Math.max(1, (lastD - first) / 86400000);
+          mttfVal = (days / fails).toFixed(1);
+        } else {
+          mttfVal = (eu.length / fails).toFixed(1);
+        }
       }
-      highRiskRows.push([id, fails, mttfVal, avail]);
+      highRiskRows.push([id, fails, mttfVal, avail.toFixed(1)]);
     }
   });
 
-  const total = allIds.length;
+  // Sort problem by downtime desc, high-risk by failures desc
+  problemRows.sort((a, b) => parseFloat(b[4]) - parseFloat(a[4]));
+  highRiskRows.sort((a, b) => b[1] - a[1]);
+
+  const total = allIds.length || 1;
   const opBody = [
-    ['Up (Green)', statusSummary.Up, total ? ((statusSummary.Up/total)*100).toFixed(2)+'%' : '0.00%'],
-    ['Down', statusSummary.Down, total ? ((statusSummary.Down/total)*100).toFixed(2)+'%' : '0.00%'],
-    ['Total', total, '100.00%']
+    ['Up (Green)', statusSummary.Up || 0, (((statusSummary.Up || 0) / total) * 100).toFixed(2) + '%'],
+    ['Down', statusSummary.Down || 0, (((statusSummary.Down || 0) / total) * 100).toFixed(2) + '%'],
+    ['Total', allIds.length, '100.00%']
   ];
 
-  document.getElementById('op-status-tbody').innerHTML = 
-    opBody.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+  const opStatusTbody = document.getElementById('op-status-tbody');
+  if (opStatusTbody) {
+    opStatusTbody.innerHTML = opBody.map(r =>
+      `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`
+    ).join('');
+  }
 
-  document.getElementById('problem-equipment-tbody').innerHTML = 
-    problemRows.length 
-      ? problemRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`).join('') 
-      : '<tr><td colspan="5" style="text-align:center;padding:20px;">No problem equipment</td></tr>';
+  const problemTbody = document.getElementById('problem-equipment-tbody');
+  if (problemTbody) {
+    problemTbody.innerHTML = problemRows.length
+      ? problemRows.map(r =>
+          `<tr>
+            <td><strong>${r[0]}</strong></td>
+            <td>${r[1]}</td>
+            <td style="font-weight:700;color:${r[2] === 'RED' ? '#dc2626' : r[2] === 'ORANGE' ? '#ea580c' : '#16a34a'}">${r[2]}</td>
+            <td style="max-width:280px;white-space:normal;">${(r[3] || '-').replace(/</g, '&lt;')}</td>
+            <td>${r[4]}</td>
+          </tr>`
+        ).join('')
+      : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3);">No problem equipment found. Log status updates with Status = Down or add downtime hours.</td></tr>';
+  }
 
-  document.getElementById('high-risk-tbody').innerHTML = 
-    highRiskRows.length 
-      ? highRiskRows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}%</td></tr>`).join('') 
-      : '<tr><td colspan="4" style="text-align:center;padding:20px;">No high-risk equipment</td></tr>';
+  const highRiskTbody = document.getElementById('high-risk-tbody');
+  if (highRiskTbody) {
+    highRiskTbody.innerHTML = highRiskRows.length
+      ? highRiskRows.map(r =>
+          `<tr>
+            <td><strong>${r[0]}</strong></td>
+            <td>${r[1]}</td>
+            <td>${r[2]}</td>
+            <td>${r[3]}%</td>
+          </tr>`
+        ).join('')
+      : '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-3);">No high-risk equipment. Need 2+ failures, availability &lt; 90%, or &gt; 48h downtime.</td></tr>';
+  }
 }
 
   function searchStatus(loco, date, all) {
