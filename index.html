@@ -962,9 +962,10 @@ function refreshCurrentView() {
     populateOperationsReport();
   }
   else if (section === 'control-room') populateControlRoom();
-  else if (section === 'text-mining') {
-    refreshTextMiningInsights();
-  }
+    
+if (typeof refreshTextMiningInsights === 'function') {
+  refreshTextMiningInsights();
+}
 }
 
 document.querySelectorAll('#sidebar-menu li').forEach(li => {
@@ -997,10 +998,32 @@ function tmClassifyReason(text) {
   return { mode: 'Other / Unclassified', color: '#64748b' };
 }
 
+function tmGetReason(u) {
+  return String(
+    u.reason || u.fault || u.description || u['Reason/Fault'] ||
+    u.breakdown || u['Breakdown Reported'] || u['Breakdown / Failure'] ||
+    u.problem || ''
+  ).trim();
+}
+
+function tmGetEquipId(u) {
+  return String(
+    u.equipmentId || u.locoNumber || u['Loco Number'] ||
+    u.loco || u.equipment || u.id || 'Unknown'
+  );
+}
+
+function tmGetDowntime(u) {
+  return Number(u.downtimeHours || u.downtime || u.hours || u['Down Hrs'] || 0) || 0;
+}
+
 function tmGetSourceUpdates() {
-  // Prefer shaft-filtered updates if your filter helpers exist
+  // Prefer shaft-filtered updates if available
   if (typeof getFilteredUpdates === 'function') {
-    try { return getFilteredUpdates() || []; } catch (e) { /* fall through */ }
+    try {
+      const filtered = getFilteredUpdates();
+      if (Array.isArray(filtered) && filtered.length > 0) return filtered;
+    } catch (e) { /* fall through */ }
   }
   return (typeof updates !== 'undefined' && Array.isArray(updates)) ? updates : [];
 }
@@ -1016,7 +1039,7 @@ function tmLevelForEquipment(eqId) {
 
 function tmAnalyseLiveData() {
   const rows = tmGetSourceUpdates();
-  const withText = rows.filter(u => String(u.reason || '').trim().length > 0);
+  const withText = rows.filter(u => tmGetReason(u).length > 0);
 
   const modeCounts = {};
   const locoStats = {}; // id -> { count, down, modes:{}, lastReason, lastDate, lastTime }
@@ -1024,9 +1047,12 @@ function tmAnalyseLiveData() {
   const modeByLocoDates = {}; // key: loco|mode -> Set of dates
 
   withText.forEach(u => {
-    const id = String(u.equipmentId || 'Unknown');
-    const { mode } = tmClassifyReason(u.reason);
-    const down = Number(u.downtimeHours) || 0;
+    
+    const id = tmGetEquipId(u);
+    const reasonText = tmGetReason(u);
+    const { mode } = tmClassifyReason(reasonText);
+    const down = tmGetDowntime(u);
+    
     const level = tmLevelForEquipment(id);
 
     modeCounts[mode] = (modeCounts[mode] || 0) + 1;
@@ -1042,7 +1068,9 @@ function tmAnalyseLiveData() {
     const stamp = `${u.date || ''} ${u.time || ''}`;
     const prev = `${locoStats[id].lastDate} ${locoStats[id].lastTime}`;
     if (!locoStats[id].lastDate || stamp > prev) {
-      locoStats[id].lastReason = u.reason || '';
+      
+      locoStats[id].lastReason = reasonText;
+      
       locoStats[id].lastDate = u.date || '';
       locoStats[id].lastTime = u.time || '';
     }
@@ -1069,7 +1097,8 @@ function tmAnalyseLiveData() {
     .sort((a, b) => b.count - a.count);
 
   const multiFault = badList.filter(x => x.count >= 2).length;
-  const totalDown = withText.reduce((s, u) => s + (Number(u.downtimeHours) || 0), 0);
+  
+  const totalDown = withText.reduce((s, u) => s + tmGetDowntime(u), 0);
 
   // Recurrence: same loco + same mode on 2+ distinct dates
   const recurrence = [];
@@ -1091,13 +1120,14 @@ function tmAnalyseLiveData() {
     .slice()
     .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)))
     .slice(0, 25)
+    
     .map(u => ({
       date: u.date || '—',
       time: u.time || '—',
-      id: u.equipmentId || '—',
-      mode: tmClassifyReason(u.reason).mode,
-      reason: u.reason || '',
-      down: Number(u.downtimeHours) || 0
+      id: tmGetEquipId(u),
+      mode: tmClassifyReason(tmGetReason(u)).mode,
+      reason: tmGetReason(u),
+      down: tmGetDowntime(u)
     }));
 
   return {
