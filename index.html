@@ -849,13 +849,20 @@
                       </div>
                   
                       <div class="card">
-                        <h2><i class="fas fa-bell"></i> Recurrence early-warning indicators</h2>
-                        <p style="color:var(--text-3);font-size:0.9rem;margin-bottom:1rem;">
+                        <div class="table-toolbar">
+                          <h2 style="margin:0;"><i class="fas fa-bell"></i> Recurrence early-warning indicators</h2>
+                          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-primary" style="padding:0.45rem 0.9rem;" onclick="exportRecurrenceExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                            <button type="button" class="btn btn-primary" style="padding:0.45rem 0.9rem;" onclick="exportRecurrencePDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                          </div>
+                        </div>
+                        <p style="color:var(--text-3);font-size:0.9rem;margin:0.75rem 0 1rem;">
                           Equipment with the <strong>same classified mode on 2 or more different dates</strong> — the early-warning signal described in the study.
                           These units are candidates for prioritised inspection before the next failure.
                         </p>
+                        <div id="tm-recur-summary" class="summary-alert-bar purple hidden"></div>
                         <div style="overflow-x:auto;">
-                          <table>
+                          <table id="tm-recur-table">
                             <thead>
                               <tr>
                                 <th>Equipment ID</th>
@@ -868,13 +875,23 @@
                             <tbody id="tm-recur-tbody"></tbody>
                           </table>
                         </div>
+                        <div id="tm-recur-view-more-wrap" style="text-align:center;margin-top:0.75rem;display:none;">
+                          <button type="button" class="btn btn-primary" id="tm-recur-view-more-btn" onclick="toggleTableExpand('tm-recur')">View more</button>
+                        </div>
                         <p id="tm-recur-empty" style="display:none;color:var(--text-3);">No recurrence patterns in current data.</p>
                       </div>
                   
                       <div class="card">
-                        <h2><i class="fas fa-list"></i> Latest classified entries</h2>
+                        <div class="table-toolbar">
+                          <h2 style="margin:0;"><i class="fas fa-list"></i> Latest classified entries</h2>
+                          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-primary" style="padding:0.45rem 0.9rem;" onclick="exportLatestClassifiedExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                            <button type="button" class="btn btn-primary" style="padding:0.45rem 0.9rem;" onclick="exportLatestClassifiedPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                          </div>
+                        </div>
+                        <div id="tm-recent-summary" class="summary-alert-bar info hidden" style="margin-top:0.75rem;"></div>
                         <div style="overflow-x:auto;">
-                          <table>
+                          <table id="tm-recent-table">
                             <thead>
                               <tr>
                                 <th>Date</th>
@@ -887,6 +904,9 @@
                             </thead>
                             <tbody id="tm-recent-tbody"></tbody>
                           </table>
+                        </div>
+                        <div id="tm-recent-view-more-wrap" style="text-align:center;margin-top:0.75rem;display:none;">
+                          <button type="button" class="btn btn-primary" id="tm-recent-view-more-btn" onclick="toggleTableExpand('tm-recent')">View more</button>
                         </div>
                       </div>
                   
@@ -1519,15 +1539,19 @@
                       if (w) w.style.display = 'none';
                     }
                   
-                    // Recurrence
+                    // Recurrence — paged + summary + export
+                    window._lastRecurrence = analysis.recurrence || [];
                     const recurBody = document.getElementById('tm-recur-tbody');
                     const recurEmpty = document.getElementById('tm-recur-empty');
-                    if (analysis.recurrence.length === 0) {
-                      recurBody.innerHTML = '';
+                    if (!analysis.recurrence.length) {
+                      if (recurBody) recurBody.innerHTML = '';
                       if (recurEmpty) recurEmpty.style.display = 'block';
+                      setSummaryBar('tm-recur-summary', '');
+                      const w = document.getElementById('tm-recur-view-more-wrap');
+                      if (w) w.style.display = 'none';
                     } else {
                       if (recurEmpty) recurEmpty.style.display = 'none';
-                      recurBody.innerHTML = analysis.recurrence.slice(0, 20).map(r => `
+                      const recurRows = analysis.recurrence.map(r => `
                         <tr>
                           <td><strong>${r.id}</strong></td>
                           <td>${r.mode}</td>
@@ -1535,20 +1559,49 @@
                           <td>${r.dates}</td>
                           <td style="color:var(--danger);font-weight:600;">Escalate for inspection</td>
                         </tr>
-                      `).join('');
+                      `);
+                      renderPagedTable('tm-recur', recurRows);
+                      setSummaryBar('tm-recur-summary',
+                        recurRows.length > 10
+                          ? `<div><i class="fas fa-bell" style="margin-right:6px;"></i><strong>Recurrence warnings:</strong> ${recurRows.length} patterns</div>
+                             <div class="bar-actions">
+                               <button type="button" class="btn-view-more" onclick="toggleTableExpand('tm-recur')">View more</button>
+                               <button type="button" class="btn-export" onclick="exportRecurrenceExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                               <button type="button" class="btn-export" onclick="exportRecurrencePDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                             </div>`
+                          : '', 'purple');
                     }
                   
-                    // Recent
-                    document.getElementById('tm-recent-tbody').innerHTML = analysis.recent.map(r => `
+                    // Latest classified entries — paged + summary + export
+                    window._lastRecentClassified = analysis.recent || [];
+                    const recentRows = (analysis.recent || []).map(r => `
                       <tr>
-                        <td>${r.date}</td>
-                        <td>${r.time}</td>
-                        <td>${r.id}</td>
-                        <td><strong>${r.mode}</strong></td>
+                        <td>${r.date || ''}</td>
+                        <td>${r.time || ''}</td>
+                        <td>${r.id || ''}</td>
+                        <td><strong>${r.mode || ''}</strong></td>
                         <td style="max-width:320px;white-space:normal;">${(r.reason || '').replace(/</g, '&lt;')}</td>
-                        <td>${r.down}</td>
+                        <td>${r.down ?? ''}</td>
                       </tr>
-                    `).join('');
+                    `);
+                    if (recentRows.length) {
+                      renderPagedTable('tm-recent', recentRows);
+                      setSummaryBar('tm-recent-summary',
+                        recentRows.length > 10
+                          ? `<div><i class="fas fa-list" style="margin-right:6px;"></i><strong>Latest classified:</strong> ${recentRows.length} entries</div>
+                             <div class="bar-actions">
+                               <button type="button" class="btn-view-more" onclick="toggleTableExpand('tm-recent')">View more</button>
+                               <button type="button" class="btn-export" onclick="exportLatestClassifiedExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                               <button type="button" class="btn-export" onclick="exportLatestClassifiedPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                             </div>`
+                          : '', 'info');
+                    } else {
+                      const tb = document.getElementById('tm-recent-tbody');
+                      if (tb) tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:16px;">No classified entries for this filter.</td></tr>';
+                      setSummaryBar('tm-recent-summary', '');
+                      const w = document.getElementById('tm-recent-view-more-wrap');
+                      if (w) w.style.display = 'none';
+                    }
                   
                     tmRenderCharts(analysis.modeCounts, analysis.levelCounts);
                   }
@@ -2058,25 +2111,33 @@ function populateDashboard() {
   const filteredUp = getFilteredUpdates();
   const filteredMt = getFilteredMaintenance();
 
-  // Include equipment from register AND from status/import updates
+  // Include equipment from register AND from status/import updates (already shaft-filtered)
   const idSet = new Set();
   filteredEq.forEach(e => { if (e.id) idSet.add(String(e.id)); });
-  (filteredUp.length ? filteredUp : (updates || [])).forEach(u => {
+  filteredUp.forEach(u => {
     const id = String(u.equipmentId || u.locoNumber || u['Loco Number'] || '').trim();
     if (id && id !== 'Unknown') idSet.add(id);
   });
-  // If shaft filter is on, only keep updates that match filtered equipment
-  // OR equipment that has no shaft restriction when filter is empty
+  // All Shafts → full set; specific shaft with no matches → empty list (show nothing)
   let locoIds = Array.from(idSet).filter(Boolean).sort();
-  if (currentShaftFilter) {
-    const allowed = new Set(filteredEq.map(e => String(e.id)));
-    // Also allow update IDs whose shaft field matches the filter
-    (updates || []).forEach(u => {
-      const id = String(u.equipmentId || '').trim();
-      if (id && String(u.shaft || '') === currentShaftFilter) allowed.add(id);
-    });
-    locoIds = locoIds.filter(id => allowed.has(id) || !filteredEq.length);
+  if (currentShaftFilter && filteredEq.length === 0 && filteredUp.length === 0) {
+    locoIds = []; // shaft selected but no data
   }
+                  
+                      // Empty shaft filter → clear KPIs / charts message
+                      if (currentShaftFilter && locoIds.length === 0) {
+                        document.getElementById('kpi-grid').innerHTML = `
+                          <div class="kpi-card" style="grid-column:1/-1;">
+                            <p style="margin:0;color:var(--text-3);">No equipment or breakdowns for <strong>${currentShaftFilter}</strong>. Switch to <em>All Shafts</em> to see the full fleet.</p>
+                          </div>`;
+                        ['availabilityChart','failuresChart','mttfChart'].forEach(cid => {
+                          if (charts[cid.replace('Chart','').replace('availability','avail')] ) {/* skip */}
+                        });
+                        const ml = document.getElementById('maintenance-list');
+                        if (ml) ml.innerHTML = '<div style="color:var(--text-3);">No data for this shaft.</div>';
+                        setSummaryBar('upcoming-maint-summary', '');
+                        return;
+                      }
                   
                       let operational = 0, downLt7d = 0, downGt7d = 0, totalAvail = 0;
                       locoIds.forEach(id => {
@@ -2311,18 +2372,25 @@ function populateDashboard() {
                   
                     function filterDashboard() {
                       const sel = document.getElementById('shaft-filter');
-                      currentShaftFilter = sel ? (sel.value || '') : '';
-                      // Keep control-room filter in sync (optional)
-                      const cr = document.getElementById('cr-shaft-filter');
-                      if (cr && cr.value !== currentShaftFilter) {
-                        // don't force CR filter; dashboard is master for app-wide view
+                      // Empty value = All Shafts → show everything (including unassigned)
+                      currentShaftFilter = sel ? String(sel.value || '').trim() : '';
+                      console.log('Shaft filter →', currentShaftFilter || 'All Shafts (no filter)');
+                  
+                      // Force full refresh of every major view
+                      try {
+                        if (typeof fillDatalist === 'function') fillDatalist();
+                        if (typeof populateDashboard === 'function') populateDashboard();
+                        if (typeof populateEquipmentTable === 'function') populateEquipmentTable();
+                        if (typeof populateMaintTable === 'function') populateMaintTable();
+                        if (typeof populateOperationsReport === 'function') populateOperationsReport();
+                        if (typeof populateSummaryTable === 'function') populateSummaryTable();
+                        if (typeof populateLogTable === 'function') populateLogTable();
+                        if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+                        if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+                        if (typeof refreshCurrentView === 'function') refreshCurrentView();
+                      } catch (e) {
+                        console.warn('filterDashboard refresh error:', e);
                       }
-                      console.log('Shaft filter →', currentShaftFilter || 'All Shafts');
-                      // Refresh whatever is on screen + always refresh text mining cache
-                      if (typeof refreshCurrentView === 'function') refreshCurrentView();
-                      if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
-                      if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
-                      if (typeof fillDatalist === 'function') fillDatalist();
                     }
                     window.filterDashboard = filterDashboard;
                   
@@ -3391,21 +3459,27 @@ function populateDashboard() {
                       maint: '#maint-table tbody',
                       problem: '#problem-equipment-tbody',
                       highrisk: '#high-risk-tbody',
-                      'tm-bad': '#tm-bad-tbody'
+                      'tm-bad': '#tm-bad-tbody',
+                      'tm-recur': '#tm-recur-tbody',
+                      'tm-recent': '#tm-recent-tbody'
                     };
                     const wrapMap = {
                       equipment: 'equipment-view-more-wrap',
                       maint: 'maint-view-more-wrap',
                       problem: 'problem-view-more-wrap',
                       highrisk: 'highrisk-view-more-wrap',
-                      'tm-bad': 'tm-bad-view-more-wrap'
+                      'tm-bad': 'tm-bad-view-more-wrap',
+                      'tm-recur': 'tm-recur-view-more-wrap',
+                      'tm-recent': 'tm-recent-view-more-wrap'
                     };
                     const btnMap = {
                       equipment: 'equipment-view-more-btn',
                       maint: 'maint-view-more-btn',
                       problem: 'problem-view-more-btn',
                       highrisk: 'highrisk-view-more-btn',
-                      'tm-bad': 'tm-bad-view-more-btn'
+                      'tm-bad': 'tm-bad-view-more-btn',
+                      'tm-recur': 'tm-recur-view-more-btn',
+                      'tm-recent': 'tm-recent-view-more-btn'
                     };
 
                     const tbodySel = tbodyMap[key];
@@ -3541,6 +3615,28 @@ function populateDashboard() {
                       ul.querySelectorAll('li').forEach(li => lines.push([id, li.innerText.replace(/\s+/g,' ').trim()]));
                     });
                     downloadCSV('Dashboard_Alerts.csv', ['Category','Detail'], lines);
+                  };
+                  window.exportRecurrenceExcel = function () {
+                    const rows = (window._lastRecurrence || []).map(r => [r.id, r.mode, r.times, r.dates, 'Escalate for inspection']);
+                    downloadCSV('Recurrence_Early_Warnings.csv',
+                      ['Equipment ID','Mode','Times seen','Distinct dates','Suggestion'], rows);
+                  };
+                  window.exportRecurrencePDF = function () {
+                    const rows = (window._lastRecurrence || []).map(r => [r.id, r.mode, r.times, r.dates, 'Escalate']);
+                    simpleTablePDF('Recurrence early-warning indicators',
+                      ['Equipment','Mode','Times','Dates','Suggestion'], rows, 'Recurrence_Early_Warnings.pdf');
+                  };
+                  window.exportLatestClassifiedExcel = function () {
+                    const rows = (window._lastRecentClassified || []).map(r =>
+                      [r.date, r.time, r.id, r.mode, r.reason, r.down]);
+                    downloadCSV('Latest_Classified_Entries.csv',
+                      ['Date','Time','Equipment','Mode','Reason/Fault','Down hrs'], rows);
+                  };
+                  window.exportLatestClassifiedPDF = function () {
+                    const rows = (window._lastRecentClassified || []).map(r =>
+                      [r.date, r.time, r.id, r.mode, String(r.reason||'').slice(0,50), r.down]);
+                    simpleTablePDF('Latest classified entries',
+                      ['Date','Time','Equipment','Mode','Reason','Down hrs'], rows, 'Latest_Classified_Entries.pdf');
                   };
                   window.exportUpcomingMaintExcel = function () {
                     const items = window._lastUpcomingMaint || [];
