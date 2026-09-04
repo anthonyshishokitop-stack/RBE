@@ -363,10 +363,16 @@
                           <section id="dashboard">
                             <div class="header-bar">
                               <h1>RBE Monitor</h1>
-                              <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
-                                <select id="shaft-filter" onchange="filterDashboard()">
-                                  <option value="">All Operations</option>
+                              <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+                                <label for="shaft-filter" style="font-weight:600;font-size:0.9rem;opacity:0.95;">Shaft filter</label>
+                                <select id="shaft-filter" onchange="window.filterDashboard && window.filterDashboard()"
+                                  style="min-width:200px;padding:0.55rem 0.9rem;border-radius:8px;border:1px solid rgba(255,255,255,0.35);background:white;color:#0f172a;font-weight:600;">
+                                  <option value="">All Shafts</option>
                                 </select>
+                                <button type="button" class="btn btn-primary" style="background:white;color:#1d4ed8;"
+                                  onclick="clearShaftFilter()" title="Show entire fleet (all shafts)">
+                                  <i class="fas fa-globe"></i> Show all
+                                </button>
                                 <button class="btn btn-primary" onclick="exportDashboardPDF()"><i class="fas fa-file-pdf"></i> Export Dashboard PDF</button>
                               </div>
                             </div>
@@ -556,7 +562,7 @@
                             <div id="equipment-summary-bar" class="summary-alert-bar info hidden"></div>
                             <div style="overflow-x:auto;">
                               <table id="equipment-table">
-                                <thead><tr><th>Operation</th><th>Work Place</th><th>Equipment Size</th><th>Equipment ID</th><th>SECTION</th></tr></thead>
+                                <thead><tr><th>Operation</th><th>Work Place</th><th>Equipment Size</th><th>Equipment ID</th><th>SECTION</th><th>Actions</th></tr></thead>
                                 <tbody></tbody>
                               </table>
                             </div>
@@ -960,6 +966,34 @@
                     <datalist id="loco-list"></datalist>
                   
                     <!-- MODALS -->
+                    <!-- Edit Equipment modal -->
+                    <div id="edit-equipment-modal" class="modal">
+                      <div class="modal-content">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem;">
+                          <h3>Edit Equipment</h3>
+                          <button type="button" onclick="document.getElementById('edit-equipment-modal').classList.remove('active')"
+                            style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:var(--text);">×</button>
+                        </div>
+                        <form id="edit-equipment-form">
+                          <input type="hidden" id="edit-eq-original-id">
+                          <div class="form-group"><label>Equipment ID</label>
+                            <input id="edit-eq-id" type="text" required readonly style="opacity:0.85;"></div>
+                          <div class="form-group"><label>Operation / Shaft</label>
+                            <select id="edit-eq-shaft" required></select></div>
+                          <div class="form-group"><label>Work Place</label>
+                            <input id="edit-eq-level" type="text"></div>
+                          <div class="form-group"><label>Equipment Size</label>
+                            <input id="edit-eq-size" type="text"></div>
+                          <div class="form-group"><label>SECTION</label>
+                            <input id="edit-eq-section" type="text"></div>
+                          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+                            <button type="submit" class="btn btn-primary">Save changes</button>
+                            <button type="button" class="btn btn-danger" onclick="document.getElementById('edit-equipment-modal').classList.remove('active')">Cancel</button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  
                     <div id="edit-modal" class="modal">
                       <div class="modal-content">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem;">
@@ -1646,12 +1680,28 @@
                   
                       const shaftFilter = document.getElementById('shaft-filter');
                       if (shaftFilter) {
-                        shaftFilter.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+                        const prev = shaftFilter.value;
+                        shaftFilter.innerHTML = '<option value="">All Shafts</option>' +
+                          shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+                        // Restore selection if still valid; otherwise stay on All Shafts
+                        if (prev && shafts.includes(prev)) shaftFilter.value = prev;
+                        else shaftFilter.value = '';
                       }
                   
                       const crShaftFilter = document.getElementById('cr-shaft-filter');
                       if (crShaftFilter) {
-                        crShaftFilter.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+                        const prev = crShaftFilter.value;
+                        crShaftFilter.innerHTML = '<option value="">All Shafts</option>' +
+                          shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+                        if (prev && shafts.includes(prev)) crShaftFilter.value = prev;
+                        else crShaftFilter.value = '';
+                      }
+                  
+                      // Keep edit-equipment shaft dropdown in sync
+                      const editShaft = document.getElementById('edit-eq-shaft');
+                      if (editShaft) {
+                        editShaft.innerHTML = '<option value="">— Unassigned (All Shafts only) —</option>' +
+                          shafts.map(s => `<option value="${s}">${s}</option>`).join('');
                       }
                   
                       // This is the correct place for the import shaft dropdown
@@ -2370,13 +2420,20 @@ function populateDashboard() {
                       }
                     }
                   
+                    function clearShaftFilter() {
+                      const sel = document.getElementById('shaft-filter');
+                      if (sel) sel.value = '';
+                      currentShaftFilter = '';
+                      filterDashboard();
+                    }
+                    window.clearShaftFilter = clearShaftFilter;
+                  
                     function filterDashboard() {
                       const sel = document.getElementById('shaft-filter');
-                      // Empty value = All Shafts → show everything (including unassigned)
+                      // Empty string = All Shafts → entire system, no filter
                       currentShaftFilter = sel ? String(sel.value || '').trim() : '';
-                      console.log('Shaft filter →', currentShaftFilter || 'All Shafts (no filter)');
+                      console.log('Shaft filter →', currentShaftFilter ? currentShaftFilter : 'All Shafts (entire system)');
                   
-                      // Force full refresh of every major view
                       try {
                         if (typeof fillDatalist === 'function') fillDatalist();
                         if (typeof populateDashboard === 'function') populateDashboard();
@@ -2596,24 +2653,63 @@ function populateDashboard() {
                     }
                   
                     function removeEquipment(locoNumber) {
-                      if (!confirm(`Remove ${locoNumber} and ALL related data?`)) return;
+                      const id = String(locoNumber || '').trim();
+                      if (!id) return;
+                      if (!confirm(`Delete equipment "${id}" and ALL related status / maintenance / delay records?\n\nThis cannot be undone.`)) return;
                       (async () => {
                         try {
-                          await deleteDoc(doc(db, "equipment", locoNumber));
-                          const uq = query(collection(db, "status_updates"), where("equipmentId", "==", locoNumber));
+                          await deleteDoc(doc(db, "equipment", id));
+                          const uq = query(collection(db, "status_updates"), where("equipmentId", "==", id));
                           const usnap = await getDocs(uq);
                           for (let ds of usnap.docs) await deleteDoc(ds.ref);
-                          const mq = query(collection(db, "maintenance"), where("equipment", "==", locoNumber));
+                          const mq = query(collection(db, "maintenance"), where("equipment", "==", id));
                           const msnap = await getDocs(mq);
                           for (let ds of msnap.docs) await deleteDoc(ds.ref);
-                          const dq = query(collection(db, "delays"), where("equipment", "==", locoNumber));
-                          const dsnap = await getDocs(dq);
-                          for (let ds of dsnap.docs) await deleteDoc(ds.ref);
+                          try {
+                            const dq = query(collection(db, "delays"), where("equipment", "==", id));
+                            const dsnap = await getDocs(dq);
+                            for (let ds of dsnap.docs) await deleteDoc(ds.ref);
+                          } catch (e) { /* delays optional */ }
                           alert('Equipment and related data removed');
-                          refreshCurrentView();
+                          if (typeof refreshCurrentView === 'function') refreshCurrentView();
+                          if (typeof populateEquipmentTable === 'function') populateEquipmentTable();
                         } catch (err) { alert('Error: ' + err.message); }
                       })();
                     }
+                    window.removeEquipment = removeEquipment;
+                  
+                    function openEditEquipment(id) {
+                      const sid = String(id || '').trim();
+                      const eq = (equipment || []).find(e => String(e.id) === sid);
+                      if (!eq) {
+                        alert('Equipment not found: ' + sid);
+                        return;
+                      }
+                      // Ensure shaft options exist
+                      const shaftSel = document.getElementById('edit-eq-shaft');
+                      if (shaftSel && shaftSel.options.length <= 1) {
+                        // fallback options from dashboard filter
+                        const src = document.getElementById('shaft-filter');
+                        if (src) {
+                          shaftSel.innerHTML = '<option value="">— Unassigned (All Shafts only) —</option>';
+                          [...src.options].forEach(o => {
+                            if (!o.value) return;
+                            const opt = document.createElement('option');
+                            opt.value = o.value;
+                            opt.textContent = o.textContent;
+                            shaftSel.appendChild(opt);
+                          });
+                        }
+                      }
+                      document.getElementById('edit-eq-original-id').value = sid;
+                      document.getElementById('edit-eq-id').value = sid;
+                      document.getElementById('edit-eq-shaft').value = eq.shaft || '';
+                      document.getElementById('edit-eq-level').value = eq.level || '';
+                      document.getElementById('edit-eq-size').value = eq.locoSize || '';
+                      document.getElementById('edit-eq-section').value = eq.section || '';
+                      document.getElementById('edit-equipment-modal').classList.add('active');
+                    }
+                    window.openEditEquipment = openEditEquipment;
                   
                     function populateSummaryTable() {
                       const filteredEq = getFilteredEquipment();
@@ -2642,9 +2738,22 @@ function populateDashboard() {
                   
                     function populateEquipmentTable() {
                       const list = getFilteredEquipment();
-                      const rows = list.map(e =>
-                        `<tr><td>${e.shaft||'-'}</td><td>${e.level||'-'}</td><td>${e.locoSize||'-'}</td><td><strong>${e.id}</strong></td><td>${e.section||'-'}</td></tr>`
-                      );
+                      const rows = list.map(e => {
+                        const id = String(e.id || '').replace(/'/g, "\\'");
+                        return `<tr>
+                          <td>${e.shaft || '— unassigned —'}</td>
+                          <td>${e.level||'-'}</td>
+                          <td>${e.locoSize||'-'}</td>
+                          <td><strong>${e.id}</strong></td>
+                          <td>${e.section||'-'}</td>
+                          <td style="white-space:nowrap;">
+                            <button type="button" class="btn btn-primary" style="padding:0.3rem 0.65rem;font-size:0.8rem;"
+                              onclick="openEditEquipment('${id}')"><i class="fas fa-edit"></i> Edit</button>
+                            <button type="button" class="btn btn-danger" style="padding:0.3rem 0.65rem;font-size:0.8rem;"
+                              onclick="removeEquipment('${id}')"><i class="fas fa-trash"></i> Delete</button>
+                          </td>
+                        </tr>`;
+                      });
                       renderPagedTable('equipment', rows);
                       const bar = document.getElementById('equipment-summary-bar');
                       if (bar) {
@@ -3928,6 +4037,31 @@ function populateDashboard() {
                     
                   
                     // ── Form listeners ──────────────────────────────────────────────
+                    const editEqForm = document.getElementById('edit-equipment-form');
+                    if (editEqForm) {
+                      editEqForm.addEventListener('submit', async e => {
+                        e.preventDefault();
+                        const id = document.getElementById('edit-eq-original-id').value.trim();
+                        if (!id) return alert('Missing equipment ID');
+                        const data = {
+                          shaft: document.getElementById('edit-eq-shaft').value || '',
+                          level: document.getElementById('edit-eq-level').value || '',
+                          locoSize: document.getElementById('edit-eq-size').value || '',
+                          section: document.getElementById('edit-eq-section').value || '',
+                          updatedAt: new Date().toISOString()
+                        };
+                        try {
+                          await setDoc(doc(db, 'equipment', id), data, { merge: true });
+                          document.getElementById('edit-equipment-modal').classList.remove('active');
+                          alert('Equipment updated' + (data.shaft ? '' : ' (unassigned — visible under All Shafts only)'));
+                          if (typeof populateEquipmentTable === 'function') populateEquipmentTable();
+                          if (typeof refreshCurrentView === 'function') refreshCurrentView();
+                        } catch (err) {
+                          alert('Error: ' + err.message);
+                        }
+                      });
+                    }
+                  
                     document.getElementById('add-eq-form').addEventListener('submit', async e => {
                       e.preventDefault();
                       const rawId = document.getElementById('loco-number').value.trim();
