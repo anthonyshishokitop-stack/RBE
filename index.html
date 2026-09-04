@@ -267,7 +267,7 @@
                           <li data-section="operations-report"><i class="fas fa-file-alt"></i><span>Operations Report</span></li>
                           <li data-section="import-spreadsheet"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
                   
-                          <li data-section="text-mining"><i class="fas fa-brain"></i><span>Text Mining Insights</span></li>
+                          <li data-section="text-mining"><i class="fas fa-brain"></i><span>Text Mining Framework</span></li>
                   
                           <li id="logout-btn" style="margin-top:auto; color:#fca5a5; border-top:1px solid #334155; margin-top:1rem; padding-top:1rem;"> <i class="fas fa-sign-out-alt"></i><span>Logout</span></li>
                          
@@ -304,7 +304,7 @@
                   
                             <!-- NEW: Failure-pattern predictions from breakdown history -->
                             <div id="failure-pattern-alerts" class="alert-banner alert-high-risk hidden" style="border-color:#7c3aed;color:#5b21b6;background:rgba(124,58,237,0.08);">
-                              <strong><i class="fas fa-chart-line"></i> Failure Pattern Alerts (from breakdown history)</strong>
+                              <strong><i class="fas fa-chart-line"></i> Failure Pattern Alerts (text-mining of breakdown history)</strong>
                               <ul id="failure-pattern-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
                             </div>
                   
@@ -537,6 +537,14 @@
                           <i class="fas fa-info-circle" style="margin-right:4px;"></i>
                           The system will automatically scan <strong>all sheets</strong>, find header rows, map columns intelligently, and ignore titles / empty rows.
                         </p>
+                        <p style="margin-top:0.75rem;font-size:0.9rem;color:var(--text-2);background:rgba(29,78,216,0.06);padding:0.85rem 1rem;border-radius:8px;border-left:4px solid var(--primary);">
+                          <i class="fas fa-brain" style="margin-right:6px;"></i>
+                          <strong>Text-mining note (aligned with the research framework):</strong>
+                          Import itself does <em>not</em> apply NLP. It extracts and stores the original artisan free-text
+                          (“Breakdown reported”, “Reason/Fault”, etc.). After import, the <strong>Text Mining Framework</strong>
+                          panel applies the rule-based text classifier (the same approach used in the study) to turn those
+                          unstructured descriptions into failure-mode frequencies, bad-actor rankings and recurrence early warnings.
+                        </p>
                       </div>
                   
                       <!-- Optional shaft override -->
@@ -599,10 +607,10 @@
                   </section>
                   
                   
-                          <!-- ===================== TEXT MINING INSIGHTS (LIVE FROM SYSTEM) ===================== -->
+                          <!-- ===================== TEXT MINING FRAMEWORK (aligned with research proposal) ===================== -->
                   <section id="text-mining" class="hidden">
                     <div class="header-bar">
-                      <h1><i class="fas fa-brain"></i> Text Mining Insights</h1>
+                      <h1><i class="fas fa-brain"></i> Text Mining Framework – Predictive Maintenance</h1>
                       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
                         <button type="button" class="btn btn-primary" onclick="refreshTextMiningInsights()">
                           <i class="fas fa-sync-alt"></i> Refresh from live data
@@ -611,17 +619,22 @@
                     </div>
                   
                     <p style="color:var(--text-3);margin:0 0 1rem;font-size:0.92rem;">
-                      Insights are built only from <strong>status updates</strong> and <strong>imported breakdowns</strong> currently in this system
-                      (free-text <em>Reason/Fault</em>). Results change when you log updates or import reports.
+                      This panel implements the <strong>text-mining framework</strong> described in the research proposal
+                      (<em>Development of a Text Mining Framework for Predictive Maintenance of Underground Locomotives</em>).
+                      Unstructured artisan notes (free-text <em>Reason/Fault</em> from status updates and imported Excel breakdown reports)
+                      are classified with a <strong>rule-based text classifier</strong> — the same approach used in the study results —
+                      into engineering failure modes. No additional sensors are required. Results update automatically when new records are logged or imported.
                     </p>
                   
                     <!-- Empty state -->
                     <div id="tm-empty" class="card" style="display:none;text-align:center;padding:2.5rem 1.5rem;">
                       <i class="fas fa-inbox" style="font-size:2.5rem;color:var(--text-3);margin-bottom:0.75rem;"></i>
                       <h2 style="margin-bottom:0.5rem;">No text to analyse yet</h2>
-                      <p style="color:var(--text-3);max-width:420px;margin:0 auto;">
-                        Log a status update with a <strong>Reason/Fault</strong>, or use <strong>Import Down Report</strong>.
-                        This panel will classify faults and rank equipment from those entries only.
+                      <p style="color:var(--text-3);max-width:480px;margin:0 auto;">
+                        Log a status update with a <strong>Reason/Fault</strong> description, or use <strong>Import Down Report</strong>
+                        to load historical Excel job cards. The rule-based text classifier will then extract failure modes,
+                        rank high-frequency (“bad-actor”) locomotives and surface recurrence early-warning indicators —
+                        exactly as demonstrated in the study.
                       </p>
                     </div>
                   
@@ -651,22 +664,33 @@
                       </div>
                   
                       <div id="tm-alerts"></div>
+
+                      <!-- Study-aligned failure-mode categories -->
+                      <div class="card" style="margin-top:0.5rem;border-left:5px solid var(--primary);">
+                        <h2 style="font-size:1.05rem;margin-bottom:0.5rem;"><i class="fas fa-tags"></i> Rule-based failure-mode categories (study-aligned)</h2>
+                        <p style="font-size:0.88rem;color:var(--text-3);margin:0;">
+                          Brakes / Binding · Antenna / Comms / Display · Lights / Siren / Speedo / Display ·
+                          Motor / Power / Control / Movement · Derailment · Door / Magnet / Buffer · Battery / Cells · Other / Unclassified.
+                          These match the engineering categories used in the research results tables.
+                        </p>
+                      </div>
                   
                       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.25rem;">
                         <div class="chart-wrapper">
-                          <div class="chart-title"><i class="fas fa-chart-pie"></i> Failure modes (from your Reason/Fault text)</div>
+                          <div class="chart-title"><i class="fas fa-chart-pie"></i> Failure modes from artisan free-text (rule-based classifier)</div>
                           <div class="chart-container"><canvas id="tm-mode-chart"></canvas></div>
                         </div>
                         <div class="chart-wrapper">
-                          <div class="chart-title"><i class="fas fa-map-marker-alt"></i> Faults by workplace / level</div>
+                          <div class="chart-title"><i class="fas fa-map-marker-alt"></i> Faults by workplace / level (spatial concentration)</div>
                           <div class="chart-container"><canvas id="tm-level-chart"></canvas></div>
                         </div>
                       </div>
                   
                       <div class="card" style="margin-top:1.25rem;">
-                        <h2><i class="fas fa-fire"></i> Highest-frequency equipment (from system entries)</h2>
+                        <h2><i class="fas fa-fire"></i> Highest-frequency equipment (“bad actors”)</h2>
                         <p style="color:var(--text-3);font-size:0.9rem;margin-bottom:1rem;">
-                          Ranked by number of status/import rows with fault text. Dominant mode is the most common classified reason for that unit.
+                          Ranked by number of status/import rows with fault text — the classic “bad-actor” pattern identified in the study.
+                          Dominant mode is the most common classified reason for that unit.
                         </p>
                         <div style="overflow-x:auto;">
                           <table>
@@ -686,9 +710,10 @@
                       </div>
                   
                       <div class="card">
-                        <h2><i class="fas fa-bell"></i> Recurrence early warnings (same mode, same equipment)</h2>
+                        <h2><i class="fas fa-bell"></i> Recurrence early-warning indicators</h2>
                         <p style="color:var(--text-3);font-size:0.9rem;margin-bottom:1rem;">
-                          Equipment with the <strong>same classified mode on 2 or more different dates</strong> in the current data set.
+                          Equipment with the <strong>same classified mode on 2 or more different dates</strong> — the early-warning signal described in the study.
+                          These units are candidates for prioritised inspection before the next failure.
                         </p>
                         <div style="overflow-x:auto;">
                           <table>
@@ -727,10 +752,10 @@
                       </div>
                   
                       <div class="card">
-                        <h2><i class="fas fa-magic"></i> Test classifier on any text</h2>
+                        <h2><i class="fas fa-magic"></i> Test the rule-based text classifier</h2>
                         <div class="form-group">
-                          <label>Paste a Reason/Fault (same rules used on live entries)</label>
-                          <textarea id="tm-classify-input" rows="2" placeholder="e.g. FAILING BRAKES / CHECK ANTENNA / PULSE 350"></textarea>
+                          <label>Paste any artisan Reason/Fault text (uses the same rule set applied to every live status / import row)</label>
+                          <textarea id="tm-classify-input" rows="2" placeholder="e.g. FAILING BRAKES / CHECK ANTENNA / PULSE 350 / GABOOZ FAULT"></textarea>
                         </div>
                         <button type="button" class="btn btn-primary" onclick="tmTestClassify()">
                           <i class="fas fa-tags"></i> Classify
