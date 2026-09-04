@@ -115,6 +115,88 @@
                       label { display:block; font-weight:600; margin-bottom:0.45rem; color:var(--text-2); font-size:0.93rem; }
                       input, select, textarea { width:100%; padding:0.75rem 1rem; border:1px solid var(--border); border-radius:var(--radius-md); font-size:0.95rem; background:var(--surface-2); }
                       input:focus, select:focus, textarea:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(29,78,216,0.15); }
+
+                      /* Summary alert bar (matches compact notification style) */
+                      .summary-alert-bar {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        flex-wrap: wrap;
+                        gap: 0.75rem;
+                        padding: 0.85rem 1.15rem;
+                        border-radius: 12px;
+                        border: 1px solid rgba(234, 88, 12, 0.35);
+                        border-left: 5px solid #ea580c;
+                        background: rgba(234, 88, 12, 0.08);
+                        color: #9a3412;
+                        margin: 1rem 0;
+                        font-weight: 600;
+                        box-shadow: var(--shadow-sm);
+                      }
+                      .summary-alert-bar.info {
+                        border-color: rgba(29, 78, 216, 0.3);
+                        border-left-color: #1d4ed8;
+                        background: rgba(29, 78, 216, 0.07);
+                        color: #1e3a8a;
+                      }
+                      .summary-alert-bar.danger {
+                        border-color: rgba(220, 38, 38, 0.3);
+                        border-left-color: #dc2626;
+                        background: rgba(220, 38, 38, 0.07);
+                        color: #991b1b;
+                      }
+                      .summary-alert-bar.purple {
+                        border-color: rgba(124, 58, 237, 0.3);
+                        border-left-color: #7c3aed;
+                        background: rgba(124, 58, 237, 0.07);
+                        color: #5b21b6;
+                      }
+                      .summary-alert-bar .bar-actions {
+                        display: flex;
+                        gap: 0.5rem;
+                        flex-wrap: wrap;
+                        align-items: center;
+                      }
+                      .summary-alert-bar .btn-view-more {
+                        background: #dc2626;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        padding: 0.45rem 1rem;
+                        font-weight: 600;
+                        font-size: 0.88rem;
+                        cursor: pointer;
+                      }
+                      .summary-alert-bar .btn-view-more:hover { background: #b91c1c; }
+                      .summary-alert-bar .btn-export {
+                        background: var(--primary);
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        padding: 0.45rem 0.9rem;
+                        font-weight: 600;
+                        font-size: 0.85rem;
+                        cursor: pointer;
+                      }
+                      .collapsible-detail { margin-top: 0.5rem; }
+                      .collapsible-detail.collapsed { display: none; }
+                      .table-toolbar {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        flex-wrap: wrap;
+                        gap: 0.75rem;
+                        margin-bottom: 0.75rem;
+                      }
+                      .table-toolbar .count-badge {
+                        background: var(--surface-2);
+                        color: var(--text-2);
+                        padding: 0.35rem 0.75rem;
+                        border-radius: 999px;
+                        font-size: 0.85rem;
+                        font-weight: 600;
+                      }
+
                       .live-indicator { position:fixed; bottom:16px; right:16px; background:#16a34a; color:white; padding:0.55rem 1.1rem; border-radius:999px; font-weight:600; font-size:0.86rem; box-shadow:0 4px 16px rgba(22,163,74,0.4); z-index:999; display:flex; align-items:center; gap:6px; }
                       .hidden { display: none !important; }
                   
@@ -289,23 +371,39 @@
                               </div>
                             </div>
                   
-                            <div id="high-risk-alerts" class="alert-banner alert-high-risk hidden">
-                              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                                <strong><i class="fas fa-triangle-exclamation"></i> High Risk / Long Downtime Equipment</strong>
-                                <button type="button" class="btn btn-primary" style="padding:0.35rem 0.8rem;font-size:0.85rem;" onclick="clearAllDismissedAlerts()">Reset dismissed</button>
+                            <!-- Compact summary bar (always visible when any alerts exist) -->
+                            <div id="dashboard-alert-summary" class="summary-alert-bar hidden">
+                              <div>
+                                <i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i>
+                                <strong>Alerts:</strong>
+                                <span id="dash-alert-summary-text">0 Overdue | 0 Due Soon | 0 Failure-pattern | 0 High-risk</span>
                               </div>
-                              <ul id="high-risk-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
+                              <div class="bar-actions">
+                                <button type="button" class="btn-view-more" onclick="toggleDashAlertDetails()">View details</button>
+                                <button type="button" class="btn-view-more" style="background:#1d4ed8;" onclick="show('maintenance-schedule')">View Schedule</button>
+                                <button type="button" class="btn-export" onclick="exportAlertsCSV()"><i class="fas fa-file-csv"></i> Excel</button>
+                                <button type="button" class="btn-export" onclick="exportAlertsPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                              </div>
                             </div>
-                  
-                            <div id="predictive-alerts" class="alert-banner alert-predictive hidden">
-                              <strong><i class="fas fa-bell"></i> Predictive Maintenance – Due Soon / Overdue</strong>
-                              <ul id="predictive-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
-                            </div>
-                  
-                            <!-- NEW: Failure-pattern predictions from breakdown history -->
-                            <div id="failure-pattern-alerts" class="alert-banner alert-high-risk hidden" style="border-color:#7c3aed;color:#5b21b6;background:rgba(124,58,237,0.08);">
-                              <strong><i class="fas fa-chart-line"></i> Failure Pattern Alerts (text-mining of breakdown history)</strong>
-                              <ul id="failure-pattern-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
+
+                            <div id="dash-alert-details" class="collapsible-detail collapsed">
+                              <div id="high-risk-alerts" class="alert-banner alert-high-risk hidden">
+                                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                                  <strong><i class="fas fa-triangle-exclamation"></i> High Risk / Long Downtime Equipment</strong>
+                                  <button type="button" class="btn btn-primary" style="padding:0.35rem 0.8rem;font-size:0.85rem;" onclick="clearAllDismissedAlerts()">Reset dismissed</button>
+                                </div>
+                                <ul id="high-risk-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
+                              </div>
+                    
+                              <div id="predictive-alerts" class="alert-banner alert-predictive hidden">
+                                <strong><i class="fas fa-bell"></i> Predictive Maintenance – Due Soon / Overdue</strong>
+                                <ul id="predictive-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
+                              </div>
+                    
+                              <div id="failure-pattern-alerts" class="alert-banner alert-high-risk hidden" style="border-color:#7c3aed;color:#5b21b6;background:rgba(124,58,237,0.08);">
+                                <strong><i class="fas fa-chart-line"></i> Failure Pattern Alerts (text-mining of breakdown history)</strong>
+                                <ul id="failure-pattern-list" style="margin-top:0.85rem;list-style:none;padding-left:0;"></ul>
+                              </div>
                             </div>
                   
                             <div class="kpi-grid" id="kpi-grid"></div>
@@ -440,13 +538,20 @@
                           <section id="manage-equipment" class="hidden">
                             <div class="header-bar">
                               <h1>Equipment Register</h1>
-                              <button class="btn btn-primary" onclick="exportEquipmentPDF()"><i class="fas fa-file-pdf"></i> Export Register PDF</button>
+                              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button class="btn btn-primary" onclick="exportEquipmentExcel()"><i class="fas fa-file-excel"></i> Export Excel</button>
+                                <button class="btn btn-primary" onclick="exportEquipmentPDF()"><i class="fas fa-file-pdf"></i> Export PDF</button>
+                              </div>
                             </div>
+                            <div id="equipment-summary-bar" class="summary-alert-bar info hidden"></div>
                             <div style="overflow-x:auto;">
                               <table id="equipment-table">
                                 <thead><tr><th>Operation</th><th>Work Place</th><th>Equipment Size</th><th>Equipment ID</th><th>SECTION</th></tr></thead>
                                 <tbody></tbody>
                               </table>
+                            </div>
+                            <div id="equipment-view-more-wrap" style="text-align:center;margin-top:0.75rem;display:none;">
+                              <button type="button" class="btn btn-primary" id="equipment-view-more-btn" onclick="toggleTableExpand('equipment')">View more</button>
                             </div>
                           </section>
                   
@@ -456,16 +561,19 @@
                               <h1>Maintenance Schedule</h1>
                               <div style="display:flex;gap:12px;flex-wrap:wrap;">
                                 <button class="btn btn-primary" onclick="document.getElementById('add-maint-modal').classList.add('active')">+ Add Task</button>
+                                <button class="btn btn-primary" onclick="exportMaintExcel()"><i class="fas fa-file-excel"></i> Export Excel</button>
                                 <button class="btn btn-primary" onclick="exportMaintPDF()"><i class="fas fa-file-pdf"></i> Export PDF</button>
                               </div>
                             </div>
+                            <div id="maint-summary-bar" class="summary-alert-bar hidden"></div>
                             <div style="overflow-x:auto;">
                               <table id="maint-table">
-                                
                                 <thead><tr><th>Equipment</th><th>Task</th><th>Interval</th><th>Last Done</th><th>Due</th><th>Days Left</th><th>Source</th><th>Actions</th></tr></thead>
-                                
                                 <tbody></tbody>
                               </table>
+                            </div>
+                            <div id="maint-view-more-wrap" style="text-align:center;margin-top:0.75rem;display:none;">
+                              <button type="button" class="btn btn-primary" id="maint-view-more-btn" onclick="toggleTableExpand('maint')">View more</button>
                             </div>
                           </section>
                   
@@ -479,8 +587,13 @@
                           <section id="operations-report" class="hidden">
                             <div class="header-bar">
                               <h1>All Operations Report</h1>
-                              <button class="btn btn-primary" onclick="exportOperationsReportPDF()"><i class="fas fa-file-pdf"></i> Export Report (PDF)</button>
+                              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button class="btn btn-primary" onclick="exportOperationsExcel()"><i class="fas fa-file-excel"></i> Export Excel</button>
+                                <button class="btn btn-primary" onclick="exportOperationsReportPDF()"><i class="fas fa-file-pdf"></i> Export Report (PDF)</button>
+                              </div>
                             </div>
+                            <div id="ops-problem-summary" class="summary-alert-bar danger hidden"></div>
+                            <div id="ops-highrisk-summary" class="summary-alert-bar purple hidden"></div>
                             <h2 style="color:var(--info);"><i class="fas fa-chart-line"></i> Operation Status</h2>
                             <div style="overflow-x:auto;">
                               <table id="op-status-table">
@@ -495,12 +608,18 @@
                                 <tbody id="problem-equipment-tbody"></tbody>
                               </table>
                             </div>
+                            <div id="problem-view-more-wrap" style="text-align:center;margin:0.75rem 0;display:none;">
+                              <button type="button" class="btn btn-primary" id="problem-view-more-btn" onclick="toggleTableExpand('problem')">View more</button>
+                            </div>
                             <h2 style="color:var(--info);"><i class="fas fa-fire"></i> Focus Areas: High Risk Equipment</h2>
                             <div style="overflow-x:auto;">
                               <table id="high-risk-table">
                                 <thead><tr><th>Equipment ID</th><th>Number of Failures</th><th>MTTF (Days)</th><th>Availability %</th></tr></thead>
                                 <tbody id="high-risk-tbody"></tbody>
                               </table>
+                            </div>
+                            <div id="highrisk-view-more-wrap" style="text-align:center;margin:0.75rem 0;display:none;">
+                              <button type="button" class="btn btn-primary" id="highrisk-view-more-btn" onclick="toggleTableExpand('highrisk')">View more</button>
                             </div>
                           </section>
                   
@@ -687,13 +806,20 @@
                       </div>
                   
                       <div class="card" style="margin-top:1.25rem;">
-                        <h2><i class="fas fa-fire"></i> Highest-frequency equipment (“bad actors”)</h2>
-                        <p style="color:var(--text-3);font-size:0.9rem;margin-bottom:1rem;">
+                        <div class="table-toolbar">
+                          <h2 style="margin:0;"><i class="fas fa-fire"></i> Highest-frequency equipment (“bad actors”)</h2>
+                          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-primary" style="padding:0.45rem 0.9rem;" onclick="exportBadActorsExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                            <button type="button" class="btn btn-primary" style="padding:0.45rem 0.9rem;" onclick="exportBadActorsPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                          </div>
+                        </div>
+                        <p style="color:var(--text-3);font-size:0.9rem;margin:0.75rem 0 1rem;">
                           Ranked by number of status/import rows with fault text — the classic “bad-actor” pattern identified in the study.
                           Dominant mode is the most common classified reason for that unit.
                         </p>
+                        <div id="tm-bad-summary" class="summary-alert-bar purple hidden"></div>
                         <div style="overflow-x:auto;">
-                          <table>
+                          <table id="tm-bad-table">
                             <thead>
                               <tr>
                                 <th>#</th>
@@ -706,6 +832,9 @@
                             </thead>
                             <tbody id="tm-bad-tbody"></tbody>
                           </table>
+                        </div>
+                        <div id="tm-bad-view-more-wrap" style="text-align:center;margin-top:0.75rem;display:none;">
+                          <button type="button" class="btn btn-primary" id="tm-bad-view-more-btn" onclick="toggleTableExpand('tm-bad')">View more</button>
                         </div>
                       </div>
                   
@@ -1350,8 +1479,8 @@
                     alerts.innerHTML = alertHtml;
                   
                     // Bad actor table (top 15)
-                    const badBody = document.getElementById('tm-bad-tbody');
-                    badBody.innerHTML = analysis.badList.slice(0, 15).map((r, i) => `
+                    window._lastBadActors = analysis.badList || [];
+                    const badRows = (analysis.badList || []).map((r, i) => `
                       <tr>
                         <td>${i + 1}</td>
                         <td><strong>${r.id}</strong></td>
@@ -1360,7 +1489,25 @@
                         <td>${r.topMode}</td>
                         <td style="max-width:280px;white-space:normal;">${(r.lastReason || '').replace(/</g, '&lt;')}</td>
                       </tr>
-                    `).join('') || '<tr><td colspan="6">No multi-entry equipment yet</td></tr>';
+                    `);
+                    if (badRows.length) {
+                      renderPagedTable('tm-bad', badRows);
+                      setSummaryBar('tm-bad-summary',
+                        badRows.length > 10
+                          ? `<div><i class="fas fa-fire" style="margin-right:6px;"></i><strong>Bad actors:</strong> ${badRows.length} high-frequency units</div>
+                             <div class="bar-actions">
+                               <button type="button" class="btn-view-more" onclick="toggleTableExpand('tm-bad')">View more</button>
+                               <button type="button" class="btn-export" onclick="exportBadActorsExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                               <button type="button" class="btn-export" onclick="exportBadActorsPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                             </div>`
+                          : '', 'purple');
+                    } else {
+                      const badBody = document.getElementById('tm-bad-tbody');
+                      if (badBody) badBody.innerHTML = '<tr><td colspan="6">No multi-entry equipment yet</td></tr>';
+                      setSummaryBar('tm-bad-summary', '');
+                      const w = document.getElementById('tm-bad-view-more-wrap');
+                      if (w) w.style.display = 'none';
+                    }
                   
                     // Recurrence
                     const recurBody = document.getElementById('tm-recur-tbody');
@@ -1781,6 +1928,30 @@ function getFilteredUpdates() {
                       container.insertBefore(alertContainer, dashboard.querySelector('.kpi-grid') || dashboard.firstElementChild);
                     }
                   
+                    // Compact summary bar (style matching product alerts)
+                    const summaryBar = document.getElementById('dashboard-alert-summary');
+                    const summaryText = document.getElementById('dash-alert-summary-text');
+                    // High-risk count from current equipment status
+                    let highRiskCount = 0;
+                    try {
+                      (equipment || []).forEach(e => {
+                        if (!e.id) return;
+                        const st = typeof getEquipmentStatus === 'function' ? getEquipmentStatus(e.id) : null;
+                        if (st && (st.failures >= 2 || st.downtime > 48 || parseFloat(st.availability) < 90)) highRiskCount++;
+                      });
+                    } catch (e) {}
+                  
+                    if (summaryBar && summaryText) {
+                      if (overdue.length > 0 || dueSoon.length > 0 || patterns.length > 0 || highRiskCount > 0) {
+                        summaryText.textContent =
+                          `${overdue.length} Overdue | ${dueSoon.length} Due Soon | ${patterns.length} Failure-pattern | ${highRiskCount} High-risk`;
+                        summaryBar.classList.remove('hidden');
+                      } else {
+                        summaryBar.classList.add('hidden');
+                      }
+                    }
+                  
+                    // Keep legacy alertContainer in sync if present
                     if (alertContainer) {
                       if (overdue.length > 0 || dueSoon.length > 0 || patterns.length > 0) {
                         alertContainer.innerHTML = `
@@ -2170,33 +2341,64 @@ function populateDashboard() {
                       ).join('');
                     }
                   
-                    const problemTbody = document.getElementById('problem-equipment-tbody');
-                    if (problemTbody) {
-                      problemTbody.innerHTML = problemRows.length
-                        ? problemRows.map(r =>
-                            `<tr>
-                              <td><strong>${r[0]}</strong></td>
-                              <td>${r[1]}</td>
-                              <td style="font-weight:700;color:${r[2] === 'RED' ? '#dc2626' : r[2] === 'ORANGE' ? '#ea580c' : '#16a34a'}">${r[2]}</td>
-                              <td style="max-width:280px;white-space:normal;">${(r[3] || '-').replace(/</g, '&lt;')}</td>
-                              <td>${r[4]}</td>
-                            </tr>`
-                          ).join('')
-                        : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3);">No problem equipment found. Log status updates with Status = Down or add downtime hours.</td></tr>';
+                    const problemHtml = problemRows.length
+                      ? problemRows.map(r =>
+                          `<tr>
+                            <td><strong>${r[0]}</strong></td>
+                            <td>${r[1]}</td>
+                            <td style="font-weight:700;color:${r[2] === 'RED' ? '#dc2626' : r[2] === 'ORANGE' ? '#ea580c' : '#16a34a'}">${r[2]}</td>
+                            <td style="max-width:280px;white-space:normal;">${(r[3] || '-').replace(/</g, '&lt;')}</td>
+                            <td>${r[4]}</td>
+                          </tr>`
+                        )
+                      : ['<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3);">No problem equipment found. Log status updates with Status = Down or add downtime hours.</td></tr>'];
+                  
+                    if (problemRows.length) {
+                      renderPagedTable('problem', problemHtml);
+                      setSummaryBar('ops-problem-summary',
+                        problemRows.length > 10
+                          ? `<div><i class="fas fa-exclamation-triangle" style="margin-right:6px;"></i><strong>Problem equipment:</strong> ${problemRows.length} units</div>
+                             <div class="bar-actions">
+                               <button type="button" class="btn-view-more" onclick="toggleTableExpand('problem')">View more</button>
+                               <button type="button" class="btn-export" onclick="exportOperationsExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                             </div>`
+                          : '', 'danger');
+                    } else {
+                      const tbody = document.getElementById('problem-equipment-tbody');
+                      if (tbody) tbody.innerHTML = problemHtml[0];
+                      setSummaryBar('ops-problem-summary', '');
+                      const w = document.getElementById('problem-view-more-wrap');
+                      if (w) w.style.display = 'none';
                     }
                   
-                    const highRiskTbody = document.getElementById('high-risk-tbody');
-                    if (highRiskTbody) {
-                      highRiskTbody.innerHTML = highRiskRows.length
-                        ? highRiskRows.map(r =>
-                            `<tr>
-                              <td><strong>${r[0]}</strong></td>
-                              <td>${r[1]}</td>
-                              <td>${r[2]}</td>
-                              <td>${r[3]}%</td>
-                            </tr>`
-                          ).join('')
-                        : '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-3);">No high-risk equipment. Need 2+ failures, availability &lt; 90%, or &gt; 48h downtime.</td></tr>';
+                    const highHtml = highRiskRows.length
+                      ? highRiskRows.map(r =>
+                          `<tr>
+                            <td><strong>${r[0]}</strong></td>
+                            <td>${r[1]}</td>
+                            <td>${r[2]}</td>
+                            <td>${r[3]}%</td>
+                          </tr>`
+                        )
+                      : ['<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-3);">No high-risk equipment. Need 2+ failures, availability &lt; 90%, or &gt; 48h downtime.</td></tr>'];
+                  
+                    if (highRiskRows.length) {
+                      renderPagedTable('highrisk', highHtml);
+                      setSummaryBar('ops-highrisk-summary',
+                        highRiskRows.length > 10
+                          ? `<div><i class="fas fa-fire" style="margin-right:6px;"></i><strong>High-risk focus:</strong> ${highRiskRows.length} units</div>
+                             <div class="bar-actions">
+                               <button type="button" class="btn-view-more" onclick="toggleTableExpand('highrisk')">View more</button>
+                               <button type="button" class="btn-export" onclick="exportOperationsExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                               <button type="button" class="btn-export" onclick="exportOperationsReportPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                             </div>`
+                          : '', 'purple');
+                    } else {
+                      const tbody = document.getElementById('high-risk-tbody');
+                      if (tbody) tbody.innerHTML = highHtml[0];
+                      setSummaryBar('ops-highrisk-summary', '');
+                      const w = document.getElementById('highrisk-view-more-wrap');
+                      if (w) w.style.display = 'none';
                     }
                   }
                   
@@ -2263,17 +2465,43 @@ function populateDashboard() {
                     }
                   
                     function populateEquipmentTable() {
-                      document.querySelector('#equipment-table tbody').innerHTML = getFilteredEquipment().map(e => `<tr><td>${e.shaft||'-'}</td><td>${e.level||'-'}</td><td>${e.locoSize||'-'}</td><td>${e.id}</td><td>${e.section||'-'}</td></tr>`).join('');
+                      const list = getFilteredEquipment();
+                      const rows = list.map(e =>
+                        `<tr><td>${e.shaft||'-'}</td><td>${e.level||'-'}</td><td>${e.locoSize||'-'}</td><td><strong>${e.id}</strong></td><td>${e.section||'-'}</td></tr>`
+                      );
+                      renderPagedTable('equipment', rows);
+                      const bar = document.getElementById('equipment-summary-bar');
+                      if (bar) {
+                        if (list.length > 10) {
+                          setSummaryBar('equipment-summary-bar',
+                            `<div><i class="fas fa-tools" style="margin-right:6px;"></i><strong>Equipment Register:</strong> ${list.length} units` +
+                            ` <span style="font-weight:500;opacity:0.85;">— showing ${Math.min(10, list.length)} first; use View more or Export</span></div>` +
+                            `<div class="bar-actions">
+                              <button type="button" class="btn-view-more" onclick="toggleTableExpand('equipment')">View more</button>
+                              <button type="button" class="btn-export" onclick="exportEquipmentExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                              <button type="button" class="btn-export" onclick="exportEquipmentPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                            </div>`, 'info');
+                        } else {
+                          setSummaryBar('equipment-summary-bar', '', 'info');
+                        }
+                      }
                     }
                   
                   function populateMaintTable() {
                     const tbody = document.querySelector('#maint-table tbody');
                     if (!tbody) return;
                   
-                    tbody.innerHTML = (maintenance || []).map(m => {
+                    const list = maintenance || [];
+                    let overdue = 0, dueSoon = 0, pattern = 0;
+                    const rows = list.map(m => {
                       const days = m.dueDate
                         ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
                         : calculateDaysLeft(m.lastDone, m.interval);
+                      if (!isNaN(days)) {
+                        if (days < 0) overdue++;
+                        else if (days <= 7) dueSoon++;
+                      }
+                      if (m.source === 'failure-pattern') pattern++;
                       const disp = isNaN(days) ? '-' : (days >= 0 ? days : Math.abs(days) + ' overdue');
                       const source = m.source === 'failure-pattern' ? '🧠 Pattern' : 'Manual';
                       return `<tr>
@@ -2291,7 +2519,31 @@ function populateDashboard() {
                             onclick="dismissAlert('maint-${m.id}')">Dismiss</button>
                         </td>
                       </tr>`;
-                    }).join('') || '<tr><td colspan="8" style="text-align:center;padding:16px;">No maintenance tasks yet</td></tr>';
+                    });
+                  
+                    if (!rows.length) {
+                      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;">No maintenance tasks yet</td></tr>';
+                      setSummaryBar('maint-summary-bar', '');
+                      const wrap = document.getElementById('maint-view-more-wrap');
+                      if (wrap) wrap.style.display = 'none';
+                      return;
+                    }
+                  
+                    renderPagedTable('maint', rows);
+                    if (list.length > 10 || overdue || dueSoon || pattern) {
+                      setSummaryBar('maint-summary-bar',
+                        `<div><i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i>
+                          <strong>Alerts:</strong> ${overdue} Overdue | ${dueSoon} Due Soon | ${pattern} Failure-pattern
+                          <span style="font-weight:500;opacity:0.85;"> — ${list.length} total tasks</span>
+                        </div>
+                        <div class="bar-actions">
+                          <button type="button" class="btn-view-more" onclick="toggleTableExpand('maint')">View more</button>
+                          <button type="button" class="btn-export" onclick="exportMaintExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                          <button type="button" class="btn-export" onclick="exportMaintPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                        </div>`);
+                    } else {
+                      setSummaryBar('maint-summary-bar', '');
+                    }
                   }
                   
                   
@@ -2972,6 +3224,202 @@ function populateDashboard() {
                     if (man) man.style.display = 'none';
                   };
                   
+
+
+                  // ========== Collapsible long lists + exports ==========
+                  const TABLE_PAGE_SIZE = 10;
+                  window._tableExpandState = window._tableExpandState || {};
+                  window._tableFullRows = window._tableFullRows || {};
+
+                  function toggleDashAlertDetails() {
+                    const el = document.getElementById('dash-alert-details');
+                    if (!el) return;
+                    const collapsed = el.classList.toggle('collapsed');
+                    const btn = document.querySelector('#dashboard-alert-summary .btn-view-more');
+                    if (btn && btn.textContent.includes('View')) {
+                      btn.textContent = collapsed ? 'View details' : 'Hide details';
+                    }
+                  }
+                  window.toggleDashAlertDetails = toggleDashAlertDetails;
+
+                  function toggleTableExpand(key) {
+                    window._tableExpandState[key] = !window._tableExpandState[key];
+                    const full = window._tableFullRows[key] || [];
+                    renderPagedTable(key, full);
+                  }
+                  window.toggleTableExpand = toggleTableExpand;
+
+                  function renderPagedTable(key, rowsHtmlArray) {
+                    window._tableFullRows[key] = rowsHtmlArray || [];
+                    const expanded = !!window._tableExpandState[key];
+                    const rows = window._tableFullRows[key];
+                    const show = expanded ? rows : rows.slice(0, TABLE_PAGE_SIZE);
+
+                    const tbodyMap = {
+                      equipment: '#equipment-table tbody',
+                      maint: '#maint-table tbody',
+                      problem: '#problem-equipment-tbody',
+                      highrisk: '#high-risk-tbody',
+                      'tm-bad': '#tm-bad-tbody'
+                    };
+                    const wrapMap = {
+                      equipment: 'equipment-view-more-wrap',
+                      maint: 'maint-view-more-wrap',
+                      problem: 'problem-view-more-wrap',
+                      highrisk: 'highrisk-view-more-wrap',
+                      'tm-bad': 'tm-bad-view-more-wrap'
+                    };
+                    const btnMap = {
+                      equipment: 'equipment-view-more-btn',
+                      maint: 'maint-view-more-btn',
+                      problem: 'problem-view-more-btn',
+                      highrisk: 'highrisk-view-more-btn',
+                      'tm-bad': 'tm-bad-view-more-btn'
+                    };
+
+                    const tbodySel = tbodyMap[key];
+                    const tbody = tbodySel ? document.querySelector(tbodySel) : null;
+                    if (tbody) tbody.innerHTML = show.join('') || '';
+
+                    const wrap = document.getElementById(wrapMap[key]);
+                    const btn = document.getElementById(btnMap[key]);
+                    if (wrap && btn) {
+                      if (rows.length > TABLE_PAGE_SIZE) {
+                        wrap.style.display = 'block';
+                        btn.textContent = expanded
+                          ? `Show less (showing all ${rows.length})`
+                          : `View more (${rows.length - TABLE_PAGE_SIZE} more of ${rows.length})`;
+                      } else {
+                        wrap.style.display = 'none';
+                      }
+                    }
+                  }
+
+                  function setSummaryBar(elId, html, variant) {
+                    const el = document.getElementById(elId);
+                    if (!el) return;
+                    if (!html) {
+                      el.classList.add('hidden');
+                      el.innerHTML = '';
+                      return;
+                    }
+                    el.classList.remove('hidden', 'info', 'danger', 'purple');
+                    if (variant) el.classList.add(variant);
+                    el.innerHTML = html;
+                  }
+
+                  function downloadCSV(filename, headers, rows) {
+                    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+                    let csv = headers.map(esc).join(',') + '\n';
+                    rows.forEach(r => { csv += r.map(esc).join(',') + '\n'; });
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = filename;
+                    a.click();
+                  }
+
+                  function simpleTablePDF(title, headers, rows, filename) {
+                    try {
+                      const { jsPDF } = window.jspdf;
+                      const doc = new jsPDF({ orientation: rows[0] && rows[0].length > 5 ? 'landscape' : 'portrait' });
+                      doc.setFontSize(14);
+                      doc.text(title, 14, 16);
+                      doc.autoTable({ head: [headers], body: rows, startY: 22, styles: { fontSize: 8 } });
+                      doc.save(filename);
+                    } catch (e) {
+                      alert('PDF export failed: ' + e.message);
+                    }
+                  }
+
+                  window.exportEquipmentExcel = function () {
+                    const rows = getFilteredEquipment().map(e => [e.shaft||'', e.level||'', e.locoSize||'', e.id||'', e.section||'']);
+                    downloadCSV('Equipment_Register.csv', ['Operation','Work Place','Size','Equipment ID','SECTION'], rows);
+                  };
+                  window.exportMaintExcel = function () {
+                    const rows = (maintenance || []).map(m => {
+                      const days = m.dueDate
+                        ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
+                        : (typeof calculateDaysLeft === 'function' ? calculateDaysLeft(m.lastDone, m.interval) : '');
+                      return [m.equipment, m.task, m.interval, m.lastDone, m.dueDate || '', days, m.source || 'manual'];
+                    });
+                    downloadCSV('Maintenance_Schedule.csv', ['Equipment','Task','Interval','Last Done','Due','Days Left','Source'], rows);
+                  };
+                  window.exportOperationsExcel = function () {
+                    // Problem + high risk combined sheet-style CSV
+                    const problemRows = [];
+                    const highRows = [];
+                    const tbodyP = document.getElementById('problem-equipment-tbody');
+                    const tbodyH = document.getElementById('high-risk-tbody');
+                    if (tbodyP) {
+                      tbodyP.querySelectorAll('tr').forEach(tr => {
+                        const cells = [...tr.querySelectorAll('td')].map(td => td.innerText.trim());
+                        if (cells.length >= 4 && !cells[0].includes('No problem')) problemRows.push(cells);
+                      });
+                    }
+                    // Prefer live data rebuild
+                    if (typeof populateOperationsReport === 'function') {
+                      // use updates for export
+                    }
+                    const ids = new Set();
+                    (equipment || []).forEach(e => e.id && ids.add(String(e.id)));
+                    (updates || []).forEach(u => u.equipmentId && ids.add(String(u.equipmentId)));
+                    const allIds = [...ids].sort();
+                    const exportProblem = [];
+                    const exportHigh = [];
+                    allIds.forEach(id => {
+                      const st = typeof getEquipmentStatus === 'function' ? getEquipmentStatus(id) : null;
+                      if (!st) return;
+                      if (st.status === 'Down' || st.downtime > 0 || st.failures > 0) {
+                        exportProblem.push([id, st.status, st.color, st.lastReason || '', st.downtime.toFixed(1)]);
+                      }
+                      if (st.failures >= 2 || parseFloat(st.availability) < 90 || st.downtime > 48) {
+                        exportHigh.push([id, st.failures, '', st.availability]);
+                      }
+                    });
+                    downloadCSV('Operations_Problem_Equipment.csv',
+                      ['Equipment ID','Status','Color','Last Reason/Fault','Total Downtime Hours'], exportProblem);
+                    setTimeout(() => downloadCSV('Operations_High_Risk.csv',
+                      ['Equipment ID','Failures','MTTF','Availability %'], exportHigh), 300);
+                  };
+                  window.exportBadActorsExcel = function () {
+                    const rows = [];
+                    document.querySelectorAll('#tm-bad-tbody tr').forEach(tr => {
+                      const cells = [...tr.querySelectorAll('td')].map(td => td.innerText.trim());
+                      if (cells.length) rows.push(cells);
+                    });
+                    // Prefer full cached rows from analysis if available
+                    if (window._lastBadActors && window._lastBadActors.length) {
+                      downloadCSV('Bad_Actors.csv',
+                        ['#','Equipment ID','Fault entries','Down hrs','Top mode','Last fault text'],
+                        window._lastBadActors.map((r,i) => [i+1, r.id, r.count, r.down, r.topMode, r.lastReason]));
+                      return;
+                    }
+                    downloadCSV('Bad_Actors.csv', ['#','Equipment ID','Fault entries','Down hrs','Top mode','Last fault'], rows);
+                  };
+                  window.exportBadActorsPDF = function () {
+                    const data = (window._lastBadActors || []).map((r,i) => [i+1, r.id, r.count, r.down, r.topMode, (r.lastReason||'').slice(0,60)]);
+                    simpleTablePDF('Highest-frequency equipment (bad actors)',
+                      ['#','Equipment ID','Faults','Down hrs','Top mode','Last fault'], data, 'Bad_Actors.pdf');
+                  };
+                  window.exportAlertsCSV = function () {
+                    const lines = [];
+                    ['high-risk-list','predictive-list','failure-pattern-list'].forEach(id => {
+                      const ul = document.getElementById(id);
+                      if (!ul) return;
+                      ul.querySelectorAll('li').forEach(li => lines.push([id, li.innerText.replace(/\s+/g,' ').trim()]));
+                    });
+                    downloadCSV('Dashboard_Alerts.csv', ['Category','Detail'], lines);
+                  };
+                  window.exportAlertsPDF = function () {
+                    const rows = [];
+                    ['high-risk-list','predictive-list','failure-pattern-list'].forEach(id => {
+                      const ul = document.getElementById(id);
+                      if (!ul) return;
+                      ul.querySelectorAll('li').forEach(li => rows.push([id, li.innerText.replace(/\s+/g,' ').trim().slice(0,100)]));
+                    });
+                    simpleTablePDF('Dashboard Alerts', ['Category','Detail'], rows, 'Dashboard_Alerts.pdf');
+                  };
 
                   // Sanitize Equipment ID so it is a valid Firestore document ID
                   // (no "/", no leading/trailing dots, max 1500 chars, not empty)
