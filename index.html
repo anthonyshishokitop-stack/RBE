@@ -2701,8 +2701,11 @@ function populateDashboard() {
                       }
                   
                       // Equipment: LOCO NUMBER only (e.g. "LOCO 3260" → "3260")
+                      // Also remove "/" and other chars that break Firestore document paths
                       let equip = String(get('equipmentId') || '').trim();
                       equip = equip.replace(/^LOCO\s+/i, '').trim();
+                      // Replace path separators early so preview & import stay consistent
+                      equip = equip.replace(/[\/\\#?[\]]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').trim();
                   
                       // Reason: prefer BREAKDOWN REPORTED; append actual fault if useful
                       let reason = String(get('reason') || '').trim();
@@ -2860,6 +2863,23 @@ function populateDashboard() {
                     if (man) man.style.display = 'none';
                   };
                   
+
+                  // Sanitize Equipment ID so it is a valid Firestore document ID
+                  // (no "/", no leading/trailing dots, max 1500 chars, not empty)
+                  function sanitizeEquipmentId(raw) {
+                    let id = String(raw || '').trim();
+                    if (!id || id === 'Unknown') return null;
+                    // Replace path separators and other illegal chars with hyphen
+                    id = id.replace(/[\/\\#?[\]]+/g, '-').replace(/\s+/g, ' ').trim();
+                    // Collapse multiple hyphens
+                    id = id.replace(/-+/g, '-').replace(/^-|-$/g, '');
+                    // Firestore doc IDs cannot be "." or ".."
+                    if (id === '.' || id === '..' || !id) return null;
+                    // Keep it reasonably short
+                    if (id.length > 200) id = id.slice(0, 200);
+                    return id;
+                  }
+
                   window.importSelectedRows = async function () {
                     const toImport = excelData.filter(r => r.selected);
                     if (toImport.length === 0) return alert('No rows selected');
@@ -2876,58 +2896,89 @@ function populateDashboard() {
                     statusDiv.style.color = 'var(--primary)';
                   
                     let success = 0;
-                    try {
-for (const row of toImport) {
-  const equipId = String(row.equipmentId || '').trim();
-  if (!equipId || equipId === 'Unknown') continue;
-
-  await addDoc(collection(db, 'status_updates'), {
-    equipmentId: equipId,
-    date: row.date,
-    time: row.time,
-    status: 'Down',
-    shift: row.shift,
-    reason: row.reason,
-    downtimeHours: row.downtimeHours,
-    isFailure: '1',
-    operator: row.operator || '',
-    actionTaken: row.action || '',
-    shaft: row.shaft || '',
-    workplace: row.workplace || '',
-    source: 'Imported Breakdown Report',
-    sourceSheet: row.sourceSheet || '',
-    createdAt: serverTimestamp()
-  });
-
-  // Auto-register so it appears on Availability / Fleet charts
-  await setDoc(doc(db, 'equipment', equipId), {
-    shaft: row.shaft || '',
-    level: row.workplace || '',
-    locoSize: '',
-    section: '',
-    source: 'Imported Breakdown Report',
-    updatedAt: new Date().toISOString()
-  }, { merge: true });
-
-  success++;
-}
+                    let skipped = 0;
+                    const skipReasons = [];
                   
-                      statusDiv.innerHTML =
-                        `🎉 Successfully imported <strong>${success}</strong> records into Firebase!`;
+                    // Process row-by-row so one bad ID never aborts the whole file
+                    for (const row of toImport) {
+                      try {
+                        const rawId = String(row.equipmentId || '').trim();
+                        const equipId = sanitizeEquipmentId(rawId);
+                  
+                        if (!equipId) {
+                          skipped++;
+                          if (skipReasons.length < 8) {
+                            skipReasons.push(`Empty / invalid ID: "${rawId || '(blank)'}"`);
+                          }
+                          continue;
+                        }
+                  
+                        // Keep original text for display; use sanitized ID for Firestore paths
+                        await addDoc(collection(db, 'status_updates'), {
+                          equipmentId: equipId,
+                          originalEquipmentId: rawId !== equipId ? rawId : undefined,
+                          date: row.date,
+                          time: row.time,
+                          status: 'Down',
+                          shift: row.shift || 'Night',
+                          reason: row.reason || 'No reason provided',
+                          downtimeHours: Number(row.downtimeHours) || 0,
+                          isFailure: '1',
+                          operator: row.operator || '',
+                          actionTaken: row.action || '',
+                          shaft: row.shaft || '',
+                          workplace: row.workplace || '',
+                          source: 'Imported Breakdown Report',
+                          sourceSheet: row.sourceSheet || '',
+                          createdAt: serverTimestamp()
+                        });
+                  
+                        // Auto-register equipment (safe document ID)
+                        await setDoc(doc(db, 'equipment', equipId), {
+                          shaft: row.shaft || '',
+                          level: row.workplace || '',
+                          locoSize: '',
+                          section: '',
+                          source: 'Imported Breakdown Report',
+                          originalId: rawId !== equipId ? rawId : undefined,
+                          updatedAt: new Date().toISOString()
+                        }, { merge: true });
+                  
+                        success++;
+                      } catch (rowErr) {
+                        console.warn('Skipped row during import:', rowErr, row);
+                        skipped++;
+                        if (skipReasons.length < 8) {
+                          const idHint = String(row.equipmentId || '?').slice(0, 40);
+                          skipReasons.push(`${idHint}: ${rowErr.message || rowErr}`);
+                        }
+                      }
+                    }
+                  
+                    // Final status message
+                    let msg = '';
+                    if (success > 0) {
+                      msg = `🎉 Successfully imported <strong>${success}</strong> record(s) into Firebase.`;
+                      if (skipped > 0) {
+                        msg += ` <span style="color:var(--warning);">Skipped ${skipped} row(s)</span>`;
+                        if (skipReasons.length) {
+                          msg += `<br><small style="color:var(--text-3);">Examples: ${skipReasons.slice(0,5).join(' · ')}</small>`;
+                        }
+                      }
                       statusDiv.style.background = 'rgba(22,163,74,0.12)';
                       statusDiv.style.color = 'var(--success)';
-                  
                       document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
                       document.querySelector('.import-step[data-step="3"]')?.classList.add('active');
-                  
                       if (typeof refreshCurrentView === 'function') refreshCurrentView();
-                  
-                    } catch (e) {
-                      console.error(e);
-                      statusDiv.innerHTML = `❌ Import failed: ${e.message}`;
+                    } else {
+                      msg = `❌ No rows could be imported. Skipped ${skipped}.`;
+                      if (skipReasons.length) {
+                        msg += `<br><small>${skipReasons.join('<br>')}</small>`;
+                      }
                       statusDiv.style.background = 'rgba(220,38,38,0.1)';
                       statusDiv.style.color = 'var(--danger)';
                     }
+                    statusDiv.innerHTML = msg;
                   };
                   
                   // Aliases so existing buttons keep working
@@ -3013,19 +3064,25 @@ for (const row of toImport) {
                     // ── Form listeners ──────────────────────────────────────────────
                     document.getElementById('add-eq-form').addEventListener('submit', async e => {
                       e.preventDefault();
-                      const id = document.getElementById('loco-number').value.trim();
-                      if (!id) return alert('Equipment ID required');
+                      const rawId = document.getElementById('loco-number').value.trim();
+                      const id = (typeof sanitizeEquipmentId === 'function')
+                        ? sanitizeEquipmentId(rawId)
+                        : rawId.replace(/[\/\\#?[\]]+/g, '-').trim();
+                      if (!id) return alert('Equipment ID required (or contained only invalid characters such as /)');
                   
                       const data = {
                         shaft: document.getElementById('shaft').value,
                         level: document.getElementById('level').value,
                         locoSize: document.getElementById('loco-size').value,
-                        section: document.getElementById('section').value
+                        section: document.getElementById('section').value,
+                        originalId: rawId !== id ? rawId : undefined
                       };
                   
                       try {
                         await setDoc(doc(db, "equipment", id), data, { merge: true });
-                        alert('Equipment saved');
+                        alert(rawId !== id
+                          ? `Equipment saved as "${id}" (slashes and illegal characters were replaced)`
+                          : 'Equipment saved');
                         e.target.reset();
                       } catch (err) {
                         alert('Error: ' + err.message);
