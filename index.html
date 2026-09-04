@@ -946,18 +946,37 @@
                     });
                     unsubscribeFunctions.push(unsubEq);
                   
-                    // Status Updates - Enhanced
-                    const unsubUpdates = onSnapshot(
-                      query(collection(db, "status_updates"), 
-                            orderBy("date","desc"), 
-                            orderBy("time","desc")), 
-                      snap => {
-                        updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                        refreshCurrentView();
-                        updatePredictiveNotifications();
-                        console.log(`✅ Updates loaded: ${updates.length}`);
-                      }
-                    );
+                    // Status Updates – load ALL docs (no composite index required).
+                    // Sort client-side by date+time so missing Firestore indexes never leave updates empty.
+                    const applyUpdatesSnap = (snap) => {
+                      updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                      updates.sort((a, b) => {
+                        const da = `${a.date || ''} ${a.time || ''}`;
+                        const db_ = `${b.date || ''} ${b.time || ''}`;
+                        return db_.localeCompare(da);
+                      });
+                      refreshCurrentView();
+                      if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+                      if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+                      console.log(`✅ Updates loaded: ${updates.length}`);
+                    };
+                    let unsubUpdates;
+                    try {
+                      // Prefer single-field orderBy if an index exists; fall back to unordered collection
+                      unsubUpdates = onSnapshot(
+                        query(collection(db, "status_updates"), orderBy("date", "desc")),
+                        applyUpdatesSnap,
+                        (err) => {
+                          console.warn('status_updates ordered query failed, falling back to full collection:', err.message);
+                          const unsub2 = onSnapshot(collection(db, "status_updates"), applyUpdatesSnap, (e2) => {
+                            console.error('status_updates listener failed:', e2);
+                          });
+                          unsubscribeFunctions.push(unsub2);
+                        }
+                      );
+                    } catch (e) {
+                      unsubUpdates = onSnapshot(collection(db, "status_updates"), applyUpdatesSnap);
+                    }
                     unsubscribeFunctions.push(unsubUpdates);
                   
                     // Maintenance
@@ -979,6 +998,7 @@
                     
                     // ── Navigation & Refresh ────────────────────────────────────────
                     function show(section) {
+                      // exposed below for post-import navigation
                       document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
                       document.getElementById(section).classList.remove('hidden');
                       document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
@@ -987,28 +1007,35 @@
                       refreshCurrentView();
                     }
                   
+                  window.show = show;
+
                   function refreshCurrentView() {
                     const section = document.querySelector('section:not(.hidden)')?.id;
                     if (!section) return;
                   
-                    if (section === 'dashboard') {
-                      populateDashboard();
-                      updatePredictiveNotifications();
+                    try {
+                      if (section === 'dashboard') {
+                        if (typeof populateDashboard === 'function') populateDashboard();
+                        if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+                      }
+                      else if (section === 'status-log' && typeof populateLogTable === 'function') populateLogTable();
+                      else if (section === 'summary' && typeof populateSummaryTable === 'function') populateSummaryTable();
+                      else if (section === 'manage-equipment' && typeof populateEquipmentTable === 'function') populateEquipmentTable();
+                      else if (section === 'maintenance-schedule' && typeof populateMaintTable === 'function') populateMaintTable();
+                      else if (section === 'calendar' && typeof initCalendar === 'function') initCalendar();
+                      else if (section === 'operations-report' && typeof populateOperationsReport === 'function') populateOperationsReport();
+                      else if (section === 'control-room' && typeof populateControlRoom === 'function') populateControlRoom();
+                      else if (section === 'text-mining' && typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+                    } catch (e) {
+                      console.warn('refreshCurrentView section error:', e);
                     }
-                    else if (section === 'status-log') populateLogTable();
-                    else if (section === 'summary') populateSummaryTable();
-                    else if (section === 'manage-equipment') populateEquipmentTable();
-                    else if (section === 'maintenance-schedule') populateMaintTable();
-                    else if (section === 'calendar') initCalendar();
-                    else if (section === 'operations-report') {
-                      populateOperationsReport();
-                    }
-                    else if (section === 'control-room') populateControlRoom();
-                      
-                  if (typeof refreshTextMiningInsights === 'function') {
-                    refreshTextMiningInsights();
+
+                    // Always refresh text-mining cache so data is ready when user opens that tab
+                    try {
+                      if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+                    } catch (e) { /* ignore */ }
                   }
-                  }
+                  window.refreshCurrentView = refreshCurrentView;
                   
                   document.querySelectorAll('#sidebar-menu li').forEach(li => {
                     li.addEventListener('click', () => {
@@ -1254,10 +1281,34 @@
                     });
                   }
                   
+                  async function ensureUpdatesLoaded() {
+                    if ((updates || []).length > 0) return;
+                    if (typeof getDocs !== 'function' || typeof collection !== 'function') return;
+                    try {
+                      const snap = await getDocs(collection(db, 'status_updates'));
+                      updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                      updates.sort((a, b) => {
+                        const da = `${a.date || ''} ${a.time || ''}`;
+                        const db_ = `${b.date || ''} ${b.time || ''}`;
+                        return db_.localeCompare(da);
+                      });
+                      console.log(`✅ ensureUpdatesLoaded: ${updates.length} status_updates`);
+                    } catch (e) {
+                      console.warn('ensureUpdatesLoaded failed:', e);
+                    }
+                  }
+
                   function refreshTextMiningInsights() {
                     const emptyEl = document.getElementById('tm-empty');
                     const contentEl = document.getElementById('tm-content');
                     if (!contentEl) return;
+
+                    // If listener hasn't populated yet, try a one-shot fetch then re-run
+                    if ((updates || []).length === 0) {
+                      ensureUpdatesLoaded().then(() => {
+                        if ((updates || []).length > 0) refreshTextMiningInsights();
+                      });
+                    }
                   
                     const analysis = tmAnalyseLiveData();
                   
@@ -1434,7 +1485,11 @@ function getFilteredUpdates() {
                   
                     
                   function getEquipmentStatus(id) {
-                    const eu = updates.filter(u => u.equipmentId === id);
+                    const sid = String(id || '').trim();
+                    const eu = (updates || []).filter(u => {
+                      const uid = String(u.equipmentId || u.locoNumber || u['Loco Number'] || '').trim();
+                      return uid === sid;
+                    });
                     
                     if (eu.length === 0) {
                       return { 
@@ -1444,31 +1499,54 @@ function getFilteredUpdates() {
                         lastUpdate: '-', 
                         color: 'green',
                         totalEntries: 0,
-                        failures: 0
+                        failures: 0,
+                        lastReason: ''
                       };
                     }
                   
-                    const last = eu.sort((a,b) => new Date(b.date+' '+b.time) - new Date(a.date+' '+b.time))[0];
+                    const last = eu.slice().sort((a,b) => {
+                      const da = `${a.date || ''} ${a.time || ''}`;
+                      const db_ = `${b.date || ''} ${b.time || ''}`;
+                      return db_.localeCompare(da);
+                    })[0];
                     
                     const totalEntries = eu.length;
-                    const downEntries = eu.filter(u => u.status === 'Down').length;
-                    const failures = eu.filter(u => u.isFailure === '1' || u.isFailure === 1).length;
+                    const downEntries = eu.filter(u => String(u.status || '').toLowerCase() === 'down').length;
+                    const failures = eu.filter(u =>
+                      u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
+                      String(u.isFailure || '').toLowerCase() === 'yes' ||
+                      String(u.status || '').toLowerCase() === 'down'
+                    ).length;
                   
-                    // New Availability based on number of entries
-                    const availability = totalEntries > 0 
-                      ? ((totalEntries - downEntries) / totalEntries * 100).toFixed(1) 
-                      : '100.0';
+                    // Availability: share of non-down records (import rows are mostly Down)
+                    // Prefer hour-based availability when downtime is recorded
+                    const totalDownH = eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0);
+                    let availability;
+                    if (totalDownH > 0) {
+                      // Rough window from first to last event (min 1 day)
+                      const dates = eu.map(u => u.date).filter(Boolean).sort();
+                      const spanDays = dates.length >= 2
+                        ? Math.max(1, (new Date(dates[dates.length-1]) - new Date(dates[0])) / 86400000 + 1)
+                        : Math.max(1, totalDownH / 24 + 1);
+                      availability = Math.max(0, Math.min(100, (1 - totalDownH / (spanDays * 24)) * 100)).toFixed(1);
+                    } else {
+                      availability = totalEntries > 0
+                        ? ((totalEntries - downEntries) / totalEntries * 100).toFixed(1)
+                        : '100.0';
+                    }
                   
-                    const status = downEntries > 0 && (last.status === 'Down') ? 'Down' : 'Up';
+                    const status = (String(last.status || '').toLowerCase() === 'down') ? 'Down' : 'Up';
+                    const lastReason = String(last.reason || last.fault || '').trim();
                   
                     return {
                       status: status,
-                      downtime: eu.reduce((s, u) => s + (parseFloat(u.downtimeHours) || 0), 0), // keep hours for reference
+                      downtime: totalDownH,
                       availability: availability,
-                      lastUpdate: `${last.date} ${last.time}`,
+                      lastUpdate: `${last.date || ''} ${last.time || ''}`.trim() || '-',
                       color: parseFloat(availability) < 70 ? 'red' : (parseFloat(availability) < 90 ? 'orange' : 'green'),
                       totalEntries: totalEntries,
-                      failures: failures
+                      failures: failures,
+                      lastReason: lastReason
                     };
                   }
                   
@@ -1772,6 +1850,11 @@ function getFilteredUpdates() {
                     
                     // ── Dashboard ───────────────────────────────────────────────────
 function populateDashboard() {
+  if ((updates || []).length === 0 && typeof ensureUpdatesLoaded === 'function') {
+    ensureUpdatesLoaded().then(() => {
+      if ((updates || []).length > 0) populateDashboard();
+    });
+  }
   const filteredEq = getFilteredEquipment();
   const filteredUp = getFilteredUpdates();
   const filteredMt = getFilteredMaintenance();
@@ -1814,7 +1897,13 @@ function populateDashboard() {
                       `;
                   
                       const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
-                      const failureData  = locoIds.map(id => filteredUp.filter(u=>u.equipmentId===id && u.isFailure==='1').length);
+                      const failureData  = locoIds.map(id => filteredUp.filter(u => {
+                        const uid = String(u.equipmentId || '').trim();
+                        if (uid !== String(id).trim()) return false;
+                        return u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
+                          String(u.isFailure||'').toLowerCase() === 'yes' ||
+                          String(u.status||'').toLowerCase() === 'down';
+                      }).length);
                   
                   
                   const mttfData = locoIds.map(id => {
@@ -1918,13 +2007,31 @@ function populateDashboard() {
                         options:{ responsive:true, maintainAspectRatio:false }
                       });
                   
-                      const highRisk = locoIds.filter(id => getEquipmentStatus(id).downtime > 168).map(id => {
+                      // High-risk / problem equipment: 2+ failures, downtime > 48h, or availability < 90%
+                      const highRiskItems = locoIds.map(id => {
                         const st = getEquipmentStatus(id);
-                        const lastDown = filteredUp.filter(u=>u.equipmentId===id && u.status==='Down').sort((a,b)=>new Date(b.date+' '+b.time)-new Date(a.date+' '+a.time))[0];
-                        return `${id} — ${lastDown?.reason || 'Unknown'} (${st.downtime.toFixed(1)} hrs down)`;
-                      });
-                      document.getElementById('high-risk-list').innerHTML = highRisk.map(s=>`<li>${s}</li>`).join('');
-                      document.getElementById('high-risk-alerts').classList.toggle('hidden', highRisk.length===0);
+                        const reasons = [];
+                        if (st.failures >= 2) reasons.push(`${st.failures} failures`);
+                        if (st.downtime > 48) reasons.push(`${st.downtime.toFixed(1)}h downtime`);
+                        if (parseFloat(st.availability) < 90) reasons.push(`${st.availability}% avail`);
+                        if (!reasons.length) return null;
+                        const reasonText = st.lastReason || 'See status history';
+                        return {
+                          id,
+                          html: `<strong>${id}</strong> — ${reasonText} <span style="color:var(--text-3);">(${reasons.join(', ')})</span>`,
+                          failures: st.failures,
+                          downtime: st.downtime
+                        };
+                      }).filter(Boolean).sort((a,b) => b.failures - a.failures || b.downtime - a.downtime);
+                  
+                      const hrList = document.getElementById('high-risk-list');
+                      const hrBox = document.getElementById('high-risk-alerts');
+                      if (hrList && hrBox) {
+                        hrList.innerHTML = highRiskItems.length
+                          ? highRiskItems.slice(0, 25).map(s => `<li style="margin:6px 0;">${s.html}</li>`).join('')
+                          : '';
+                        hrBox.classList.toggle('hidden', highRiskItems.length === 0);
+                      }
                   
                       const predictive = filteredMt.map(m => ({...m, days:calculateDaysLeft(m.lastDone, m.interval)})).filter(m => !isNaN(m.days) && m.days <= 7);
                       document.getElementById('predictive-list').innerHTML = predictive.map(p => `<li>${p.equipment} — ${p.task} (${p.days >= 0 ? 'due in '+p.days+' days' : Math.abs(p.days)+' days overdue'})</li>`).join('');
@@ -1963,7 +2070,9 @@ function populateDashboard() {
                       return Number(u.downtimeHours || u.downtime || u.hours || u['Down Hrs'] || 0) || 0;
                     }
                     function isFailure(u) {
-                      return u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true || u.isFailure === 'Yes';
+                      return u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
+                        String(u.isFailure || '').toLowerCase() === 'yes' ||
+                        String(u.status || '').toLowerCase() === 'down';
                     }
                     function isDown(u) {
                       const s = String(u.status || '').toLowerCase();
@@ -2891,19 +3000,24 @@ function populateDashboard() {
                   
                     const statusDiv = document.getElementById('import-status');
                     statusDiv.style.display = 'block';
-                    statusDiv.innerHTML = `Importing ${toImport.length} records… Please wait.`;
                     statusDiv.style.background = 'rgba(29,78,216,0.08)';
                     statusDiv.style.color = 'var(--primary)';
+                    statusDiv.innerHTML = `Preparing to import <strong>${toImport.length}</strong> records…`;
                   
                     let success = 0;
                     let skipped = 0;
                     const skipReasons = [];
+                    const BATCH = 25; // write in small batches so the UI stays responsive
                   
-                    // Process row-by-row so one bad ID never aborts the whole file
-                    for (const row of toImport) {
+                    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+                  
+                    for (let i = 0; i < toImport.length; i++) {
+                      const row = toImport[i];
                       try {
                         const rawId = String(row.equipmentId || '').trim();
-                        const equipId = sanitizeEquipmentId(rawId);
+                        const equipId = (typeof sanitizeEquipmentId === 'function')
+                          ? sanitizeEquipmentId(rawId)
+                          : (rawId ? rawId.replace(/[\/\\#?[\]]+/g, '-').trim() : null);
                   
                         if (!equipId) {
                           skipped++;
@@ -2913,7 +3027,6 @@ function populateDashboard() {
                           continue;
                         }
                   
-                        // Build payload WITHOUT undefined values (Firestorestore rejects undefined)
                         const statusPayload = {
                           equipmentId: equipId,
                           date: row.date || new Date().toISOString().slice(0, 10),
@@ -2931,14 +3044,12 @@ function populateDashboard() {
                           sourceSheet: row.sourceSheet || '',
                           createdAt: serverTimestamp()
                         };
-                        // Only store original ID when it actually changed (never pass undefined)
                         if (rawId && rawId !== equipId) {
                           statusPayload.originalEquipmentId = rawId;
                         }
-
-                        await addDoc(collection(db, 'status_updates'), statusPayload);
-
-                        // Auto-register equipment (safe document ID)
+                  
+                        const docRef = await addDoc(collection(db, 'status_updates'), statusPayload);
+                  
                         const eqPayload = {
                           shaft: row.shaft || '',
                           level: row.workplace || '',
@@ -2952,6 +3063,24 @@ function populateDashboard() {
                         }
                         await setDoc(doc(db, 'equipment', equipId), eqPayload, { merge: true });
                   
+                        // Optimistically update in-memory arrays so UI refreshes immediately
+                        // (Firestorestore listeners will also update, but this removes the lag)
+                        try {
+                          if (Array.isArray(updates)) {
+                            updates.unshift({
+                              id: docRef.id,
+                              ...statusPayload,
+                              createdAt: new Date().toISOString()
+                            });
+                          }
+                          if (Array.isArray(equipment)) {
+                            const exists = equipment.some(e => String(e.id) === String(equipId));
+                            if (!exists) {
+                              equipment.push({ id: equipId, ...eqPayload });
+                            }
+                          }
+                        } catch (memErr) { /* ignore memory merge errors */ }
+                  
                         success++;
                       } catch (rowErr) {
                         console.warn('Skipped row during import:', rowErr, row);
@@ -2961,6 +3090,16 @@ function populateDashboard() {
                           skipReasons.push(`${idHint}: ${rowErr.message || rowErr}`);
                         }
                       }
+                  
+                      // Live progress every BATCH rows (keeps the page responsive)
+                      if ((i + 1) % BATCH === 0 || i === toImport.length - 1) {
+                        const pct = Math.round(((i + 1) / toImport.length) * 100);
+                        statusDiv.innerHTML =
+                          `Importing… <strong>${success}</strong> saved, <strong>${skipped}</strong> skipped ` +
+                          `(${i + 1}/${toImport.length} — ${pct}%)`;
+                        // Yield to the browser so the status text actually paints
+                        await sleep(0);
+                      }
                     }
                   
                     // Final status message
@@ -2968,16 +3107,46 @@ function populateDashboard() {
                     if (success > 0) {
                       msg = `🎉 Successfully imported <strong>${success}</strong> record(s) into Firebase.`;
                       if (skipped > 0) {
-                        msg += ` <span style="color:var(--warning);">Skipped ${skipped} row(s)</span>`;
+                        msg += ` <span style="color:#ea580c;">Skipped ${skipped} row(s)</span>`;
                         if (skipReasons.length) {
                           msg += `<br><small style="color:var(--text-3);">Examples: ${skipReasons.slice(0,5).join(' · ')}</small>`;
                         }
                       }
+                      msg += `<br><small style="color:var(--text-2);">Refreshing dashboard &amp; Text Mining Framework…</small>`;
                       statusDiv.style.background = 'rgba(22,163,74,0.12)';
                       statusDiv.style.color = 'var(--success)';
                       document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
                       document.querySelector('.import-step[data-step="3"]')?.classList.add('active');
-                      if (typeof refreshCurrentView === 'function') refreshCurrentView();
+                  
+                      // Force full UI refresh (dashboard + text mining + equipment lists)
+                      try {
+                        if (typeof fillDatalist === 'function') fillDatalist();
+                        if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+                        if (typeof populateDashboard === 'function') populateDashboard();
+                        if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+                        if (typeof window.refreshCurrentView === 'function') window.refreshCurrentView();
+                        else if (typeof refreshCurrentView === 'function') refreshCurrentView();
+                      } catch (refErr) {
+                        console.warn('Post-import refresh error:', refErr);
+                      }
+                  
+                      // Switch to Text Mining Framework so the user sees the new insights
+                      try {
+                        if (typeof show === 'function') {
+                          show('text-mining');
+                        } else {
+                          // Fallback navigation
+                          document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+                          const tm = document.getElementById('text-mining');
+                          if (tm) tm.classList.remove('hidden');
+                          document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
+                          const menuItem = document.querySelector('[data-section="text-mining"]');
+                          if (menuItem) menuItem.classList.add('active');
+                          if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+                        }
+                      } catch (navErr) {
+                        console.warn('Could not switch to Text Mining view:', navErr);
+                      }
                     } else {
                       msg = `❌ No rows could be imported. Skipped ${skipped}.`;
                       if (skipReasons.length) {
@@ -2988,7 +3157,8 @@ function populateDashboard() {
                     }
                     statusDiv.innerHTML = msg;
                   };
-                  
+
+
                   // Aliases so existing buttons keep working
                   window.startColumnMapping = window.showManualMapping;
                   window.handleFileUpload = window.handleFileUpload;
