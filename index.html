@@ -2913,12 +2913,11 @@ function populateDashboard() {
                           continue;
                         }
                   
-                        // Keep original text for display; use sanitized ID for Firestore paths
-                        await addDoc(collection(db, 'status_updates'), {
+                        // Build payload WITHOUT undefined values (Firestorestore rejects undefined)
+                        const statusPayload = {
                           equipmentId: equipId,
-                          originalEquipmentId: rawId !== equipId ? rawId : undefined,
-                          date: row.date,
-                          time: row.time,
+                          date: row.date || new Date().toISOString().slice(0, 10),
+                          time: row.time || '00:00',
                           status: 'Down',
                           shift: row.shift || 'Night',
                           reason: row.reason || 'No reason provided',
@@ -2931,18 +2930,27 @@ function populateDashboard() {
                           source: 'Imported Breakdown Report',
                           sourceSheet: row.sourceSheet || '',
                           createdAt: serverTimestamp()
-                        });
-                  
+                        };
+                        // Only store original ID when it actually changed (never pass undefined)
+                        if (rawId && rawId !== equipId) {
+                          statusPayload.originalEquipmentId = rawId;
+                        }
+
+                        await addDoc(collection(db, 'status_updates'), statusPayload);
+
                         // Auto-register equipment (safe document ID)
-                        await setDoc(doc(db, 'equipment', equipId), {
+                        const eqPayload = {
                           shaft: row.shaft || '',
                           level: row.workplace || '',
                           locoSize: '',
                           section: '',
                           source: 'Imported Breakdown Report',
-                          originalId: rawId !== equipId ? rawId : undefined,
                           updatedAt: new Date().toISOString()
-                        }, { merge: true });
+                        };
+                        if (rawId && rawId !== equipId) {
+                          eqPayload.originalId = rawId;
+                        }
+                        await setDoc(doc(db, 'equipment', equipId), eqPayload, { merge: true });
                   
                         success++;
                       } catch (rowErr) {
@@ -3074,9 +3082,9 @@ function populateDashboard() {
                         shaft: document.getElementById('shaft').value,
                         level: document.getElementById('level').value,
                         locoSize: document.getElementById('loco-size').value,
-                        section: document.getElementById('section').value,
-                        originalId: rawId !== id ? rawId : undefined
+                        section: document.getElementById('section').value
                       };
+                      if (rawId && rawId !== id) data.originalId = rawId;
                   
                       try {
                         await setDoc(doc(db, "equipment", id), data, { merge: true });
