@@ -1,141 +1,69 @@
-// ====================== FIREBASE SETUP ======================
-const firebaseConfig = {
-    apiKey: "AIzaSyCnDsQVhQxk9Q7axCPcMSpHDcqOonBbNMc",
-    authDomain: "rbe-equipment.firebaseapp.com",
-    projectId: "rbe-equipment",
-    storageBucket: "rbe-equipment.firebasestorage.app",
-    messagingSenderId: "481759813476",
-    appId: "1:481759813476:web:ef176ffa73fb65e01ca471",
-    measurementId: "G-15E0HZJ2X6"
+/**
+ * RBE Monitor – supporting script.js
+ * ----------------------------------
+ * The main application logic (Firebase modular SDK, dashboard, text-mining
+ * classifier, Excel import, etc.) lives in the inline <script type="module">
+ * inside index.html.
+ *
+ * This file provides the Search History helper that is referenced by the
+ * HTML. It is intentionally lightweight and does not re-initialise Firebase
+ * so that it does not conflict with the modular code.
+ *
+ * If you later want to extract the text-mining functions (tmClassifyReason,
+ * refreshTextMiningInsights, etc.) into a separate module, you can move them
+ * here and export them; the current design keeps everything in one place for
+ * simplicity and offline reliability.
+ */
+
+// ---------------------------------------------------------------------------
+// Search-history helpers (used by the Search History section)
+// ---------------------------------------------------------------------------
+
+// These functions are also defined inside the main module; they are repeated
+// here only so that any non-module code that might call them continues to work.
+// The live implementation that writes to Firestore lives in the module.
+
+window.addToSearchHistory = window.addToSearchHistory || async function (jobOrderNumber, pdfName = '') {
+  console.log('[script.js] addToSearchHistory called – main module should handle persistence:', jobOrderNumber);
 };
 
-// Initialize Firebase (Modular)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    serverTimestamp, 
-    onSnapshot, 
-    query, 
-    orderBy, 
-    limit 
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-console.log('%c✅ Firebase initialized successfully (Modular)', 'color:#16a34a; font-weight:bold');
-
-const HISTORY_COLLECTION = 'searchHistory';
-
-// Save a new search to Firebase
-async function addToSearchHistory(jobOrderNumber, pdfName = '') {
-  if (!jobOrderNumber) return;
-  try {
-    await addDoc(collection(db, HISTORY_COLLECTION), {
-      jobOrder: jobOrderNumber.toString().trim(),
-      pdfName: pdfName || `Job Order ${jobOrderNumber}`,
-      timestamp: serverTimestamp(),
-      searchedAt: new Date().toISOString()
-    });
-    console.log(`✅ Saved to history: ${jobOrderNumber}`);
-  } catch (e) {
-    console.error("❌ Error saving to history:", e);
-  }
-}
-
-// Real-time listener
-let historyUnsubscribe = null;
-
-function startLiveSearchHistory() {
-  if (historyUnsubscribe) historyUnsubscribe();
-
-  const q = query(
-    collection(db, HISTORY_COLLECTION),
-    orderBy("timestamp", "desc"),
-    limit(30)
-  );
-
-  historyUnsubscribe = onSnapshot(q, (snapshot) => {
-    const history = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      history.push({
-        id: doc.id,
-        ...data,
-        timestamp: data.timestamp ? data.timestamp.toDate() : new Date(data.searchedAt)
-      });
-    });
-    updateHistoryUI(history);
-  }, (error) => {
-    console.error("History listener error:", error);
-  });
-}
-
-// Display history in the list
-function updateHistoryUI(history) {
-  const container = document.getElementById('history-list');
-  if (!container) {
-    console.error("❌ #history-list not found");
-    return;
-  }
-
-  container.innerHTML = '';
-
-  if (history.length === 0) {
-    container.innerHTML = `<li class="list-group-item text-muted">No searches yet. Perform a search above.</li>`;
-    return;
-  }
-
-  history.forEach(item => {
-    const li = document.createElement('li');
-    li.className = "list-group-item d-flex justify-content-between align-items-center";
-    li.innerHTML = `
-      <div>
-        <strong>Job Order: ${item.jobOrder}</strong><br>
-        <small class="text-muted">${item.pdfName || ''}</small>
-      </div>
-      <small class="text-muted">${item.timestamp.toLocaleString()}</small>
-    `;
-    container.appendChild(li);
-  });
-}
-
-// ====================== CONNECT SEARCH BUTTON ======================
-document.addEventListener('DOMContentLoaded', function() {
-  const searchForm = document.getElementById('search-form');
-  
-  if (searchForm) {
-    searchForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
-
-      // Get value from Equipment ID or Job Order select
-      let jobOrderNumber = document.getElementById('s-loco').value.trim();
-      if (!jobOrderNumber) {
-        jobOrderNumber = document.getElementById('job-loco').value;
-      }
-
-      if (jobOrderNumber) {
-        await addToSearchHistory(jobOrderNumber);   // ← Save to Firebase
-        console.log(`🔍 Searched: ${jobOrderNumber}`);
-        // You can add your existing search logic here later
-      } else {
-        alert("Please enter Equipment ID or select Job Order Equipment");
-      }
-    });
-  }
-
-  // Start listening to Firebase history
-  console.log('%c📡 Starting live search history...', 'color:#3b82f6');
-  startLiveSearchHistory();
-});
-
-// Optional: Clear history button (type in console: clearSearchHistory())
-window.clearSearchHistory = async () => {
-  if (confirm("Clear all search history?")) {
-    const snapshot = await db.collection(HISTORY_COLLECTION).get();
-    snapshot.docs.forEach(doc => doc.ref.delete());
-    console.log("🗑️ History cleared");
+window.clearSearchHistory = window.clearSearchHistory || async function () {
+  if (confirm('Clear all search history?')) {
+    console.log('[script.js] clearSearchHistory – implement via main module if needed');
   }
 };
+
+// ---------------------------------------------------------------------------
+// Optional: expose a global reference to the rule-based classifier for
+// console testing / future external scripts.
+// (The real implementation is defined inside the module as tmClassifyReason.)
+// ---------------------------------------------------------------------------
+window.RBE_TextMining = window.RBE_TextMining || {
+  /**
+   * Rule-based text classifier – same categories as the research study
+   * (Brakes / Binding, Antenna / Comms / Display, etc.)
+   * The authoritative version lives in the HTML module.
+   */
+  classify(text) {
+    if (typeof window.tmClassifyReason === 'function') {
+      return window.tmClassifyReason(text);
+    }
+    // Fallback pure implementation (mirrors the study categories)
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return { mode: 'No text', color: '#94a3b8' };
+    if (/derail/.test(t)) return { mode: 'Derailment', color: '#7c3aed' };
+    if (/brake|binding|brake interface|brake release|static brake/.test(t))
+      return { mode: 'Brakes / Binding', color: '#dc2626' };
+    if (/battery|cell|charger/.test(t)) return { mode: 'Battery / Cells', color: '#16a34a' };
+    if (/antenna|gabooz|gabboz|pulse|network|rf\b|canbus|can bus|check connection/.test(t))
+      return { mode: 'Antenna / Comms / Display', color: '#1d4ed8' };
+    if (/light|siren|speedo|screen|display/.test(t))
+      return { mode: 'Lights / Siren / Speedo / Display', color: '#0891b2' };
+    if (/motor|gear|power|control|movement|tram|not starting|no forward|no backward|hydraulic/.test(t))
+      return { mode: 'Motor / Power / Control / Movement', color: '#ea580c' };
+    if (/door|magnet|buffer/.test(t)) return { mode: 'Door / Magnet / Buffer', color: '#ca8a04' };
+    return { mode: 'Other / Unclassified', color: '#64748b' };
+  }
+};
+
+console.log('%c✅ RBE script.js loaded (search-history helper + text-mining fallback)', 'color:#16a34a;font-weight:bold');
