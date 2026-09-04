@@ -426,8 +426,18 @@
                   
                   
                             <div class="card" style="border-left:6px solid var(--info);">
-                              <h2><i class="fas fa-wrench"></i> Upcoming &amp; Overdue Maintenance</h2>
-                              <div id="maintenance-list" style="display:grid;gap:1rem;font-size:0.98rem;"></div>
+                              <div class="table-toolbar">
+                                <h2 style="margin:0;"><i class="fas fa-wrench"></i> Upcoming &amp; Overdue Maintenance</h2>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                  <button type="button" class="btn btn-primary" style="padding:0.45rem 0.9rem;" onclick="exportUpcomingMaintExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                                  <button type="button" class="btn btn-primary" style="padding:0.45rem 0.9rem;" onclick="exportUpcomingMaintPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                                </div>
+                              </div>
+                              <div id="upcoming-maint-summary" class="summary-alert-bar hidden"></div>
+                              <div id="maintenance-list" style="display:grid;gap:0.65rem;font-size:0.98rem;"></div>
+                              <div id="upcoming-view-more-wrap" style="text-align:center;margin-top:0.75rem;display:none;">
+                                <button type="button" class="btn btn-primary" id="upcoming-view-more-btn" onclick="toggleTableExpand('upcoming')">View more</button>
+                              </div>
                             </div>
                           </section>
                   
@@ -1563,7 +1573,8 @@
                   function fillDatalist() {
                       const dl = document.getElementById('loco-list');
                       if (dl) {
-                        dl.innerHTML = equipment.map(e => `<option value="${e.id}"></option>`).join('');
+                        const list = (typeof getFilteredEquipment === 'function') ? getFilteredEquipment() : (equipment || []);
+                        dl.innerHTML = list.map(e => `<option value="${e.id}"></option>`).join('');
                       }
                   
                       const shafts = [
@@ -1599,35 +1610,52 @@
                   }   // ← THIS CLOSING BRACE WAS MISSING
                   
                   
+                  /**
+                   * System-wide shaft filter (Dashboard dropdown).
+                   * - "All Shafts" (empty): show everything, including equipment with no shaft.
+                   * - Specific shaft: only equipment whose shaft matches exactly.
+                   *   Equipment with blank/missing shaft appear ONLY under All Shafts.
+                   */
                   function getFilteredEquipment() {
-                    return currentShaftFilter ? equipment.filter(e => (e.shaft || '') === currentShaftFilter) : equipment;
+                    const list = equipment || [];
+                    if (!currentShaftFilter) return list; // All Shafts
+                    return list.filter(e => {
+                      const s = String(e.shaft || '').trim();
+                      // Unassigned shaft → only on All Shafts
+                      if (!s) return false;
+                      return s === currentShaftFilter;
+                    });
                   }
                   
-function getFilteredUpdates() {
-  const eqList = getFilteredEquipment();
-  // No equipment registered yet → show all updates (so imports still appear)
-  if (!eqList.length) {
-    if (!currentShaftFilter) return updates || [];
-    return (updates || []).filter(u => String(u.shaft || '') === currentShaftFilter);
-  }
-  const ids = new Set(eqList.map(e => String(e.id)));
-  return (updates || []).filter(u => {
-    const id = String(u.equipmentId || u.locoNumber || '');
-    if (ids.has(id)) return true;
-    // Include updates for unknown IDs when no shaft filter, or shaft matches
-    if (!currentShaftFilter) return true;
-    return String(u.shaft || '') === currentShaftFilter;
-  });
-}
+                  function getFilteredUpdates() {
+                    const all = updates || [];
+                    if (!currentShaftFilter) return all; // All Shafts
+                  
+                    const eqList = getFilteredEquipment();
+                    const ids = new Set(eqList.map(e => String(e.id)));
+                  
+                    return all.filter(u => {
+                      const id = String(u.equipmentId || u.locoNumber || '').trim();
+                      // Prefer match via registered equipment in this shaft
+                      if (id && ids.has(id)) return true;
+                      // Or update itself carries matching shaft
+                      const us = String(u.shaft || '').trim();
+                      return us === currentShaftFilter;
+                    });
+                  }
                   
                   function getFilteredMaintenance() {
-                    const ids = getFilteredEquipment().map(e => e.id);
-                    return maintenance.filter(m => ids.includes(m.equipment));
+                    const all = maintenance || [];
+                    if (!currentShaftFilter) return all;
+                    const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
+                    return all.filter(m => ids.has(String(m.equipment || '')));
                   }
                   
                   function getFilteredDelays() {
-                    const ids = getFilteredEquipment().map(e => e.id);
-                    return delaysData.filter(d => ids.includes(d.equipment));
+                    const all = delaysData || [];
+                    if (!currentShaftFilter) return all;
+                    const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
+                    return all.filter(d => ids.has(String(d.equipment || '')));
                   }
                   
                     
@@ -2208,18 +2236,95 @@ function populateDashboard() {
                       document.getElementById('predictive-list').innerHTML = predictive.map(p => `<li>${p.equipment} — ${p.task} (${p.days >= 0 ? 'due in '+p.days+' days' : Math.abs(p.days)+' days overdue'})</li>`).join('');
                       document.getElementById('predictive-alerts').classList.toggle('hidden', predictive.length===0);
                   
-                      document.getElementById('maintenance-list').innerHTML = filteredMt.map(m => {
-                        const days = calculateDaysLeft(m.lastDone, m.interval);
-                        const color = days<0 ? 'red' : (days<=7 ? 'orange' : 'green');
-                        const text = days>=0 ? `${days} days left` : `${Math.abs(days)} days overdue`;
-                        return `<div style="color:var(--${color});font-weight:500;">${m.equipment} — ${m.task} — ${text}</div>`;
-                      }).join('');
+                      // Upcoming & Overdue Maintenance — paged list + summary bar
+                      const upcomingItems = (filteredMt || []).map(m => {
+                        const days = m.dueDate
+                          ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
+                          : calculateDaysLeft(m.lastDone, m.interval);
+                        return { ...m, days };
+                      }).sort((a, b) => {
+                        const da = isNaN(a.days) ? 9999 : a.days;
+                        const db = isNaN(b.days) ? 9999 : b.days;
+                        return da - db;
+                      });
+                  
+                      let overdueN = 0, dueSoonN = 0;
+                      upcomingItems.forEach(m => {
+                        if (isNaN(m.days)) return;
+                        if (m.days < 0) overdueN++;
+                        else if (m.days <= 7) dueSoonN++;
+                      });
+                  
+                      const upcomingRows = upcomingItems.map(m => {
+                        const color = isNaN(m.days) ? 'text-3' : (m.days < 0 ? 'danger' : (m.days <= 7 ? 'warning' : 'success'));
+                        const label = isNaN(m.days) ? '—' : (m.days >= 0 ? `${m.days} days left` : `${Math.abs(m.days)} days overdue`);
+                        const css = color === 'danger' ? 'var(--danger)' : color === 'warning' ? 'var(--warning)' : color === 'success' ? 'var(--success)' : 'var(--text-3)';
+                        return `<div style="color:${css};font-weight:500;padding:0.35rem 0;border-bottom:1px solid var(--border);">
+                          <strong>${m.equipment}</strong> — ${m.task || 'Task'} — ${label}
+                          ${m.source === 'failure-pattern' ? ' <span style="opacity:0.7;">(pattern)</span>' : ''}
+                        </div>`;
+                      });
+                  
+                      window._lastUpcomingMaint = upcomingItems;
+                  
+                      if (upcomingRows.length) {
+                        // reuse renderPagedTable pattern for div list
+                        window._tableFullRows['upcoming'] = upcomingRows;
+                        const expanded = !!window._tableExpandState['upcoming'];
+                        const show = expanded ? upcomingRows : upcomingRows.slice(0, TABLE_PAGE_SIZE);
+                        const listEl = document.getElementById('maintenance-list');
+                        if (listEl) listEl.innerHTML = show.join('') || '<div style="color:var(--text-3);">No upcoming tasks</div>';
+                        const wrap = document.getElementById('upcoming-view-more-wrap');
+                        const btn = document.getElementById('upcoming-view-more-btn');
+                        if (wrap && btn) {
+                          if (upcomingRows.length > TABLE_PAGE_SIZE) {
+                            wrap.style.display = 'block';
+                            btn.textContent = expanded
+                              ? `Show less (showing all ${upcomingRows.length})`
+                              : `View more (${upcomingRows.length - TABLE_PAGE_SIZE} more of ${upcomingRows.length})`;
+                          } else {
+                            wrap.style.display = 'none';
+                          }
+                        }
+                        if (upcomingRows.length > 10 || overdueN || dueSoonN) {
+                          setSummaryBar('upcoming-maint-summary',
+                            `<div><i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i>
+                              <strong>Alerts:</strong> ${overdueN} Overdue | ${dueSoonN} Due Soon
+                              <span style="font-weight:500;opacity:0.85;"> — ${upcomingRows.length} tasks${currentShaftFilter ? ' ('+currentShaftFilter+')' : ''}</span>
+                            </div>
+                            <div class="bar-actions">
+                              <button type="button" class="btn-view-more" onclick="toggleTableExpand('upcoming')">View more</button>
+                              <button type="button" class="btn-export" onclick="exportUpcomingMaintExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+                              <button type="button" class="btn-export" onclick="exportUpcomingMaintPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                            </div>`);
+                        } else {
+                          setSummaryBar('upcoming-maint-summary', '');
+                        }
+                      } else {
+                        const listEl = document.getElementById('maintenance-list');
+                        if (listEl) listEl.innerHTML = '<div style="color:var(--text-3);padding:0.5rem 0;">No upcoming or overdue maintenance for this filter.</div>';
+                        setSummaryBar('upcoming-maint-summary', '');
+                        const wrap = document.getElementById('upcoming-view-more-wrap');
+                        if (wrap) wrap.style.display = 'none';
+                      }
                     }
                   
                     function filterDashboard() {
-                      currentShaftFilter = document.getElementById('shaft-filter').value;
-                      refreshCurrentView();
+                      const sel = document.getElementById('shaft-filter');
+                      currentShaftFilter = sel ? (sel.value || '') : '';
+                      // Keep control-room filter in sync (optional)
+                      const cr = document.getElementById('cr-shaft-filter');
+                      if (cr && cr.value !== currentShaftFilter) {
+                        // don't force CR filter; dashboard is master for app-wide view
+                      }
+                      console.log('Shaft filter →', currentShaftFilter || 'All Shafts');
+                      // Refresh whatever is on screen + always refresh text mining cache
+                      if (typeof refreshCurrentView === 'function') refreshCurrentView();
+                      if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+                      if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+                      if (typeof fillDatalist === 'function') fillDatalist();
                     }
+                    window.filterDashboard = filterDashboard;
                   
                     
                     // ── Other populate functions ────────────────────────────────────
@@ -2250,13 +2355,16 @@ function populateDashboard() {
                       return s === 'down' || s === 'offline' || s === 'failed' || s === 'broken';
                     }
                   
-                    // Use all equipment IDs that appear either in the register or in updates
+                    // Respect system-wide shaft filter (Dashboard "All Shafts" / specific shaft)
+                    const filteredEq = (typeof getFilteredEquipment === 'function') ? getFilteredEquipment() : (equipment || []);
+                    const filteredUp = (typeof getFilteredUpdates === 'function') ? getFilteredUpdates() : (updates || []);
+                  
                     const idSet = new Set();
-                    (equipment || []).forEach(e => {
+                    filteredEq.forEach(e => {
                       if (e.id) idSet.add(String(e.id));
                       if (e['Loco Number']) idSet.add(String(e['Loco Number']));
                     });
-                    (updates || []).forEach(u => {
+                    filteredUp.forEach(u => {
                       const id = getEquipId(u);
                       if (id) idSet.add(id);
                     });
@@ -2267,7 +2375,7 @@ function populateDashboard() {
                     const highRiskRows = [];
                   
                     allIds.forEach(id => {
-                      const eu = (updates || []).filter(u => getEquipId(u) === id)
+                      const eu = filteredUp.filter(u => getEquipId(u) === id)
                         .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
                   
                       const st = (typeof getEquipmentStatus === 'function')
@@ -3080,10 +3188,16 @@ function populateDashboard() {
                       // Level from WORKING PLACE (optional store in reason/shaft context)
                       const workplace = String(get('workplace') || '').trim();
                   
+                      // Shaft: only set when user forced it or column clearly identifies a known shaft.
+                      // Unassigned imports appear under "All Shafts" only (not under a specific shaft filter).
                       let shaft = document.getElementById('import-shaft')?.value || '';
                       if (!shaft) {
-                        const conv = String(get('shaft') || '');
+                        const conv = String(get('shaft') || '').trim();
                         if (/trackless/i.test(conv)) shaft = 'TRACKLESS-20 LEVEL';
+                        else if (conv && !/conventional/i.test(conv)) {
+                          // Use value only if it looks like a shaft name (contains "Shaft" or known pattern)
+                          if (/shaft|level|styldrift|clapham|drikop/i.test(conv)) shaft = conv;
+                        }
                       }
                   
                       return {
@@ -3245,6 +3359,23 @@ function populateDashboard() {
                   function toggleTableExpand(key) {
                     window._tableExpandState[key] = !window._tableExpandState[key];
                     const full = window._tableFullRows[key] || [];
+                    if (key === 'upcoming') {
+                      const expanded = !!window._tableExpandState[key];
+                      const show = expanded ? full : full.slice(0, TABLE_PAGE_SIZE);
+                      const listEl = document.getElementById('maintenance-list');
+                      if (listEl) listEl.innerHTML = show.join('');
+                      const wrap = document.getElementById('upcoming-view-more-wrap');
+                      const btn = document.getElementById('upcoming-view-more-btn');
+                      if (wrap && btn) {
+                        if (full.length > TABLE_PAGE_SIZE) {
+                          wrap.style.display = 'block';
+                          btn.textContent = expanded
+                            ? `Show less (showing all ${full.length})`
+                            : `View more (${full.length - TABLE_PAGE_SIZE} more of ${full.length})`;
+                        } else wrap.style.display = 'none';
+                      }
+                      return;
+                    }
                     renderPagedTable(key, full);
                   }
                   window.toggleTableExpand = toggleTableExpand;
@@ -3410,6 +3541,19 @@ function populateDashboard() {
                       ul.querySelectorAll('li').forEach(li => lines.push([id, li.innerText.replace(/\s+/g,' ').trim()]));
                     });
                     downloadCSV('Dashboard_Alerts.csv', ['Category','Detail'], lines);
+                  };
+                  window.exportUpcomingMaintExcel = function () {
+                    const items = window._lastUpcomingMaint || [];
+                    downloadCSV('Upcoming_Overdue_Maintenance.csv',
+                      ['Equipment','Task','Interval','Last Done','Due','Days Left','Source'],
+                      items.map(m => [m.equipment, m.task, m.interval, m.lastDone, m.dueDate || '', m.days, m.source || '']));
+                  };
+                  window.exportUpcomingMaintPDF = function () {
+                    const items = window._lastUpcomingMaint || [];
+                    simpleTablePDF('Upcoming & Overdue Maintenance',
+                      ['Equipment','Task','Days Left','Source'],
+                      items.map(m => [m.equipment, m.task, m.days, m.source || '']),
+                      'Upcoming_Overdue_Maintenance.pdf');
                   };
                   window.exportAlertsPDF = function () {
                     const rows = [];
