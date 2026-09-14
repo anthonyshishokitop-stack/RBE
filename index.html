@@ -1187,6 +1187,22 @@
     </div>
   </div>
 
+  <!-- Inspection task detail (calendar click) -->
+  <div id="inspection-task-modal" class="modal">
+    <div class="modal-content" style="max-width:640px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:0.75rem;">
+        <h3 style="margin:0;color:var(--primary);"><i class="fas fa-clipboard-list"></i> Inspection task</h3>
+        <button type="button" onclick="document.getElementById('inspection-task-modal').classList.remove('active')"
+          style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:var(--text);">×</button>
+      </div>
+      <div id="inspection-task-body"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.65rem;margin-top:1.25rem;">
+        <button type="button" class="btn btn-success" id="inspection-mark-fixed"><i class="fas fa-check"></i> Mark attended / Fixed</button>
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('inspection-task-modal').classList.remove('active')">Close</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 <script type="module">
   // ────────────────────────────────────────────────
@@ -3535,11 +3551,15 @@ function populateMaintTable() {
   
   function getMaintenanceEvents() {
     const events = [];
-    // Honour Dashboard shaft + type filter so calendar matches the rest of the system
     const maintSource = (typeof getFilteredMaintenance === 'function')
       ? getFilteredMaintenance() : (maintenance || []);
+    const patternMap = {};
+    try {
+      (typeof analyseFailurePatterns === 'function' ? analyseFailurePatterns() : []).forEach(p => {
+        patternMap[String(p.equipment)] = p;
+      });
+    } catch (e) { /* ignore */ }
 
-    // Normal + predictive maintenance tasks
     const calSeen = new Set();
     maintSource.forEach(task => {
       if (isAlertDismissed('maint-' + task.id)) return;
@@ -3556,24 +3576,45 @@ function populateMaintTable() {
       let color = '#16a34a';
       if (days < 0) color = '#dc2626';
       else if (days <= 7) color = '#ea580c';
-      if (task.source === 'failure-pattern') color = '#7c3aed'; // purple for pattern-based
+      if (task.source === 'failure-pattern') color = '#7c3aed';
+
+      const enriched = (typeof enrichMaintFocus === 'function')
+        ? enrichMaintFocus({ ...task, days })
+        : task;
+      const pInfo = patternMap[String(task.equipment)] || {};
 
       events.push({
-        title: `${task.equipment} - ${task.task}`,
+        title: `${task.equipment} - ${(task.task || 'Maintenance').slice(0, 48)}`,
         start: due,
         allDay: true,
         backgroundColor: color,
         borderColor: color,
-        extendedProps: { daysLeft: days, source: task.source || 'manual' }
+        extendedProps: {
+          daysLeft: days,
+          source: task.source || 'manual',
+          equipment: task.equipment,
+          maintId: task.id || '',
+          task: task.task || '',
+          interval: task.interval || '',
+          lastDone: task.lastDone || '',
+          dueDate: due,
+          focus: enriched.focus || pInfo.focus || '',
+          actions: enriched.actions || pInfo.actions || '',
+          topMode: enriched.topMode || pInfo.topMode || '',
+          priority: enriched.priority || pInfo.priority || '',
+          priorityColor: enriched.priorityColor || pInfo.priorityColor || color,
+          lastReason: enriched.lastReason || pInfo.lastReason || '',
+          failures: pInfo.failures || task.failureCount || '',
+          avgDays: pInfo.avgDaysBetween || task.avgDaysBetween || ''
+        }
       });
     });
 
-    // Live failure-pattern predictions (even if not yet written to maintenance)
     analyseFailurePatterns().forEach(p => {
       if (isAlertDismissed('fail-' + p.equipment)) return;
-      // Avoid duplicate if already in maintenance
       const already = events.some(e =>
-        e.title.startsWith(p.equipment) && e.extendedProps.source === 'failure-pattern'
+        String(e.extendedProps.equipment) === String(p.equipment) &&
+        e.extendedProps.source === 'failure-pattern'
       );
       if (already) return;
 
@@ -3582,7 +3623,7 @@ function populateMaintTable() {
       else if (p.daysUntil <= 7) color = '#ea580c';
 
       events.push({
-        title: `${p.equipment} - Predicted failure`,
+        title: `${p.equipment} - Predictive inspection`,
         start: p.predictedNext,
         allDay: true,
         backgroundColor: color,
@@ -3590,13 +3631,89 @@ function populateMaintTable() {
         extendedProps: {
           daysLeft: p.daysUntil,
           source: 'failure-pattern',
-          avgDays: p.avgDaysBetween
+          equipment: p.equipment,
+          maintId: '',
+          task: p.task || 'Predictive inspection',
+          interval: 'pattern',
+          lastDone: p.lastBreakdown || '',
+          dueDate: p.predictedNext,
+          focus: p.focus || '',
+          actions: p.actions || '',
+          topMode: p.topMode || '',
+          priority: p.priority || '',
+          priorityColor: p.priorityColor || color,
+          lastReason: p.lastReason || '',
+          failures: p.failures || '',
+          avgDays: p.avgDaysBetween || ''
         }
       });
     });
 
     return events;
   }
+
+  /** Open full inspection task card from a calendar event */
+  function openInspectionTaskFromEvent(ev) {
+    const x = (ev && ev.extendedProps) ? ev.extendedProps : {};
+    const equipment = x.equipment || (ev.title || '').split(' - ')[0] || '—';
+    const days = x.daysLeft;
+    const dueLabel = isNaN(days)
+      ? '—'
+      : (days >= 0 ? `${days} day(s) remaining` : `${Math.abs(days)} day(s) overdue`);
+    const priColor = x.priorityColor || '#7c3aed';
+    const body = document.getElementById('inspection-task-body');
+    if (!body) return;
+
+    const checklist = (x.actions || 'Full walk-around, safety devices, and known fault points from history.')
+      .split(/;|·|\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    body.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1rem;align-items:center;margin-bottom:0.85rem;">
+        <span style="font-size:1.25rem;font-weight:800;color:var(--text);">${String(equipment).replace(/</g,'&lt;')}</span>
+        ${x.priority ? `<span style="padding:0.25rem 0.7rem;border-radius:999px;font-size:0.78rem;font-weight:700;background:${priColor};color:#fff;">${x.priority}</span>` : ''}
+        <span style="font-size:0.85rem;color:var(--text-3);">${x.source === 'failure-pattern' ? 'Failure-pattern prediction' : 'Scheduled maintenance'}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.75rem;margin-bottom:1rem;">
+        <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;">DUE</div>
+          <div style="font-weight:700;">${x.dueDate || ev.startStr || '—'}</div></div>
+        <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;">STATUS</div>
+          <div style="font-weight:700;color:${days < 0 ? 'var(--danger)' : 'var(--text)'};">${dueLabel}</div></div>
+        <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;">FAILURES / AVG</div>
+          <div style="font-weight:700;">${x.failures || '—'} · every ${x.avgDays || '—'} days</div></div>
+        <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;">LAST DONE</div>
+          <div style="font-weight:700;">${x.lastDone || '—'}</div></div>
+      </div>
+      <div style="padding:0.85rem 1rem;border-radius:10px;background:var(--surface-2);border-left:4px solid var(--primary);margin-bottom:0.85rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.04em;">Area of focus</div>
+        <div style="font-size:1.05rem;font-weight:700;margin-top:0.25rem;">${x.focus || x.topMode || 'General reliability inspection'}</div>
+        ${x.topMode ? `<div style="font-size:0.85rem;color:var(--text-3);margin-top:0.2rem;">Dominant mode: ${x.topMode}</div>` : ''}
+      </div>
+      <div style="margin-bottom:0.85rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.45rem;">Complete task — conduct during this inspection</div>
+        <ol style="margin:0;padding-left:1.25rem;line-height:1.55;">
+          ${checklist.map(step => `<li style="margin:0.25rem 0;">${String(step).replace(/</g,'&lt;')}</li>`).join('') || '<li>Full equipment inspection per site standard</li>'}
+          <li>Record findings and actual downtime if unit is taken offline</li>
+          <li>Update status in RBE Monitor (Fixed) when work is complete</li>
+        </ol>
+      </div>
+      ${x.lastReason ? `<div style="font-size:0.88rem;color:var(--text-3);font-style:italic;border-top:1px solid var(--border);padding-top:0.65rem;"><strong>Last fault text:</strong> ${String(x.lastReason).replace(/</g,'&lt;')}</div>` : ''}
+      <div style="font-size:0.85rem;color:var(--text-2);margin-top:0.75rem;"><strong>Task title:</strong> ${String(x.task || ev.title || '').replace(/</g,'&lt;')}</div>
+    `;
+
+    const fixBtn = document.getElementById('inspection-mark-fixed');
+    if (fixBtn) {
+      fixBtn.onclick = () => {
+        if (typeof markEquipmentFixed === 'function') {
+          markEquipmentFixed(equipment, x.maintId || '');
+        }
+        document.getElementById('inspection-task-modal').classList.remove('active');
+      };
+    }
+    document.getElementById('inspection-task-modal').classList.add('active');
+  }
+  window.openInspectionTaskFromEvent = openInspectionTaskFromEvent;
 
   function initCalendar() {
     const el = document.getElementById('calendar-div');
@@ -3636,7 +3753,17 @@ function populateMaintTable() {
       headerToolbar: {left:'prev,next today', center:'title', right: isMobile ? 'dayGridMonth,listWeek' : 'dayGridMonth,timeGridWeek,listWeek'},
       height: 'auto',
       events: getMaintenanceEvents(),
-      eventContent: arg => ({html: `<div style="padding:4px;">${arg.event.title}<br><small>Days left: ${arg.event.extendedProps.daysLeft}</small></div>`})
+      eventContent: arg => {
+        const x = arg.event.extendedProps || {};
+        const focusHint = x.focus ? `<br><small style="opacity:0.95;">Focus: ${x.focus}</small>` : '';
+        return { html: `<div style="padding:4px;cursor:pointer;" title="Click for full inspection task">${arg.event.title}<br><small>Days left: ${x.daysLeft}</small>${focusHint}</div>` };
+      },
+      eventClick: function(info) {
+        info.jsEvent.preventDefault();
+        if (typeof openInspectionTaskFromEvent === 'function') {
+          openInspectionTaskFromEvent(info.event);
+        }
+      }
     });
     calendar.render();
   }
