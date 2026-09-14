@@ -731,6 +731,17 @@
         <!-- CALENDAR -->
         <section id="calendar" class="hidden">
           <div class="header-bar"><h1>Maintenance Calendar</h1></div>
+          <div class="quick-find-bar">
+            <label for="qf-calendar"><i class="fas fa-search"></i> Find equipment</label>
+            <input type="text" id="qf-calendar" list="loco-list" placeholder="Enter Equipment ID and press Enter" autocomplete="off"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();quickFindOnCalendar(this.value);}">
+            <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;"
+              onclick="quickFindOnCalendar(document.getElementById('qf-calendar').value)">Find</button>
+            <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);"
+              onclick="clearCalendarFind()">Clear</button>
+            <span class="qf-hint">Press Enter to jump to that unit’s event and open the inspection task</span>
+          </div>
+          <div id="calendar-find-status" style="display:none;margin:0 0 0.75rem;font-size:0.9rem;font-weight:600;color:var(--text-2);"></div>
           <div id="calendar-div" style="background:var(--surface);padding:2rem;border-radius:var(--radius-lg);box-shadow:var(--shadow);border:1px solid var(--border);"></div>
         </section>
 
@@ -3157,6 +3168,106 @@ const mttfData = locoIds.map(id => {
   }
   window.quickFindInTable = quickFindInTable;
   window.clearQuickFind = clearQuickFind;
+
+  /** Find equipment on Maintenance Calendar — navigate to event date and open task */
+  function quickFindOnCalendar(query) {
+    const q = String(query || '').trim();
+    const statusEl = document.getElementById('calendar-find-status');
+    if (!q) {
+      if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
+      return;
+    }
+    if (/^unknown$/i.test(q)) {
+      alert("Cannot search for Unknown equipment.");
+      return;
+    }
+
+    // Ensure calendar section is visible and calendar is built
+    const calSec = document.getElementById('calendar');
+    if (calSec && calSec.classList.contains('hidden') && typeof show === 'function') {
+      show('calendar');
+    }
+    if ((!calendar || typeof calendar.getEvents !== 'function') && typeof initCalendar === 'function') {
+      try { initCalendar(); } catch (e) { console.warn(e); }
+    }
+    if (!calendar || typeof calendar.getEvents !== 'function') {
+      alert('Calendar is not ready yet. Open the Calendar tab and try again.');
+      return;
+    }
+
+    const qLower = q.toLowerCase();
+    const matches = calendar.getEvents().filter(ev => {
+      const x = ev.extendedProps || {};
+      const equip = String(x.equipment || '').toLowerCase();
+      const title = String(ev.title || '').toLowerCase();
+      return equip === qLower || equip.includes(qLower) || title.includes(qLower);
+    });
+
+    // Prefer exact equipment id match
+    matches.sort((a, b) => {
+      const ae = String((a.extendedProps || {}).equipment || '').toLowerCase() === qLower ? 0 : 1;
+      const be = String((b.extendedProps || {}).equipment || '').toLowerCase() === qLower ? 0 : 1;
+      return ae - be;
+    });
+
+    if (!matches.length) {
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.color = 'var(--danger)';
+        statusEl.textContent = 'No calendar event found for "' + q + '" (check shaft/type filter on Dashboard).';
+      }
+      alert('No calendar event found for "' + q + '". Try clearing the Dashboard filter or confirm the unit has a maintenance / pattern task.');
+      return;
+    }
+
+    const ev = matches[0];
+    const start = ev.start;
+    if (start && typeof calendar.gotoDate === 'function') {
+      calendar.gotoDate(start);
+    }
+
+    // Brief visual pulse on matching event elements
+    try {
+      const apiEls = typeof ev.getResources === 'function' ? [] : [];
+      setTimeout(() => {
+        document.querySelectorAll('.fc-event').forEach(node => {
+          const t = (node.textContent || '').toLowerCase();
+          if (t.includes(qLower)) {
+            node.style.outline = '3px solid #1d4ed8';
+            node.style.boxShadow = '0 0 0 4px rgba(29,78,216,0.35)';
+            setTimeout(() => {
+              node.style.outline = '';
+              node.style.boxShadow = '';
+            }, 2800);
+          }
+        });
+      }, 120);
+    } catch (e) { /* ignore */ }
+
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.color = 'var(--primary)';
+      const more = matches.length > 1 ? ` (${matches.length} events — showing first)` : '';
+      statusEl.textContent = 'Found ' + (ev.extendedProps && ev.extendedProps.equipment || q) + more + ' — opening inspection task…';
+    }
+
+    if (typeof openInspectionTaskFromEvent === 'function') {
+      openInspectionTaskFromEvent(ev);
+    }
+  }
+
+  function clearCalendarFind() {
+    const inp = document.getElementById('qf-calendar');
+    if (inp) inp.value = '';
+    const statusEl = document.getElementById('calendar-find-status');
+    if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
+    document.querySelectorAll('.fc-event').forEach(node => {
+      node.style.outline = '';
+      node.style.boxShadow = '';
+    });
+  }
+  window.quickFindOnCalendar = quickFindOnCalendar;
+  window.clearCalendarFind = clearCalendarFind;
 
   
   // ── Other populate functions ────────────────────────────────────
