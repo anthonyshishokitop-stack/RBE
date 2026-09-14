@@ -284,6 +284,85 @@
 .import-step.active span { background:var(--primary); }
     
     
+
+    /* Global system filter bar */
+    .global-filter-bar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+      color: white;
+      padding: 0.75rem 1.15rem;
+      margin: -1rem -1rem 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+      align-items: center;
+      box-shadow: var(--shadow);
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    }
+    .global-filter-bar label {
+      font-weight: 600;
+      font-size: 0.85rem;
+      opacity: 0.95;
+      margin: 0;
+      color: white;
+    }
+    .global-filter-bar select,
+    .global-filter-bar input[type="text"] {
+      min-width: 160px;
+      padding: 0.45rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.35);
+      background: white;
+      color: #0f172a;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .global-filter-bar .filter-chip {
+      background: rgba(255,255,255,0.15);
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .quick-find-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin: 0.5rem 0 0.85rem;
+      padding: 0.55rem 0.85rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .quick-find-bar label {
+      margin: 0;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    .quick-find-bar input {
+      flex: 1;
+      min-width: 140px;
+      max-width: 280px;
+      padding: 0.45rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 0.9rem;
+    }
+    .quick-find-bar .qf-hint {
+      font-size: 0.78rem;
+      color: var(--text-3);
+    }
+    tr.qf-highlight td {
+      background: rgba(29, 78, 216, 0.14) !important;
+      outline: 2px solid var(--primary);
+    }
+    tr.qf-dim td { opacity: 0.35; }
+
     @media (max-width: 640px) {
       .kpi-grid { grid-template-columns: 1fr; gap: 0.9rem; }
       .chart-container { height: 240px; }
@@ -359,20 +438,29 @@
     <main class="main">
       <div class="container">
 
+        <!-- SYSTEM-WIDE FILTER (all tabs) -->
+        <div class="global-filter-bar" id="global-filter-bar">
+          <strong style="font-size:0.95rem;margin-right:0.25rem;"><i class="fas fa-filter"></i> System filter</strong>
+          <label for="shaft-filter">Shaft</label>
+          <select id="shaft-filter" onchange="window.applySystemFilters && window.applySystemFilters()" title="Filters entire system across all tabs">
+            <option value="">All Shafts</option>
+          </select>
+          <label for="type-filter">Equipment type</label>
+          <select id="type-filter" onchange="window.applySystemFilters && window.applySystemFilters()" title="Filter by equipment type">
+            <option value="">All Types</option>
+          </select>
+          <button type="button" class="btn btn-primary" style="background:white;color:#1d4ed8;padding:0.45rem 0.9rem;"
+            onclick="clearSystemFilters()" title="Clear shaft and type filters">
+            <i class="fas fa-globe"></i> Show all
+          </button>
+          <span class="filter-chip" id="filter-status-chip">All Shafts · All Types</span>
+        </div>
+
         <!-- DASHBOARD -->
         <section id="dashboard">
           <div class="header-bar">
             <h1>RBE Monitor</h1>
             <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
-              <label for="shaft-filter" style="font-weight:600;font-size:0.9rem;opacity:0.95;">Shaft filter</label>
-              <select id="shaft-filter" onchange="window.filterDashboard && window.filterDashboard()"
-                style="min-width:200px;padding:0.55rem 0.9rem;border-radius:8px;border:1px solid rgba(255,255,255,0.35);background:white;color:#0f172a;font-weight:600;">
-                <option value="">All Shafts</option>
-              </select>
-              <button type="button" class="btn btn-primary" style="background:white;color:#1d4ed8;"
-                onclick="clearShaftFilter()" title="Show entire fleet (all shafts)">
-                <i class="fas fa-globe"></i> Show all
-              </button>
               <button class="btn btn-primary" onclick="exportDashboardPDF()"><i class="fas fa-file-pdf"></i> Export Dashboard PDF</button>
             </div>
           </div>
@@ -453,6 +541,23 @@
           <form id="add-eq-form" style="max-width:600px;margin:0 auto;">
             <div class="form-group"><label>Operation</label><select id="shaft" required><option value="">Select Operation</option></select></div>
             <div class="form-group"><label>Work Place</label><input id="level" type="text" required></div>
+            <div class="form-group"><label>Equipment Type</label>
+              <select id="eq-type" required>
+                <option value="">Select Type</option>
+                <option>Loco</option>
+                <option>Winder</option>
+                <option>Winch</option>
+                <option>Compressor</option>
+                <option>Loader</option>
+                <option>Substation</option>
+                <option>Ventilation Fan</option>
+                <option>Pump</option>
+                <option>Conveyor</option>
+                <option>Drill</option>
+                <option>Transformer</option>
+                <option>Other</option>
+              </select>
+            </div>
             <div class="form-group"><label>Equipment Size</label><input id="loco-size" type="text" required></div>
             <div class="form-group"><label>Equipment ID</label><input id="loco-number" type="text" required></div>
             <div class="form-group"><label>SECTION</label><input id="section" type="text" required></div>
@@ -565,9 +670,17 @@
             </div>
           </div>
           <div id="equipment-summary-bar" class="summary-alert-bar info hidden"></div>
+          <div class="quick-find-bar">
+            <label for="qf-equipment"><i class="fas fa-search"></i> Find equipment</label>
+            <input type="text" id="qf-equipment" list="loco-list" placeholder="Enter Equipment ID and press Enter" autocomplete="off"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();quickFindInTable('equipment-table',this.value);}">
+            <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="quickFindInTable('equipment-table',document.getElementById('qf-equipment').value)">Find</button>
+            <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);" onclick="clearQuickFind('equipment-table','qf-equipment')">Clear</button>
+            <span class="qf-hint">Press Enter to jump / filter this table</span>
+          </div>
           <div style="overflow-x:auto;">
             <table id="equipment-table">
-              <thead><tr><th>Operation</th><th>Work Place</th><th>Equipment Size</th><th>Equipment ID</th><th>SECTION</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Operation</th><th>Work Place</th><th>Type</th><th>Equipment Size</th><th>Equipment ID</th><th>SECTION</th><th>Actions</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -587,6 +700,14 @@
             </div>
           </div>
           <div id="maint-summary-bar" class="summary-alert-bar hidden"></div>
+          <div class="quick-find-bar">
+            <label for="qf-maint"><i class="fas fa-search"></i> Find equipment</label>
+            <input type="text" id="qf-maint" list="loco-list" placeholder="Enter Equipment ID and press Enter"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();quickFindInTable('maint-table',this.value);}">
+            <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="quickFindInTable('maint-table',document.getElementById('qf-maint').value)">Find</button>
+            <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);" onclick="clearQuickFind('maint-table','qf-maint')">Clear</button>
+            <span class="qf-hint">Press Enter to jump / filter this table</span>
+          </div>
           <div style="overflow-x:auto;">
             <table id="maint-table">
               <thead><tr><th>Equipment</th><th>Task</th><th>Interval</th><th>Last Done</th><th>Due</th><th>Days Left</th><th>Source</th><th>Actions</th></tr></thead>
@@ -623,6 +744,13 @@
             </table>
           </div>
           <h2 style="color:var(--info);"><i class="fas fa-exclamation-triangle"></i> Problem Equipment</h2>
+          <div class="quick-find-bar">
+            <label for="qf-problem"><i class="fas fa-search"></i> Find equipment</label>
+            <input type="text" id="qf-problem" list="loco-list" placeholder="Enter Equipment ID and press Enter"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();quickFindInTable('problem-equipment-table',this.value);}">
+            <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="quickFindInTable('problem-equipment-table',document.getElementById('qf-problem').value)">Find</button>
+            <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);" onclick="clearQuickFind('problem-equipment-table','qf-problem')">Clear</button>
+          </div>
           <div style="overflow-x:auto;">
             <table id="problem-equipment-table">
               <thead><tr><th>Equipment ID</th><th>Status</th><th>Color</th><th>Last Reason/Fault</th><th>Total Downtime Hours</th></tr></thead>
@@ -633,6 +761,13 @@
             <button type="button" class="btn btn-primary" id="problem-view-more-btn" onclick="toggleTableExpand('problem')">View more</button>
           </div>
           <h2 style="color:var(--info);"><i class="fas fa-fire"></i> Focus Areas: High Risk Equipment</h2>
+          <div class="quick-find-bar">
+            <label for="qf-highrisk"><i class="fas fa-search"></i> Find equipment</label>
+            <input type="text" id="qf-highrisk" list="loco-list" placeholder="Enter Equipment ID and press Enter"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();quickFindInTable('high-risk-table',this.value);}">
+            <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="quickFindInTable('high-risk-table',document.getElementById('qf-highrisk').value)">Find</button>
+            <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);" onclick="clearQuickFind('high-risk-table','qf-highrisk')">Clear</button>
+          </div>
           <div style="overflow-x:auto;">
             <table id="high-risk-table">
               <thead><tr><th>Equipment ID</th><th>Number of Failures</th><th>MTTF (Hours)</th><th>Availability %</th></tr></thead>
@@ -825,6 +960,13 @@
         Dominant mode is the most common classified reason for that unit.
       </p>
       <div id="tm-bad-summary" class="summary-alert-bar purple hidden"></div>
+      <div class="quick-find-bar">
+        <label for="qf-tm-bad"><i class="fas fa-search"></i> Find equipment</label>
+        <input type="text" id="qf-tm-bad" list="loco-list" placeholder="Enter Equipment ID and press Enter"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();quickFindInTable('tm-bad-table',this.value);}">
+        <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="quickFindInTable('tm-bad-table',document.getElementById('qf-tm-bad').value)">Find</button>
+        <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);" onclick="clearQuickFind('tm-bad-table','qf-tm-bad')">Clear</button>
+      </div>
       <div style="overflow-x:auto;">
         <table id="tm-bad-table">
           <thead>
@@ -972,6 +1114,23 @@
           <select id="edit-eq-shaft" required></select></div>
         <div class="form-group"><label>Work Place</label>
           <input id="edit-eq-level" type="text"></div>
+        <div class="form-group"><label>Equipment Type</label>
+          <select id="edit-eq-type">
+            <option value="">— Select —</option>
+            <option>Loco</option>
+            <option>Winder</option>
+            <option>Winch</option>
+            <option>Compressor</option>
+            <option>Loader</option>
+            <option>Substation</option>
+            <option>Ventilation Fan</option>
+            <option>Pump</option>
+            <option>Conveyor</option>
+            <option>Drill</option>
+            <option>Transformer</option>
+            <option>Other</option>
+          </select>
+        </div>
         <div class="form-group"><label>Equipment Size</label>
           <input id="edit-eq-size" type="text"></div>
         <div class="form-group"><label>SECTION</label>
@@ -1047,6 +1206,43 @@
   let maintenance = [];
   let delaysData = [];
   let currentShaftFilter = '';
+                    let currentTypeFilter = '';
+                    const EQUIPMENT_TYPES = ['Loco','Winder','Winch','Compressor','Loader','Substation','Ventilation Fan','Pump','Conveyor','Drill','Transformer','Other'];
+
+                    /** Infer equipment type from id / size / explicit field */
+                    function inferEquipmentType(eqOrId, sizeHint) {
+                      if (eqOrId && typeof eqOrId === 'object') {
+                        const explicit = String(eqOrId.equipmentType || eqOrId.type || eqOrId.Type || '').trim();
+                        if (explicit) {
+                          const hit = EQUIPMENT_TYPES.find(t => t.toLowerCase() === explicit.toLowerCase());
+                          return hit || explicit;
+                        }
+                        sizeHint = eqOrId.locoSize || eqOrId.size || sizeHint;
+                        eqOrId = eqOrId.id || eqOrId['Loco Number'] || '';
+                      }
+                      const s = String(eqOrId || '').toLowerCase() + ' ' + String(sizeHint || '').toLowerCase();
+                      if (/winder|winders/.test(s)) return 'Winder';
+                      if (/winch/.test(s)) return 'Winch';
+                      if (/compress/.test(s)) return 'Compressor';
+                      if (/loader|lhds?|scoop/.test(s)) return 'Loader';
+                      if (/substation|sub-station|\bsub\b/.test(s)) return 'Substation';
+                      if (/vent|fan\b|ventilation/.test(s)) return 'Ventilation Fan';
+                      if (/pump/.test(s)) return 'Pump';
+                      if (/conveyor|belt/.test(s)) return 'Conveyor';
+                      if (/drill|jumbo/.test(s)) return 'Drill';
+                      if (/transform/.test(s)) return 'Transformer';
+                      if (/loco|locomotive|\blh\b/.test(s) || /^\d{3,5}$/.test(String(eqOrId||'').trim())) return 'Loco';
+                      return 'Other';
+                    }
+                    function getEquipmentType(id) {
+                      const sid = String(id || '').trim();
+                      const eq = (equipment || []).find(e => String(e.id) === sid);
+                      if (eq) return inferEquipmentType(eq);
+                      return inferEquipmentType(sid);
+                    }
+                    window.inferEquipmentType = inferEquipmentType;
+                    window.getEquipmentType = getEquipmentType;
+
   let unsubscribeFunctions = [];
   let charts = {};
   let calendar = null;
@@ -1700,7 +1896,24 @@ function fillDatalist() {
       importShaft.innerHTML = '<option value="">Auto-detect</option>' 
         + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
     }
-}   // ← THIS CLOSING BRACE WAS MISSING
+
+    // Equipment type system filter
+    const typeFilter = document.getElementById('type-filter');
+    if (typeFilter) {
+      const prev = typeFilter.value;
+      typeFilter.innerHTML = '<option value="">All Types</option>' +
+        EQUIPMENT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+      if (prev && EQUIPMENT_TYPES.includes(prev)) typeFilter.value = prev;
+      else if (currentTypeFilter && EQUIPMENT_TYPES.includes(currentTypeFilter)) typeFilter.value = currentTypeFilter;
+      else typeFilter.value = '';
+    }
+    // Keep shaft filter selection aligned with currentShaftFilter
+    const sf = document.getElementById('shaft-filter');
+    if (sf && currentShaftFilter && [...sf.options].some(o => o.value === currentShaftFilter)) {
+      sf.value = currentShaftFilter;
+    }
+    updateFilterStatusChip();
+}
 
 
 /**
@@ -1710,31 +1923,49 @@ function fillDatalist() {
  *   Equipment with blank/missing shaft appear ONLY under All Shafts.
  */
 function getFilteredEquipment() {
-  const list = equipment || [];
-  if (!currentShaftFilter) return list; // All Shafts
-  return list.filter(e => {
-    const s = String(e.shaft || '').trim();
-    // Unassigned shaft → only on All Shafts
-    if (!s) return false;
-    return s === currentShaftFilter;
-  });
+  let list = equipment || [];
+  if (currentShaftFilter) {
+    list = list.filter(e => {
+      const s = String(e.shaft || '').trim();
+      if (!s) return false; // unassigned only on All Shafts
+      return s === currentShaftFilter;
+    });
+  }
+  if (currentTypeFilter) {
+    list = list.filter(e => inferEquipmentType(e) === currentTypeFilter);
+  }
+  return list;
 }
 
 function getFilteredUpdates() {
-  const all = updates || [];
-  if (!currentShaftFilter) return all; // All Shafts
-
+  let all = updates || [];
   const eqList = getFilteredEquipment();
-  const ids = new Set(eqList.map(e => String(e.id)));
+  const filteredIds = new Set(eqList.map(e => String(e.id)));
 
-  return all.filter(u => {
-    const id = String(u.equipmentId || u.locoNumber || '').trim();
-    // Prefer match via registered equipment in this shaft
-    if (id && ids.has(id)) return true;
-    // Or update itself carries matching shaft
-    const us = String(u.shaft || '').trim();
-    return us === currentShaftFilter;
-  });
+  if (currentShaftFilter || currentTypeFilter) {
+    all = all.filter(u => {
+      const id = String(u.equipmentId || u.locoNumber || '').trim();
+      if (!id || /^unknown$/i.test(id)) return false;
+      // Prefer registered equipment that already passed shaft+type filters
+      if (filteredIds.size && filteredIds.has(id)) return true;
+      // Shaft-only: update may carry shaft when equipment not in register
+      if (currentShaftFilter && !currentTypeFilter) {
+        const us = String(u.shaft || '').trim();
+        if (us === currentShaftFilter) return true;
+      }
+      // Type filter without register entry: infer from id
+      if (currentTypeFilter && !currentShaftFilter) {
+        return getEquipmentType(id) === currentTypeFilter;
+      }
+      // Both filters: require shaft match on update and type from id
+      if (currentShaftFilter && currentTypeFilter) {
+        const us = String(u.shaft || '').trim();
+        if (us === currentShaftFilter && getEquipmentType(id) === currentTypeFilter) return true;
+      }
+      return false;
+    });
+  }
+  return all;
 }
 
 function getFilteredMaintenance() {
@@ -2018,7 +2249,7 @@ function updatePredictiveNotifications() {
   const filteredEqCheck = (typeof getFilteredEquipment === 'function') ? getFilteredEquipment() : (equipment || []);
   const filteredUpCheck = (typeof getFilteredUpdates === 'function') ? getFilteredUpdates() : (updates || []);
   // Shaft with no equipment and no updates: clear all alert UI — no fleet-wide analyses
-  if (typeof currentShaftFilter !== 'undefined' && currentShaftFilter &&
+  if (typeof currentShaftFilter !== 'undefined' && (currentShaftFilter || currentTypeFilter) &&
       filteredEqCheck.length === 0 && filteredUpCheck.length === 0) {
     const summaryBar = document.getElementById('dashboard-alert-summary');
     if (summaryBar) summaryBar.classList.add('hidden');
@@ -2184,15 +2415,15 @@ function populateDashboard() {
   });
   // All Shafts → full set; specific shaft with no matches → empty list (show nothing)
   let locoIds = Array.from(idSet).filter(id => id && !/^unknown$/i.test(String(id))).sort();
-  if (currentShaftFilter && filteredEq.length === 0 && filteredUp.length === 0) {
-    locoIds = []; // shaft selected but no data
+  if ((currentShaftFilter || currentTypeFilter) && filteredEq.length === 0 && filteredUp.length === 0) {
+    locoIds = []; // filter selected but no data
   }
 
     // Empty shaft filter → clear KPIs / charts message
-    if (currentShaftFilter && locoIds.length === 0) {
+    if ((currentShaftFilter || currentTypeFilter) && locoIds.length === 0) {
       document.getElementById('kpi-grid').innerHTML = `
         <div class="kpi-card" style="grid-column:1/-1;">
-          <p style="margin:0;color:var(--text-3);">No equipment or breakdowns for <strong>${currentShaftFilter}</strong>. Switch to <em>All Shafts</em> to see the full fleet.</p>
+          <p style="margin:0;color:var(--text-3);">No equipment or breakdowns for the current filter${currentShaftFilter ? ' (shaft: <strong>'+currentShaftFilter+'</strong>)' : ''}${currentTypeFilter ? ' (type: <strong>'+currentTypeFilter+'</strong>)' : ''}. Clear filters to see the full fleet.</p>
         </div>`;
       ['availabilityChart','failuresChart','mttfChart'].forEach(cid => {
         if (charts[cid.replace('Chart','').replace('availability','avail')] ) {/* skip */}
@@ -2448,19 +2679,34 @@ const mttfData = locoIds.map(id => {
     }
   }
 
-  function clearShaftFilter() {
-    const sel = document.getElementById('shaft-filter');
-    if (sel) sel.value = '';
-    currentShaftFilter = '';
-    filterDashboard();
+  function updateFilterStatusChip() {
+    const chip = document.getElementById('filter-status-chip');
+    if (!chip) return;
+    const shaftLabel = currentShaftFilter || 'All Shafts';
+    const typeLabel = currentTypeFilter || 'All Types';
+    chip.textContent = shaftLabel + ' · ' + typeLabel;
   }
-  window.clearShaftFilter = clearShaftFilter;
 
-  function filterDashboard() {
+  function clearSystemFilters() {
     const sel = document.getElementById('shaft-filter');
-    // Empty string = All Shafts → entire system, no filter
+    const typ = document.getElementById('type-filter');
+    if (sel) sel.value = '';
+    if (typ) typ.value = '';
+    currentShaftFilter = '';
+    currentTypeFilter = '';
+    applySystemFilters();
+  }
+  window.clearSystemFilters = clearSystemFilters;
+  // Back-compat aliases
+  window.clearShaftFilter = clearSystemFilters;
+
+  function applySystemFilters() {
+    const sel = document.getElementById('shaft-filter');
+    const typ = document.getElementById('type-filter');
     currentShaftFilter = sel ? String(sel.value || '').trim() : '';
-    console.log('Shaft filter →', currentShaftFilter ? currentShaftFilter : 'All Shafts (entire system)');
+    currentTypeFilter = typ ? String(typ.value || '').trim() : '';
+    console.log('System filters →', currentShaftFilter || 'All Shafts', '|', currentTypeFilter || 'All Types');
+    updateFilterStatusChip();
 
     try {
       if (typeof fillDatalist === 'function') fillDatalist();
@@ -2472,12 +2718,74 @@ const mttfData = locoIds.map(id => {
       if (typeof populateLogTable === 'function') populateLogTable();
       if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
       if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+      if (typeof initCalendar === 'function') {
+        const calSec = document.getElementById('calendar');
+        if (calSec && !calSec.classList.contains('hidden')) initCalendar();
+      }
       if (typeof refreshCurrentView === 'function') refreshCurrentView();
     } catch (e) {
-      console.warn('filterDashboard refresh error:', e);
+      console.warn('applySystemFilters refresh error:', e);
     }
   }
-  window.filterDashboard = filterDashboard;
+  window.applySystemFilters = applySystemFilters;
+  window.filterDashboard = applySystemFilters; // back-compat
+
+  /** Quick-find in a table by equipment ID (Enter key). Highlights & scrolls to match. */
+  function quickFindInTable(tableId, query) {
+    const q = String(query || '').trim().toLowerCase();
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const rows = [...table.querySelectorAll('tbody tr')];
+    if (!q) {
+      rows.forEach(r => { r.classList.remove('qf-highlight','qf-dim'); r.style.display = ''; });
+      return;
+    }
+    // Expand paged tables so matches are visible
+    const keyMap = {
+      'equipment-table': 'equipment',
+      'maint-table': 'maint',
+      'problem-equipment-table': 'problem',
+      'high-risk-table': 'highrisk',
+      'tm-bad-table': 'tm-bad'
+    };
+    const pageKey = keyMap[tableId];
+    if (pageKey && window._tableExpandState && !window._tableExpandState[pageKey] && typeof toggleTableExpand === 'function') {
+      const full = window._tableFullRows && window._tableFullRows[pageKey];
+      if (full && full.length > 10) {
+        window._tableExpandState[pageKey] = true;
+        if (typeof renderPagedTable === 'function') renderPagedTable(pageKey, full);
+      }
+    }
+    const rows2 = [...table.querySelectorAll('tbody tr')];
+    let first = null;
+    let matches = 0;
+    rows2.forEach(r => {
+      const text = (r.innerText || '').toLowerCase();
+      const hit = text.includes(q);
+      r.classList.toggle('qf-highlight', hit);
+      r.classList.toggle('qf-dim', !hit);
+      if (hit) {
+        matches++;
+        if (!first) first = r;
+        r.style.display = '';
+      } else {
+        r.style.display = 'none';
+      }
+    });
+    if (first) {
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      alert('No row found for "' + query + '" in this table (check system shaft/type filter).');
+      rows2.forEach(r => { r.classList.remove('qf-highlight','qf-dim'); r.style.display = ''; });
+    }
+  }
+  function clearQuickFind(tableId, inputId) {
+    const inp = document.getElementById(inputId);
+    if (inp) inp.value = '';
+    quickFindInTable(tableId, '');
+  }
+  window.quickFindInTable = quickFindInTable;
+  window.clearQuickFind = clearQuickFind;
 
   
   // ── Other populate functions ────────────────────────────────────
@@ -2737,6 +3045,8 @@ function populateOperationsReport() {
     document.getElementById('edit-eq-level').value = eq.level || '';
     document.getElementById('edit-eq-size').value = eq.locoSize || '';
     document.getElementById('edit-eq-section').value = eq.section || '';
+    const typeEl = document.getElementById('edit-eq-type');
+    if (typeEl) typeEl.value = (typeof inferEquipmentType === 'function') ? inferEquipmentType(eq) : (eq.equipmentType || '');
     document.getElementById('edit-equipment-modal').classList.add('active');
   }
   window.openEditEquipment = openEditEquipment;
@@ -4080,6 +4390,7 @@ function updateHistoryUI(history) {
       const data = {
         shaft: document.getElementById('edit-eq-shaft').value || '',
         level: document.getElementById('edit-eq-level').value || '',
+        equipmentType: (document.getElementById('edit-eq-type') && document.getElementById('edit-eq-type').value) || '',
         locoSize: document.getElementById('edit-eq-size').value || '',
         section: document.getElementById('edit-eq-section').value || '',
         updatedAt: new Date().toISOString()
@@ -4107,6 +4418,7 @@ function updateHistoryUI(history) {
     const data = {
       shaft: document.getElementById('shaft').value,
       level: document.getElementById('level').value,
+      equipmentType: (document.getElementById('eq-type') && document.getElementById('eq-type').value) || '',
       locoSize: document.getElementById('loco-size').value,
       section: document.getElementById('section').value
     };
@@ -4230,6 +4542,9 @@ document.getElementById('search-form').addEventListener('submit', async e => {
     if (profileCard && profileBody) {
       const cells = [
         ['Equipment ID', equipmentId],
+        ['Equipment Type', (typeof inferEquipmentType === 'function')
+          ? (eq ? inferEquipmentType(eq) : getEquipmentType(equipmentId))
+          : ((eq && eq.equipmentType) || '—')],
         ['Operation / Shaft', (eq && (eq.shaft || eq.Operation)) || '—'],
         ['Work Place / Level', (eq && (eq.level || eq.workPlace || eq['Work Place'] || eq.Level)) || '—'],
         ['Equipment Size', (eq && (eq.locoSize || eq.size || eq['Equipment Size'])) || '—'],
