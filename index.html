@@ -2221,29 +2221,71 @@ window.clearAllDismissedAlerts = function() {
   alert('All dismissed alerts restored.');
 };
 
-/** Analyse breakdown frequency per equipment → predicted next failure */
+/** Focus checklist by dominant failure mode (for predicted inspections) */
+function focusGuidanceForMode(mode) {
+  const m = String(mode || '').toLowerCase();
+  if (/brake|binding/.test(m))
+    return { focus: 'Brakes / binding', actions: 'Check brake interface & release, static brake, binding on rails, pad wear; test stop distance' };
+  if (/antenna|comms|display|gabooz|pulse|network|can/.test(m))
+    return { focus: 'Antenna / Comms / Display', actions: 'Inspect antenna, cabling, connectors, Pulse/Gabooz unit, screen/display & network link' };
+  if (/battery|cell|charger/.test(m))
+    return { focus: 'Battery / Cells', actions: 'Load-test cells, check charger output, terminals, electrolyte/levels where applicable' };
+  if (/motor|power|control|movement|hydraulic|gear/.test(m))
+    return { focus: 'Motor / Power / Movement', actions: 'Motor/gearbox noise & heat, power contactors, hydraulic leaks, forward/reverse response' };
+  if (/light|siren|speedo/.test(m))
+    return { focus: 'Lights / Siren / Speedo', actions: 'Verify lights, siren, speedometer/sensors; repair or replace failed units' };
+  if (/door|magnet|buffer/.test(m))
+    return { focus: 'Door / Magnet / Buffer', actions: 'Door mechanism, magnets, buffers/bumpers; safety interlocks' };
+  if (/derail/.test(m))
+    return { focus: 'Derailment risk', actions: 'Track condition at workplace, wheel flanges, guidance, recent derail points' };
+  return { focus: 'General reliability', actions: 'Full walk-around, recurring fault points from history, safety devices & last artisan notes' };
+}
+
+function priorityFromPattern(daysUntil, failures, avgDays, downtimeH) {
+  // Higher score = do first
+  let score = 0;
+  if (daysUntil < 0) score += Math.min(50, Math.abs(daysUntil) / 7); // overdue weight
+  else if (daysUntil <= 3) score += 20;
+  else if (daysUntil <= 7) score += 10;
+  score += Math.min(25, (failures || 0) * 3);
+  if (avgDays && avgDays <= 7) score += 15;
+  else if (avgDays && avgDays <= 14) score += 8;
+  if (downtimeH > 48) score += 12;
+  else if (downtimeH > 16) score += 6;
+  let band = 'P3 · Plan';
+  let color = '#16a34a';
+  if (score >= 40 || daysUntil < -30) { band = 'P1 · Critical — do first'; color = '#dc2626'; }
+  else if (score >= 22 || daysUntil < 0) { band = 'P2 · High — this shift/week'; color = '#ea580c'; }
+  return { score, band, color };
+}
+
+/** Analyse breakdown frequency per equipment → predicted next failure + focus */
 function analyseFailurePatterns() {
   const byEquip = {};
-  // Respect shaft filter so empty shafts do not surface fleet-wide patterns
   const source = (typeof getFilteredUpdates === 'function') ? getFilteredUpdates() : (updates || []);
   source.forEach(u => {
     const id = String(u.equipmentId || u.locoNumber || u['Loco Number'] || '').trim();
     if (!id || /^unknown$/i.test(id)) return;
+    if (typeof isUnknownEquipmentId === 'function' && isUnknownEquipmentId(id)) return;
     const isFail = u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
                    String(u.status || '').toLowerCase() === 'down';
     if (!isFail) return;
-    if (!byEquip[id]) byEquip[id] = [];
-    if (u.date) byEquip[id].push(u.date);
+    if (!byEquip[id]) byEquip[id] = { dates: [], modes: {}, reasons: [], downtime: 0 };
+    if (u.date) byEquip[id].dates.push(u.date);
+    const reason = (typeof tmGetReason === 'function') ? tmGetReason(u) : String(u.reason || u.fault || '');
+    const mode = (typeof tmClassifyReason === 'function') ? tmClassifyReason(reason).mode : 'Other / Unclassified';
+    byEquip[id].modes[mode] = (byEquip[id].modes[mode] || 0) + 1;
+    if (reason) byEquip[id].reasons.push(reason);
+    byEquip[id].downtime += Number(u.downtimeHours || u.downtime || 0) || 0;
   });
 
   const patterns = [];
-  Object.entries(byEquip).forEach(([id, dates]) => {
+  Object.entries(byEquip).forEach(([id, bag]) => {
     if (typeof isUnknownEquipmentId === 'function' && isUnknownEquipmentId(id)) return;
     if (/^unknown$/i.test(String(id || '').trim())) return;
-    const unique = [...new Set(dates)].sort();
-    if (unique.length < 2) return; // need at least 2 breakdown dates
+    const unique = [...new Set(bag.dates)].sort();
+    if (unique.length < 2) return;
 
-    // Average days between consecutive breakdowns
     let totalGap = 0, gaps = 0;
     for (let i = 1; i < unique.length; i++) {
       const d1 = new Date(unique[i - 1]);
@@ -2254,13 +2296,23 @@ function analyseFailurePatterns() {
     if (gaps === 0) return;
 
     const avgDays = totalGap / gaps;
-    // Nonsense intervals (0 / tiny) produce 20000+ day overdue noise — skip
     if (!avgDays || avgDays < 0.5) return;
     const lastDate = new Date(unique[unique.length - 1]);
     const nextDate = new Date(lastDate);
     nextDate.setDate(nextDate.getDate() + Math.round(avgDays));
-
     const daysUntil = Math.ceil((nextDate - new Date()) / 86400000);
+
+    // Dominant failure mode
+    let topMode = 'Other / Unclassified', topC = 0;
+    Object.entries(bag.modes || {}).forEach(([m, c]) => {
+      if (c > topC) { topMode = m; topC = c; }
+    });
+    const guide = focusGuidanceForMode(topMode);
+    const lastReason = (bag.reasons && bag.reasons.length) ? bag.reasons[bag.reasons.length - 1] : '';
+    const pri = priorityFromPattern(daysUntil, unique.length, avgDays, bag.downtime);
+
+    const task =
+      `Predictive inspection — PRIORITISE: ${guide.focus} (avg every ${Math.round(avgDays)} days)`;
 
     patterns.push({
       equipment: id,
@@ -2269,14 +2321,55 @@ function analyseFailurePatterns() {
       lastBreakdown: unique[unique.length - 1],
       predictedNext: nextDate.toISOString().slice(0, 10),
       daysUntil,
-      task: `Predictive inspection (avg every ${Math.round(avgDays)} days)`
+      topMode,
+      focus: guide.focus,
+      actions: guide.actions,
+      lastReason: String(lastReason || '').slice(0, 120),
+      downtimeHours: Math.round((bag.downtime || 0) * 10) / 10,
+      priority: pri.band,
+      priorityScore: pri.score,
+      priorityColor: pri.color,
+      task
     });
   });
 
-  // Sort: most urgent first
-  patterns.sort((a, b) => a.daysUntil - b.daysUntil);
+  // Sort: priority score desc, then most overdue first
+  patterns.sort((a, b) => (b.priorityScore - a.priorityScore) || (a.daysUntil - b.daysUntil));
   return patterns;
 }
+
+/** Enrich a maintenance row with focus from live pattern map when source is failure-pattern */
+function enrichMaintFocus(m) {
+  if (!m) return m;
+  if (m.focus && m.actions && m.priority) return m;
+  try {
+    const patterns = (typeof analyseFailurePatterns === 'function') ? analyseFailurePatterns() : [];
+    const p = patterns.find(x => String(x.equipment) === String(m.equipment));
+    if (p) {
+      return {
+        ...m,
+        focus: m.focus || p.focus,
+        actions: m.actions || p.actions,
+        topMode: m.topMode || p.topMode,
+        priority: m.priority || p.priority,
+        priorityColor: m.priorityColor || p.priorityColor,
+        lastReason: m.lastReason || p.lastReason
+      };
+    }
+  } catch (e) { /* ignore */ }
+  // Fallback generic guidance
+  const g = focusGuidanceForMode(m.topMode || '');
+  return {
+    ...m,
+    focus: m.focus || g.focus,
+    actions: m.actions || g.actions,
+    priority: m.priority || (m.days < 0 ? 'P2 · High — this shift/week' : 'P3 · Plan'),
+    priorityColor: m.priorityColor || (m.days < 0 ? '#ea580c' : '#16a34a')
+  };
+}
+window.focusGuidanceForMode = focusGuidanceForMode;
+window.priorityFromPattern = priorityFromPattern;
+window.enrichMaintFocus = enrichMaintFocus;
 
 /** Auto-create / update maintenance tasks from failure patterns */
 async function syncPredictiveMaintenanceTasks(patterns) {
@@ -2300,13 +2393,19 @@ async function syncPredictiveMaintenanceTasks(patterns) {
 
     const data = {
       equipment: p.equipment,
-      task: p.task || `Predictive inspection (avg every ${p.avgDaysBetween} days)`,
+      task: p.task || `Predictive inspection — PRIORITISE: ${p.focus || 'General reliability'} (avg every ${p.avgDaysBetween} days)`,
       interval: 'custom',
       lastDone: p.lastBreakdown,
       dueDate: p.predictedNext,
-      source: 'failure-pattern',          // critical — marks it as auto
+      source: 'failure-pattern',
       avgDaysBetween: p.avgDaysBetween,
       failureCount: p.failures,
+      topMode: p.topMode || '',
+      focus: p.focus || '',
+      actions: p.actions || '',
+      priority: p.priority || '',
+      priorityColor: p.priorityColor || '',
+      lastReason: p.lastReason || '',
       updatedAt: new Date().toISOString()
     };
 
@@ -2505,20 +2604,35 @@ function updatePredictiveNotifications() {
   const predList = document.getElementById('predictive-list');
   const predBox  = document.getElementById('predictive-alerts');
   if (predList && predBox) {
-    const items = [...overdue, ...dueSoon];
+    const items = [...overdue, ...dueSoon].map(p =>
+      (typeof enrichMaintFocus === 'function') ? enrichMaintFocus({...p, days: p.dueDate
+        ? Math.ceil((new Date(p.dueDate) - new Date()) / 86400000)
+        : calculateDaysLeft(p.lastDone, p.interval)}) : p
+    );
     predList.innerHTML = items.map(p => {
       const days = p.dueDate
         ? Math.ceil((new Date(p.dueDate) - new Date()) / 86400000)
         : calculateDaysLeft(p.lastDone, p.interval);
       const label = days >= 0 ? `due in ${days} days` : `${Math.abs(days)} days overdue`;
-      return `<li style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0;">
-        <span>${p.equipment} — ${p.task} (${label})</span>
-        <span>
-          <button class="btn btn-success" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
-            onclick="markEquipmentFixed('${p.equipment}','${p.id}')">Fixed</button>
-          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
-            onclick="dismissAlert('maint-${p.id}')">Dismiss</button>
-        </span>
+      const focusLine = p.focus
+        ? `<div style="font-size:0.84rem;margin-top:3px;"><strong style="color:var(--primary);">Focus:</strong> ${p.focus} — <span style="color:var(--text-2);">${p.actions || ''}</span></div>`
+        : '';
+      const pri = p.priority
+        ? `<span style="font-size:0.75rem;font-weight:700;color:${p.priorityColor || 'var(--warning)'};margin-left:6px;">${p.priority}</span>`
+        : '';
+      return `<li style="margin:8px 0;padding-bottom:8px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:180px;">
+            <div>${p.equipment} — ${p.task} (${label})${pri}</div>
+            ${focusLine}
+          </div>
+          <span style="white-space:nowrap;">
+            <button class="btn btn-success" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
+              onclick="markEquipmentFixed('${p.equipment}','${p.id}')">Fixed</button>
+            <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
+              onclick="dismissAlert('maint-${p.id}')">Dismiss</button>
+          </span>
+        </div>
       </li>`;
     }).join('');
     predBox.classList.toggle('hidden', items.length === 0);
@@ -2532,14 +2646,31 @@ function updatePredictiveNotifications() {
       const label = p.daysUntil >= 0
         ? `likely in ${p.daysUntil} days (${p.predictedNext})`
         : `${Math.abs(p.daysUntil)} days overdue (was ${p.predictedNext})`;
-      return `<li style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0;">
-        <span><strong>${p.equipment}</strong> — ${p.failures} breakdowns, avg every ${p.avgDaysBetween} days → ${label}</span>
-        <span>
-          <button class="btn btn-success" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
-            onclick="markEquipmentFixed('${p.equipment}')">Fixed</button>
-          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
-            onclick="dismissAlert('fail-${p.equipment}')">Dismiss</button>
-        </span>
+      const pri = p.priority || '';
+      const focus = p.focus || 'General reliability';
+      const actions = p.actions || '';
+      return `<li style="margin:10px 0;padding:0.65rem 0;border-bottom:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div><strong>${p.equipment}</strong>
+              <span style="margin-left:8px;font-size:0.78rem;font-weight:700;color:${p.priorityColor || 'var(--danger)'};">${pri}</span>
+            </div>
+            <div style="font-size:0.9rem;margin-top:2px;">${p.failures} breakdowns · avg every ${p.avgDaysBetween} days → ${label}</div>
+            <div style="margin-top:6px;font-size:0.88rem;">
+              <span style="font-weight:700;color:var(--primary);">Focus:</span> ${focus}
+            </div>
+            <div style="font-size:0.84rem;color:var(--text-2);margin-top:2px;">
+              <span style="font-weight:600;">Do during inspection:</span> ${actions}
+            </div>
+            ${p.lastReason ? `<div style="font-size:0.8rem;color:var(--text-3);margin-top:4px;font-style:italic;">Last fault: ${String(p.lastReason).replace(/</g,'&lt;')}</div>` : ''}
+          </div>
+          <span style="white-space:nowrap;">
+            <button class="btn btn-success" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
+              onclick="markEquipmentFixed('${p.equipment}')">Fixed</button>
+            <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;"
+              onclick="dismissAlert('fail-${p.equipment}')">Dismiss</button>
+          </span>
+        </div>
       </li>`;
     }).join('');
     fpBox.classList.toggle('hidden', patterns.length === 0);
@@ -2830,17 +2961,33 @@ const mttfData = locoIds.map(id => {
       else if (m.days <= 7) dueSoonN++;
     });
 
-    const upcomingRows = upcomingItems.map(m => {
+    const upcomingRows = upcomingItems.map(raw => {
+      const m = (typeof enrichMaintFocus === 'function') ? enrichMaintFocus(raw) : raw;
       const color = isNaN(m.days) ? 'text-3' : (m.days < 0 ? 'danger' : (m.days <= 7 ? 'warning' : 'success'));
       const label = isNaN(m.days) ? '—' : (m.days >= 0 ? `${m.days} days left` : `${Math.abs(m.days)} days overdue`);
       const css = color === 'danger' ? 'var(--danger)' : color === 'warning' ? 'var(--warning)' : color === 'success' ? 'var(--success)' : 'var(--text-3)';
-      return `<div style="color:${css};font-weight:500;padding:0.35rem 0;border-bottom:1px solid var(--border);">
-        <strong>${m.equipment}</strong> — ${m.task || 'Task'} — ${label}
-        ${m.source === 'failure-pattern' ? ' <span style="opacity:0.7;">(pattern)</span>' : ''}
+      const isPattern = m.source === 'failure-pattern';
+      const priBadge = isPattern && m.priority
+        ? `<span style="display:inline-block;margin-left:6px;padding:0.1rem 0.45rem;border-radius:999px;font-size:0.72rem;font-weight:700;background:${m.priorityColor || css};color:#fff;">${m.priority}</span>`
+        : '';
+      const focusBlock = isPattern
+        ? `<div style="font-size:0.84rem;color:var(--text-2);margin-top:4px;font-weight:500;">
+             <span style="color:var(--primary);font-weight:700;">Focus:</span> ${m.focus || 'General reliability'}
+             <span style="opacity:0.85;"> — ${m.actions || 'Full inspection from fault history'}</span>
+           </div>
+           ${m.lastReason ? `<div style="font-size:0.78rem;color:var(--text-3);margin-top:2px;font-style:italic;">Last fault: ${String(m.lastReason).replace(/</g,'&lt;')}</div>` : ''}`
+        : '';
+      return `<div style="color:${css};font-weight:500;padding:0.55rem 0;border-bottom:1px solid var(--border);">
+        <div><strong>${m.equipment}</strong> — ${m.task || 'Task'} — ${label}
+          ${isPattern ? ' <span style="opacity:0.7;">(pattern)</span>' : ''}${priBadge}
+        </div>
+        ${focusBlock}
       </div>`;
     });
 
-    window._lastUpcomingMaint = upcomingItems;
+    window._lastUpcomingMaint = upcomingItems.map(m =>
+      (typeof enrichMaintFocus === 'function') ? enrichMaintFocus(m) : m
+    );
 
     if (upcomingRows.length) {
       // reuse renderPagedTable pattern for div list
