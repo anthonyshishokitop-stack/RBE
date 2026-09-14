@@ -553,6 +553,7 @@
             <div class="form-group"><label>Equipment Size</label><input id="loco-size" type="text" required></div>
             <div class="form-group"><label>Equipment ID</label><input id="loco-number" type="text" required></div>
             <div class="form-group"><label>SECTION</label><input id="section" type="text" required></div>
+            <div class="form-group"><label>OEM</label><input id="eq-oem" type="text" placeholder="e.g. OEM / manufacturer"></div>
             <button type="submit" class="btn btn-primary" style="width:100%;margin-top:1rem;">Add Equipment</button>
           </form>
         </section>
@@ -688,7 +689,7 @@
           </div>
           <div style="overflow-x:auto;">
             <table id="equipment-table">
-              <thead><tr><th>Operation</th><th>Work Place</th><th>Type</th><th>Equipment Size</th><th>Equipment ID</th><th>SECTION</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Operation</th><th>Work Place</th><th>Type</th><th>Equipment Size</th><th>Equipment ID</th><th>SECTION</th><th>OEM</th><th>Actions</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -1143,6 +1144,8 @@
           <input id="edit-eq-size" type="text"></div>
         <div class="form-group"><label>SECTION</label>
           <input id="edit-eq-section" type="text"></div>
+        <div class="form-group"><label>OEM</label>
+          <input id="edit-eq-oem" type="text" placeholder="e.g. OEM / manufacturer"></div>
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
           <button type="submit" class="btn btn-primary">Save changes</button>
           <button type="button" class="btn btn-danger" onclick="document.getElementById('edit-equipment-modal').classList.remove('active')">Cancel</button>
@@ -1250,6 +1253,14 @@
                     }
                     window.inferEquipmentType = inferEquipmentType;
                     window.getEquipmentType = getEquipmentType;
+
+                    /** True for blank / Unknown / N/A style IDs — never predict or alert on these */
+                    function isUnknownEquipmentId(id) {
+                      const s = String(id || '').trim();
+                      if (!s) return true;
+                      return /^(unknown|n\/?a|none|null|undefined|-|—)$/i.test(s);
+                    }
+                    window.isUnknownEquipmentId = isUnknownEquipmentId;
 
   let unsubscribeFunctions = [];
   let charts = {};
@@ -2019,12 +2030,18 @@ function getFilteredUpdates() {
 }
 
 function getFilteredMaintenance() {
-  const all = maintenance || [];
+  const all = (maintenance || []).filter(m => {
+    const eid = String(m.equipment || '').trim();
+    // Never surface Unknown equipment in plans, alerts, or calendar
+    if (!eid || (typeof isUnknownEquipmentId === 'function' && isUnknownEquipmentId(eid)) || /^unknown$/i.test(eid)) {
+      return false;
+    }
+    return true;
+  });
   if (!currentShaftFilter && !currentTypeFilter) return all;
   const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
   return all.filter(m => {
     const eid = String(m.equipment || '').trim();
-    if (!eid || /^unknown$/i.test(eid)) return false;
     if (ids.has(eid)) return true;
     if (currentTypeFilter && !currentShaftFilter) {
       return (typeof getEquipmentType === 'function') && getEquipmentType(eid) === currentTypeFilter;
@@ -2187,6 +2204,8 @@ function analyseFailurePatterns() {
 
   const patterns = [];
   Object.entries(byEquip).forEach(([id, dates]) => {
+    if (typeof isUnknownEquipmentId === 'function' && isUnknownEquipmentId(id)) return;
+    if (/^unknown$/i.test(String(id || '').trim())) return;
     const unique = [...new Set(dates)].sort();
     if (unique.length < 2) return; // need at least 2 breakdown dates
 
@@ -2201,6 +2220,8 @@ function analyseFailurePatterns() {
     if (gaps === 0) return;
 
     const avgDays = totalGap / gaps;
+    // Nonsense intervals (0 / tiny) produce 20000+ day overdue noise — skip
+    if (!avgDays || avgDays < 0.5) return;
     const lastDate = new Date(unique[unique.length - 1]);
     const nextDate = new Date(lastDate);
     nextDate.setDate(nextDate.getDate() + Math.round(avgDays));
@@ -2229,6 +2250,10 @@ async function syncPredictiveMaintenanceTasks(patterns) {
   if (typeof addDoc !== 'function' || typeof collection !== 'function') return;
 
   for (const p of patterns) {
+    // Never create predictive tasks for Unknown / blank equipment
+    if (!p.equipment || (typeof isUnknownEquipmentId === 'function' && isUnknownEquipmentId(p.equipment)) ||
+        /^unknown$/i.test(String(p.equipment))) continue;
+    if (!p.avgDaysBetween || p.avgDaysBetween < 0.5) continue;
     // Only auto-add if predicted within next 45 days or already overdue
     if (p.daysUntil > 45) continue;
 
@@ -2269,6 +2294,22 @@ async function syncPredictiveMaintenanceTasks(patterns) {
     } catch (err) {
       console.warn('Could not sync predictive task for', p.equipment, err);
     }
+  }
+
+  // Remove legacy Unknown pattern tasks so they never reappear in alerts
+  try {
+    const bad = (maintenance || []).filter(m =>
+      m.source === 'failure-pattern' &&
+      (typeof isUnknownEquipmentId === 'function' ? isUnknownEquipmentId(m.equipment) : /^unknown$/i.test(String(m.equipment || '')))
+    );
+    for (const m of bad) {
+      if (m.id && typeof deleteDoc === 'function') {
+        await deleteDoc(doc(db, 'maintenance', m.id));
+        console.log('Removed Unknown pattern task', m.id);
+      }
+    }
+  } catch (cleanErr) {
+    console.warn('Unknown pattern cleanup:', cleanErr);
   }
 }
 
@@ -3137,6 +3178,8 @@ function populateOperationsReport() {
     document.getElementById('edit-eq-level').value = eq.level || '';
     document.getElementById('edit-eq-size').value = eq.locoSize || '';
     document.getElementById('edit-eq-section').value = eq.section || '';
+    const oemEl = document.getElementById('edit-eq-oem');
+    if (oemEl) oemEl.value = eq.oem || eq.OEM || '';
     const typeEl = document.getElementById('edit-eq-type');
     if (typeEl) typeEl.value = (typeof inferEquipmentType === 'function') ? inferEquipmentType(eq) : (eq.equipmentType || '');
     document.getElementById('edit-equipment-modal').classList.add('active');
@@ -3179,6 +3222,7 @@ function populateOperationsReport() {
         <td>${e.locoSize||'-'}</td>
         <td><strong>${e.id}</strong></td>
         <td>${e.section||'-'}</td>
+        <td>${e.oem || e.OEM || '—'}</td>
         <td style="white-space:nowrap;">
           <button type="button" class="btn btn-primary" style="padding:0.3rem 0.65rem;font-size:0.8rem;"
             onclick="openEditEquipment('${id}')"><i class="fas fa-edit"></i> Edit</button>
@@ -3445,8 +3489,8 @@ window.exportEquipmentPDF = function() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.text("Equipment Register", 20, 20);
-  const data = getFilteredEquipment().map(e => [e.shaft||'-', e.level||'-', (typeof inferEquipmentType==='function'?inferEquipmentType(e):(e.equipmentType||'')), e.locoSize||'-', e.id, e.section||'-']);
-  doc.autoTable({ head: [['Shaft','Level','Type','Size','Equipment ID','SECTION']], body: data, startY: 35 });
+  const data = getFilteredEquipment().map(e => [e.shaft||'-', e.level||'-', (typeof inferEquipmentType==='function'?inferEquipmentType(e):(e.equipmentType||'')), e.locoSize||'-', e.id, e.section||'-', e.oem||e.OEM||'']);
+  doc.autoTable({ head: [['Shaft','Level','Type','Size','Equipment ID','SECTION','OEM']], body: data, startY: 35 });
   doc.save('Equipment_Register.pdf');
 };
 
@@ -4116,8 +4160,8 @@ function simpleTablePDF(title, headers, rows, filename) {
 }
 
 window.exportEquipmentExcel = function () {
-  const rows = getFilteredEquipment().map(e => [e.shaft||'', e.level||'', (typeof inferEquipmentType==='function'?inferEquipmentType(e):(e.equipmentType||'')), e.locoSize||'', e.id||'', e.section||'']);
-  downloadCSV('Equipment_Register.csv', ['Operation','Work Place','Type','Size','Equipment ID','SECTION'], rows);
+  const rows = getFilteredEquipment().map(e => [e.shaft||'', e.level||'', (typeof inferEquipmentType==='function'?inferEquipmentType(e):(e.equipmentType||'')), e.locoSize||'', e.id||'', e.section||'', e.oem||e.OEM||'']);
+  downloadCSV('Equipment_Register.csv', ['Operation','Work Place','Type','Size','Equipment ID','SECTION','OEM'], rows);
 };
 window.exportMaintExcel = function () {
   const rows = (maintenance || []).map(m => {
@@ -4519,6 +4563,7 @@ function updateHistoryUI(history) {
         equipmentType: (document.getElementById('edit-eq-type') && document.getElementById('edit-eq-type').value) || '',
         locoSize: document.getElementById('edit-eq-size').value || '',
         section: document.getElementById('edit-eq-section').value || '',
+        oem: (document.getElementById('edit-eq-oem') && document.getElementById('edit-eq-oem').value.trim()) || '',
         updatedAt: new Date().toISOString()
       };
       try {
@@ -4545,6 +4590,7 @@ function updateHistoryUI(history) {
       shaft: document.getElementById('shaft').value,
       level: document.getElementById('level').value,
       equipmentType: (document.getElementById('eq-type') && document.getElementById('eq-type').value) || '',
+      oem: (document.getElementById('eq-oem') && document.getElementById('eq-oem').value.trim()) || '',
       locoSize: document.getElementById('loco-size').value,
       section: document.getElementById('section').value
     };
@@ -4675,6 +4721,7 @@ document.getElementById('search-form').addEventListener('submit', async e => {
         ['Work Place / Level', (eq && (eq.level || eq.workPlace || eq['Work Place'] || eq.Level)) || '—'],
         ['Equipment Size', (eq && (eq.locoSize || eq.size || eq['Equipment Size'])) || '—'],
         ['SECTION', (eq && (eq.section || eq.SECTION)) || '—'],
+        ['OEM', (eq && (eq.oem || eq.OEM || eq.manufacturer || eq.Manufacturer)) || '—'],
         ['Current status', (st && st.status) || '—'],
         ['Availability', (st && st.availability != null) ? st.availability + '%' : '—'],
         ['Last update', (st && st.lastUpdate) || '—']
