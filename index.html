@@ -1262,6 +1262,37 @@
                     }
                     window.isUnknownEquipmentId = isUnknownEquipmentId;
 
+                    /**
+                     * One alert / task per equipment for pattern-based items.
+                     * Manual tasks keep unique by equipment + task + dueDate.
+                     */
+                    function dedupeMaintenanceTasks(list) {
+                      const arr = Array.isArray(list) ? list : [];
+                      const seen = new Set();
+                      const out = [];
+                      // Prefer most recently updated / most overdue first when collapsing
+                      const sorted = arr.slice().sort((a, b) => {
+                        const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                        const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                        return da - db; // earliest due first (most overdue first when negative)
+                      });
+                      sorted.forEach(m => {
+                        const equip = String(m.equipment || '').trim();
+                        if (!equip) return;
+                        let key;
+                        if (m.source === 'failure-pattern') {
+                          key = 'pattern|' + equip.toLowerCase();
+                        } else {
+                          key = ['manual', equip.toLowerCase(), String(m.task || '').toLowerCase(), String(m.dueDate || m.lastDone || '')].join('|');
+                        }
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        out.push(m);
+                      });
+                      return out;
+                    }
+                    window.dedupeMaintenanceTasks = dedupeMaintenanceTasks;
+
   let unsubscribeFunctions = [];
   let charts = {};
   let calendar = null;
@@ -2030,7 +2061,7 @@ function getFilteredUpdates() {
 }
 
 function getFilteredMaintenance() {
-  const all = (maintenance || []).filter(m => {
+  let all = (maintenance || []).filter(m => {
     const eid = String(m.equipment || '').trim();
     // Never surface Unknown equipment in plans, alerts, or calendar
     if (!eid || (typeof isUnknownEquipmentId === 'function' && isUnknownEquipmentId(eid)) || /^unknown$/i.test(eid)) {
@@ -2038,16 +2069,19 @@ function getFilteredMaintenance() {
     }
     return true;
   });
-  if (!currentShaftFilter && !currentTypeFilter) return all;
-  const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
-  return all.filter(m => {
-    const eid = String(m.equipment || '').trim();
-    if (ids.has(eid)) return true;
-    if (currentTypeFilter && !currentShaftFilter) {
-      return (typeof getEquipmentType === 'function') && getEquipmentType(eid) === currentTypeFilter;
-    }
-    return false;
-  });
+  if (currentShaftFilter || currentTypeFilter) {
+    const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
+    all = all.filter(m => {
+      const eid = String(m.equipment || '').trim();
+      if (ids.has(eid)) return true;
+      if (currentTypeFilter && !currentShaftFilter) {
+        return (typeof getEquipmentType === 'function') && getEquipmentType(eid) === currentTypeFilter;
+      }
+      return false;
+    });
+  }
+  // Collapse duplicate pattern alerts (same equipment repeated many times)
+  return (typeof dedupeMaintenanceTasks === 'function') ? dedupeMaintenanceTasks(all) : all;
 }
 
 function getFilteredDelays() {
@@ -2257,14 +2291,12 @@ async function syncPredictiveMaintenanceTasks(patterns) {
     // Only auto-add if predicted within next 45 days or already overdue
     if (p.daysUntil > 45) continue;
 
-    // ONLY match existing *pattern* tasks — never touch manual entries
-    const existing = (maintenance || []).find(m =>
+    // ALL existing pattern tasks for this equipment (may be many duplicates)
+    const existingAll = (maintenance || []).filter(m =>
       String(m.equipment) === String(p.equipment) &&
       m.source === 'failure-pattern'
     );
-
-    // If user already has a *manual* task for same equipment, still add pattern task
-    // (they can coexist — different source)
+    const existing = existingAll[0] || null;
 
     const data = {
       equipment: p.equipment,
@@ -2280,13 +2312,19 @@ async function syncPredictiveMaintenanceTasks(patterns) {
 
     try {
       if (existing) {
-        // Only update if predicted date or stats changed
         const sameDue = existing.dueDate === data.dueDate;
         const sameCount = existing.failureCount === data.failureCount;
-        if (sameDue && sameCount) continue;
-
-        await updateDoc(doc(db, 'maintenance', existing.id), data);
-        console.log('Updated pattern task:', p.equipment);
+        if (!sameDue || !sameCount) {
+          await updateDoc(doc(db, 'maintenance', existing.id), data);
+          console.log('Updated pattern task:', p.equipment);
+        }
+        // Delete duplicate pattern docs for the same equipment
+        for (let i = 1; i < existingAll.length; i++) {
+          try {
+            await deleteDoc(doc(db, 'maintenance', existingAll[i].id));
+            console.log('Removed duplicate pattern task:', p.equipment, existingAll[i].id);
+          } catch (delErr) { console.warn(delErr); }
+        }
       } else {
         await addDoc(collection(db, 'maintenance'), data);
         console.log('Created pattern task:', p.equipment);
@@ -2373,18 +2411,31 @@ function updatePredictiveNotifications() {
     return;
   }
 
+  const uniqAlertKey = (m) => m.source === 'failure-pattern'
+    ? 'pattern|' + String(m.equipment || '').toLowerCase()
+    : 'maint|' + String(m.id || m.equipment || '');
+  const seenOver = new Set();
   const overdue = filteredMt.filter(m => {
     const days = m.dueDate
       ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
       : calculateDaysLeft(m.lastDone, m.interval);
-    return !isNaN(days) && days < 0 && !isAlertDismissed('maint-' + m.id);
+    if (isNaN(days) || days >= 0 || isAlertDismissed('maint-' + m.id)) return false;
+    const k = uniqAlertKey(m);
+    if (seenOver.has(k)) return false;
+    seenOver.add(k);
+    return true;
   });
 
+  const seenSoon = new Set();
   const dueSoon = filteredMt.filter(m => {
     const days = m.dueDate
       ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
       : calculateDaysLeft(m.lastDone, m.interval);
-    return !isNaN(days) && days >= 0 && days <= 7 && !isAlertDismissed('maint-' + m.id);
+    if (isNaN(days) || days < 0 || days > 7 || isAlertDismissed('maint-' + m.id)) return false;
+    const k = uniqAlertKey(m);
+    if (seenSoon.has(k)) return false;
+    seenSoon.add(k);
+    return true;
   });
 
   // Failure-pattern alerts (next 14 days or overdue)
@@ -2732,16 +2783,40 @@ const mttfData = locoIds.map(id => {
       hrBox.classList.toggle('hidden', highRiskItems.length === 0);
     }
 
-    const predictive = filteredMt.map(m => ({...m, days:calculateDaysLeft(m.lastDone, m.interval)})).filter(m => !isNaN(m.days) && m.days <= 7);
+    let predictive = filteredMt.map(m => ({...m, days: m.dueDate
+      ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
+      : calculateDaysLeft(m.lastDone, m.interval)
+    })).filter(m => !isNaN(m.days) && m.days <= 7);
+    // Extra safety: one line per equipment
+    const predSeen = new Set();
+    predictive = predictive.filter(p => {
+      const k = String(p.equipment || '').toLowerCase();
+      if (!k || predSeen.has(k)) return false;
+      predSeen.add(k);
+      return true;
+    });
     document.getElementById('predictive-list').innerHTML = predictive.map(p => `<li>${p.equipment} — ${p.task} (${p.days >= 0 ? 'due in '+p.days+' days' : Math.abs(p.days)+' days overdue'})</li>`).join('');
     document.getElementById('predictive-alerts').classList.toggle('hidden', predictive.length===0);
 
     // Upcoming & Overdue Maintenance — paged list + summary bar
-    const upcomingItems = (filteredMt || []).map(m => {
+    let upcomingItems = (filteredMt || []).map(m => {
       const days = m.dueDate
         ? Math.ceil((new Date(m.dueDate) - new Date()) / 86400000)
         : calculateDaysLeft(m.lastDone, m.interval);
       return { ...m, days };
+    });
+    // One row per equipment for pattern tasks; no identical repeats
+    upcomingItems = (typeof dedupeMaintenanceTasks === 'function')
+      ? dedupeMaintenanceTasks(upcomingItems)
+      : upcomingItems;
+    const upSeen = new Set();
+    upcomingItems = upcomingItems.filter(m => {
+      const k = (m.source === 'failure-pattern')
+        ? 'p|' + String(m.equipment || '').toLowerCase()
+        : ['m', String(m.equipment||'').toLowerCase(), String(m.task||'').toLowerCase(), String(m.days)].join('|');
+      if (upSeen.has(k)) return false;
+      upSeen.add(k);
+      return true;
     }).sort((a, b) => {
       const da = isNaN(a.days) ? 9999 : a.days;
       const db = isNaN(b.days) ? 9999 : b.days;
@@ -3318,8 +3393,14 @@ function populateMaintTable() {
       ? getFilteredMaintenance() : (maintenance || []);
 
     // Normal + predictive maintenance tasks
+    const calSeen = new Set();
     maintSource.forEach(task => {
       if (isAlertDismissed('maint-' + task.id)) return;
+      const equipKey = String(task.equipment || '').toLowerCase();
+      if (task.source === 'failure-pattern') {
+        if (!equipKey || calSeen.has('p|' + equipKey)) return;
+        calSeen.add('p|' + equipKey);
+      }
       let due = task.dueDate || calculateNextDue(task.lastDone, task.interval);
       if (!due) return;
       const days = task.dueDate
