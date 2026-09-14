@@ -633,6 +633,14 @@
             <h1>Full Status Log</h1>
             <button class="btn btn-primary" onclick="exportLogCSV()"><i class="fas fa-file-csv"></i> Export Log (CSV)</button>
           </div>
+          <div class="quick-find-bar">
+            <label for="qf-log"><i class="fas fa-search"></i> Find equipment</label>
+            <input type="text" id="qf-log" list="loco-list" placeholder="Enter Equipment ID and press Enter" autocomplete="off"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();quickFindInTable('log-table',this.value);}">
+            <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="quickFindInTable('log-table',document.getElementById('qf-log').value)">Find</button>
+            <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);" onclick="clearQuickFind('log-table','qf-log')">Clear</button>
+            <span class="qf-hint">Press Enter to jump / filter this table</span>
+          </div>
           <div style="overflow-x:auto;">
             <table id="log-table">
               <thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Status</th><th>Shift</th><th>Fault</th><th>Down Hrs</th><th>Failure</th></tr></thead>
@@ -647,6 +655,14 @@
           <div class="header-bar">
             <h1>Fleet Summary</h1>
             <button class="btn btn-primary" onclick="exportSummaryPDF()"><i class="fas fa-file-pdf"></i> Export Fleet Summary (PDF)</button>
+          </div>
+          <div class="quick-find-bar">
+            <label for="qf-summary"><i class="fas fa-search"></i> Find equipment</label>
+            <input type="text" id="qf-summary" list="loco-list" placeholder="Enter Equipment ID and press Enter" autocomplete="off"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();quickFindInTable('summary-table',this.value);}">
+            <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="quickFindInTable('summary-table',document.getElementById('qf-summary').value)">Find</button>
+            <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);" onclick="clearQuickFind('summary-table','qf-summary')">Clear</button>
+            <span class="qf-hint">Press Enter to jump / filter this table</span>
           </div>
           <div style="overflow-x:auto;">
             <table id="summary-table">
@@ -1970,16 +1986,32 @@ function getFilteredUpdates() {
 
 function getFilteredMaintenance() {
   const all = maintenance || [];
-  if (!currentShaftFilter) return all;
+  if (!currentShaftFilter && !currentTypeFilter) return all;
   const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
-  return all.filter(m => ids.has(String(m.equipment || '')));
+  return all.filter(m => {
+    const eid = String(m.equipment || '').trim();
+    if (!eid || /^unknown$/i.test(eid)) return false;
+    if (ids.has(eid)) return true;
+    if (currentTypeFilter && !currentShaftFilter) {
+      return (typeof getEquipmentType === 'function') && getEquipmentType(eid) === currentTypeFilter;
+    }
+    return false;
+  });
 }
 
 function getFilteredDelays() {
   const all = delaysData || [];
-  if (!currentShaftFilter) return all;
+  if (!currentShaftFilter && !currentTypeFilter) return all;
   const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
-  return all.filter(d => ids.has(String(d.equipment || '')));
+  return all.filter(d => {
+    const eid = String(d.equipment || '').trim();
+    if (!eid || /^unknown$/i.test(eid)) return false;
+    if (ids.has(eid)) return true;
+    if (currentTypeFilter && !currentShaftFilter) {
+      return (typeof getEquipmentType === 'function') && getEquipmentType(eid) === currentTypeFilter;
+    }
+    return false;
+  });
 }
 
   
@@ -3083,6 +3115,7 @@ function populateOperationsReport() {
       return `<tr>
         <td>${e.shaft || '— unassigned —'}</td>
         <td>${e.level||'-'}</td>
+        <td>${(typeof inferEquipmentType === 'function') ? inferEquipmentType(e) : (e.equipmentType || '—')}</td>
         <td>${e.locoSize||'-'}</td>
         <td><strong>${e.id}</strong></td>
         <td>${e.section||'-'}</td>
@@ -3116,7 +3149,7 @@ function populateMaintTable() {
   const tbody = document.querySelector('#maint-table tbody');
   if (!tbody) return;
 
-  const list = maintenance || [];
+  const list = (typeof getFilteredMaintenance === 'function') ? getFilteredMaintenance() : (maintenance || []);
   let overdue = 0, dueSoon = 0, pattern = 0;
   const rows = list.map(m => {
     const days = m.dueDate
@@ -3320,8 +3353,8 @@ window.exportEquipmentPDF = function() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.text("Equipment Register", 20, 20);
-  const data = getFilteredEquipment().map(e => [e.shaft||'-', e.level||'-', e.locoSize||'-', e.id, e.section||'-']);
-  doc.autoTable({ head: [['Shaft','Level','Loco Size','Equipment ID','SECTION']], body: data, startY: 35 });
+  const data = getFilteredEquipment().map(e => [e.shaft||'-', e.level||'-', (typeof inferEquipmentType==='function'?inferEquipmentType(e):(e.equipmentType||'')), e.locoSize||'-', e.id, e.section||'-']);
+  doc.autoTable({ head: [['Shaft','Level','Type','Size','Equipment ID','SECTION']], body: data, startY: 35 });
   doc.save('Equipment_Register.pdf');
 };
 
@@ -3991,8 +4024,8 @@ function simpleTablePDF(title, headers, rows, filename) {
 }
 
 window.exportEquipmentExcel = function () {
-  const rows = getFilteredEquipment().map(e => [e.shaft||'', e.level||'', e.locoSize||'', e.id||'', e.section||'']);
-  downloadCSV('Equipment_Register.csv', ['Operation','Work Place','Size','Equipment ID','SECTION'], rows);
+  const rows = getFilteredEquipment().map(e => [e.shaft||'', e.level||'', (typeof inferEquipmentType==='function'?inferEquipmentType(e):(e.equipmentType||'')), e.locoSize||'', e.id||'', e.section||'']);
+  downloadCSV('Equipment_Register.csv', ['Operation','Work Place','Type','Size','Equipment ID','SECTION'], rows);
 };
 window.exportMaintExcel = function () {
   const rows = (maintenance || []).map(m => {
@@ -4192,11 +4225,12 @@ window.importSelectedRows = async function () {
       const docRef = await addDoc(collection(db, 'status_updates'), statusPayload);
 
       const eqPayload = {
-        shaft: row.shaft || '',
-        level: row.workplace || '',
-        locoSize: '',
-        section: '',
-        source: 'Imported Breakdown Report',
+                          shaft: row.shaft || '',
+                          level: row.workplace || '',
+                          locoSize: '',
+                          section: '',
+                          equipmentType: (typeof inferEquipmentType === 'function') ? inferEquipmentType(equipId, '') : 'Loco',
+                          source: 'Imported Breakdown Report',
         updatedAt: new Date().toISOString()
       };
       if (rawId && rawId !== equipId) {
