@@ -595,6 +595,11 @@
       <input id="s-date" type="date">
     </div>
 
+    <div class="form-group">
+      <label>Reason / Fault filter (optional)</label>
+      <input id="s-reason" type="text" placeholder="e.g. brake, antenna, battery — filters history text" style="width:100%;">
+    </div>
+
     <div style="margin:1.5rem 0;display:flex;align-items:center;gap:8px;">
      
       <input type="checkbox" id="show-all-history" checked>
@@ -2094,6 +2099,16 @@ function getFilteredMaintenance() {
     if (!eid || (typeof isUnknownEquipmentId === 'function' && isUnknownEquipmentId(eid)) || /^unknown$/i.test(eid)) {
       return false;
     }
+    // Hide dismissed rows (Fixed/Dismiss)
+    if (typeof isAlertDismissed === 'function') {
+      if (m.id && isAlertDismissed('maint-' + m.id)) return false;
+      if (m.source === 'failure-pattern' && isAlertDismissed('fail-' + eid)) return false;
+    }
+    // Hide explicitly completed manual tasks until due again (optional soft hide for 1 day)
+    if (m.status === 'completed' && m.fixedAt) {
+      const fixedMs = new Date(m.fixedAt).getTime();
+      if (!isNaN(fixedMs) && (Date.now() - fixedMs) < 12 * 3600 * 1000) return false;
+    }
     return true;
   });
   if (currentShaftFilter || currentTypeFilter) {
@@ -2237,14 +2252,25 @@ function isAlertDismissed(key) {
 
 window.dismissAlert = function(key) {
   setDismissedAlert(key);
-  updatePredictiveNotifications();
-  if (typeof populateDashboard === 'function') populateDashboard();
+  try {
+    if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+    if (typeof populateDashboard === 'function') populateDashboard();
+    if (typeof populateMaintTable === 'function') populateMaintTable();
+    if (typeof initCalendar === 'function') {
+      const calSec = document.getElementById('calendar');
+      if (calSec && !calSec.classList.contains('hidden')) initCalendar();
+    }
+  } catch (e) { console.warn('dismissAlert refresh:', e); }
 };
 
 window.clearAllDismissedAlerts = function() {
   localStorage.removeItem(DISMISSED_KEY);
-  updatePredictiveNotifications();
-  if (typeof populateDashboard === 'function') populateDashboard();
+  try {
+    if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+    if (typeof populateDashboard === 'function') populateDashboard();
+    if (typeof populateMaintTable === 'function') populateMaintTable();
+    if (typeof initCalendar === 'function') initCalendar();
+  } catch (e) { console.warn(e); }
   alert('All dismissed alerts restored.');
 };
 
@@ -2478,34 +2504,94 @@ async function syncPredictiveMaintenanceTasks(patterns) {
 }
 
 window.markEquipmentFixed = async function(equipmentId, maintId) {
-  // 1. Dismiss alert
-  dismissAlert('fail-' + equipmentId);
-  dismissAlert('maint-' + (maintId || equipmentId));
+  const eid = String(equipmentId || '').trim();
+  const mid = String(maintId || '').trim();
+  const today = new Date().toISOString().slice(0, 10);
+  const nowIso = new Date().toISOString();
 
-  // 2. If there is a maintenance task, set lastDone = today (marks it done)
-  if (maintId) {
+  // Collect all related maintenance docs to close
+  const targets = (maintenance || []).filter(m => {
+    if (mid && String(m.id) === mid) return true;
+    if (eid && String(m.equipment) === eid && m.source === 'failure-pattern') return true;
+    return false;
+  });
+  // If specific id not in memory, still try update by id
+  if (mid && !targets.some(t => String(t.id) === mid)) {
+    targets.push({ id: mid, equipment: eid, source: 'unknown' });
+  }
+
+  let updated = 0, deleted = 0, errors = [];
+  for (const m of targets) {
+    if (!m.id) continue;
     try {
-      await updateDoc(doc(db, 'maintenance', maintId), {
-        lastDone: new Date().toISOString().slice(0, 10),
-        fixedAt: new Date().toISOString()
-      });
-    } catch (e) { console.warn(e); }
-  } else {
-    // Find predictive task for this equipment
-    const m = (maintenance || []).find(x =>
-      x.equipment === equipmentId && x.source === 'failure-pattern'
-    );
-    if (m) {
-      try {
-        await updateDoc(doc(db, 'maintenance', m.id), {
-          lastDone: new Date().toISOString().slice(0, 10),
-          fixedAt: new Date().toISOString()
-        });
-      } catch (e) { console.warn(e); }
+      // Pattern tasks: delete so they do not stay overdue forever (will re-create only from new failures)
+      if (m.source === 'failure-pattern') {
+        await deleteDoc(doc(db, 'maintenance', m.id));
+        deleted++;
+      } else {
+        // Manual: advance lastDone; clear dueDate so interval recalculates from lastDone
+        const interval = m.interval || 'monthly';
+        let nextDue = null;
+        try {
+          if (typeof calculateNextDue === 'function') nextDue = calculateNextDue(today, interval);
+        } catch (e) { /* ignore */ }
+        const payload = {
+          lastDone: today,
+          fixedAt: nowIso,
+          status: 'completed',
+          completedAt: nowIso
+        };
+        if (nextDue) payload.dueDate = nextDue;
+        await updateDoc(doc(db, 'maintenance', m.id), payload);
+        updated++;
+      }
+    } catch (e) {
+      console.warn('markEquipmentFixed item error', m.id, e);
+      errors.push(String(e.message || e));
     }
   }
-  alert(equipmentId + ' marked as attended / fixed. Alert cleared.');
-  refreshCurrentView();
+
+  // Dismiss UI alerts for this equipment / task
+  if (typeof dismissAlert === 'function') {
+    if (eid) {
+      dismissAlert('fail-' + eid);
+      dismissAlert('maint-' + eid);
+    }
+    if (mid) dismissAlert('maint-' + mid);
+    // Also dismiss any other pattern keys for same equipment
+    targets.forEach(t => {
+      if (t.id) dismissAlert('maint-' + t.id);
+    });
+  }
+
+  // Optimistic in-memory update so UI reacts before snapshot
+  try {
+    if (Array.isArray(maintenance)) {
+      const removeIds = new Set(targets.filter(t => t.source === 'failure-pattern').map(t => String(t.id)));
+      maintenance = maintenance.filter(m => !removeIds.has(String(m.id))).map(m => {
+        if (mid && String(m.id) === mid) {
+          return { ...m, lastDone: today, fixedAt: nowIso, status: 'completed', dueDate: m.dueDate };
+        }
+        return m;
+      });
+    }
+  } catch (e) { /* ignore */ }
+
+  const msg = errors.length
+    ? (eid + ' partially updated. Issues: ' + errors.slice(0, 2).join('; '))
+    : (eid + ' marked as attended / fixed.' + (deleted ? ' Pattern task cleared.' : '') + (updated ? ' Schedule updated.' : ''));
+  alert(msg);
+
+  try {
+    if (typeof populateMaintTable === 'function') populateMaintTable();
+    if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+    if (typeof populateDashboard === 'function') populateDashboard();
+    if (typeof initCalendar === 'function') {
+      const calSec = document.getElementById('calendar');
+      if (calSec && !calSec.classList.contains('hidden')) initCalendar();
+    }
+    if (typeof refreshCurrentView === 'function') refreshCurrentView();
+  } catch (e) { console.warn('post-fixed refresh', e); }
 };
 
 
@@ -3615,7 +3701,9 @@ function populateMaintTable() {
     if (m.source === 'failure-pattern') pattern++;
     const disp = isNaN(days) ? '-' : (days >= 0 ? days : Math.abs(days) + ' overdue');
     const source = m.source === 'failure-pattern' ? '🧠 Pattern' : 'Manual';
-    return `<tr>
+    const escEq = String(m.equipment || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const escId = String(m.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `<tr data-maint-id="${escId}" data-equipment="${escEq}">
       <td>${m.equipment}</td>
       <td>${m.task}</td>
       <td>${m.interval || '-'}</td>
@@ -3624,10 +3712,10 @@ function populateMaintTable() {
       <td>${disp}</td>
       <td>${source}</td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-success" style="padding:0.3rem 0.6rem;font-size:0.8rem;"
-          onclick="markEquipmentFixed('${m.equipment}','${m.id}')">Fixed</button>
-        <button class="btn btn-primary" style="padding:0.3rem 0.6rem;font-size:0.8rem;"
-          onclick="dismissAlert('maint-${m.id}')">Dismiss</button>
+        <button type="button" class="btn btn-success" style="padding:0.3rem 0.6rem;font-size:0.8rem;"
+          onclick="markEquipmentFixed('${escEq}','${escId}')">Fixed</button>
+        <button type="button" class="btn btn-primary" style="padding:0.3rem 0.6rem;font-size:0.8rem;"
+          onclick="dismissAlert('maint-${escId}')">Dismiss</button>
       </td>
     </tr>`;
   });
@@ -5146,12 +5234,50 @@ function updateHistoryUI(history) {
 
 // ====================== FIXED SEARCH FUNCTION ======================
 
+  function filterSearchHistoryByReason(q) {
+    const all = window._lastSearchHistory || [];
+    const needle = String(q || '').trim().toLowerCase();
+    const rows = !needle ? all : all.filter(u => {
+      const text = String(u.reason || u.fault || u.description || '').toLowerCase();
+      return text.includes(needle);
+    });
+    const tbody = document.querySelector('#search-history-table tbody');
+    const label = document.getElementById('hist-count-label');
+    const eqId = window._lastSearchEquipmentId || '';
+    if (label) {
+      label.innerHTML = `(${rows.length} unique event${rows.length === 1 ? '' : 's'}` +
+        (needle ? ` · reason contains "<em>${needle.replace(/</g,'&lt;')}</em>"` : '') + `)`;
+    }
+    if (!tbody) return;
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-3);">No history rows match this reason/fault filter.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(u => {
+      const fail = u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
+        String(u.isFailure || '').toLowerCase() === 'yes';
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px;">${u.date || '-'}</td>
+        <td style="padding:10px;">${u.time || '-'}</td>
+        <td style="padding:10px;">${u.status || '-'}</td>
+        <td style="padding:10px;">${u.shift || '-'}</td>
+        <td style="padding:10px;max-width:320px;white-space:normal;">${String(u.reason || u.fault || '-').replace(/</g,'&lt;')}</td>
+        <td style="padding:10px;">${u.downtimeHours ?? u.downtime ?? '0'}</td>
+        <td style="padding:10px;">${fail ? 'Yes' : 'No'}</td>
+      </tr>`;
+    }).join('');
+  }
+  window.filterSearchHistoryByReason = filterSearchHistoryByReason;
+
+
+
 
 document.getElementById('search-form').addEventListener('submit', async e => {
   e.preventDefault();
 
   const equipmentId = document.getElementById('s-loco').value.trim();
   const dateFilter = document.getElementById('s-date').value;
+  const reasonFilter = (document.getElementById('s-reason') && document.getElementById('s-reason').value || '').trim().toLowerCase();
   const showAll = document.getElementById('show-all-history').checked;
 
   if (!equipmentId) {
@@ -5232,6 +5358,16 @@ document.getElementById('search-form').addEventListener('submit', async e => {
       filteredResults = filteredResults.filter(u => u.date === dateFilter);
     }
 
+    // Reason / Fault text filter
+    if (reasonFilter) {
+      filteredResults = filteredResults.filter(u => {
+        const text = String(
+          u.reason || u.fault || u.description || u['Reason/Fault'] || ''
+        ).toLowerCase();
+        return text.includes(reasonFilter);
+      });
+    }
+
     // Deduplicate identical events (same date + time + status + reason + downtime)
     const seen = new Set();
     filteredResults = filteredResults.filter(u => {
@@ -5257,12 +5393,28 @@ document.getElementById('search-form').addEventListener('submit', async e => {
       return;
     }
 
+    // Cache for live reason re-filter without re-query
+    window._lastSearchHistory = filteredResults.slice();
+    window._lastSearchEquipmentId = equipmentId;
+
+    const reasonNote = reasonFilter
+      ? ` · reason contains "<em>${String(reasonFilter).replace(/</g,'&lt;')}</em>"`
+      : '';
     let html = `
+      <div class="quick-find-bar" style="margin-bottom:0.85rem;">
+        <label for="hist-reason-filter"><i class="fas fa-filter"></i> Filter displayed history by reason/fault</label>
+        <input type="text" id="hist-reason-filter" value="${(document.getElementById('s-reason') && document.getElementById('s-reason').value || '').replace(/"/g, '&quot;')}"
+          placeholder="Type to filter rows…" style="flex:1;min-width:160px;max-width:320px;"
+          oninput="filterSearchHistoryByReason(this.value)">
+        <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);"
+          onclick="document.getElementById('hist-reason-filter').value=''; filterSearchHistoryByReason('');">Clear</button>
+        <span class="qf-hint">Live filter on current results</span>
+      </div>
       <h2 style="margin:0 0 0.75rem;"><i class="fas fa-history"></i> History for <strong>${equipmentId}</strong>
-        <span style="font-weight:500;color:var(--text-3);font-size:0.95rem;">(${filteredResults.length} unique event${filteredResults.length === 1 ? '' : 's'})</span>
+        <span id="hist-count-label" style="font-weight:500;color:var(--text-3);font-size:0.95rem;">(${filteredResults.length} unique event${filteredResults.length === 1 ? '' : 's'}${reasonNote})</span>
       </h2>
       <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse; background:var(--surface);">
+        <table id="search-history-table" style="width:100%; border-collapse:collapse; background:var(--surface);">
           <thead style="background:#0f172a; color:white;">
             <tr>
               <th style="padding:12px;text-align:left;">Date</th>
