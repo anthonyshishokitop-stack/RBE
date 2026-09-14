@@ -1474,15 +1474,31 @@ function tmGetDowntime(u) {
 }
 
 function tmGetSourceUpdates() {
-  // Prefer shaft-filtered updates if available
+  // Always honour system filter (shaft + type) — even when result is empty
   if (typeof getFilteredUpdates === 'function') {
     try {
       const filtered = getFilteredUpdates();
-      if (Array.isArray(filtered) && filtered.length > 0) return filtered;
+      if (Array.isArray(filtered)) {
+        if (filtered.length > 0) return filtered;
+        // Filters active but no matching rows → empty (do NOT fall back to full fleet)
+        if ((typeof currentShaftFilter !== 'undefined' && currentShaftFilter) ||
+            (typeof currentTypeFilter !== 'undefined' && currentTypeFilter)) {
+          return [];
+        }
+      }
     } catch (e) { /* fall through */ }
   }
   return (typeof updates !== 'undefined' && Array.isArray(updates)) ? updates : [];
 }
+
+/** Human-readable active filter label for banners / chart titles */
+function getActiveFilterLabel() {
+  const parts = [];
+  if (typeof currentShaftFilter !== 'undefined' && currentShaftFilter) parts.push(currentShaftFilter);
+  if (typeof currentTypeFilter !== 'undefined' && currentTypeFilter) parts.push(currentTypeFilter);
+  return parts.length ? parts.join(' · ') : '';
+}
+window.getActiveFilterLabel = getActiveFilterLabel;
 
 function tmLevelForEquipment(eqId) {
   if (typeof equipment === 'undefined' || !Array.isArray(equipment)) return 'Unknown';
@@ -1695,6 +1711,32 @@ function refreshTextMiningInsights() {
     ensureUpdatesLoaded().then(() => {
       if ((updates || []).length > 0) refreshTextMiningInsights();
     });
+  }
+
+  // Scope banner — linked to Dashboard shaft / type filter
+  let scopeBar = document.getElementById('tm-filter-scope');
+  if (!scopeBar) {
+    scopeBar = document.createElement('div');
+    scopeBar.id = 'tm-filter-scope';
+    scopeBar.className = 'summary-alert-bar info';
+    const header = document.querySelector('#text-mining .header-bar');
+    if (header && header.parentNode) header.parentNode.insertBefore(scopeBar, header.nextSibling);
+    else if (contentEl.parentNode) contentEl.parentNode.insertBefore(scopeBar, contentEl);
+  }
+  const scopeLbl = (typeof getActiveFilterLabel === 'function' && getActiveFilterLabel()) || '';
+  if (scopeLbl) {
+    scopeBar.classList.remove('hidden');
+    scopeBar.innerHTML = `<div><i class="fas fa-filter" style="margin-right:6px;"></i>
+      <strong>Active filter:</strong> ${scopeLbl}
+      <span style="font-weight:500;opacity:0.85;"> — Text Mining analyses only this scope (set on Dashboard)</span></div>
+      <div class="bar-actions">
+        <button type="button" class="btn-export" onclick="show('dashboard')"><i class="fas fa-tachometer-alt"></i> Change filter</button>
+      </div>`;
+  } else {
+    scopeBar.classList.remove('hidden');
+    scopeBar.innerHTML = `<div><i class="fas fa-globe" style="margin-right:6px;"></i>
+      <strong>Scope:</strong> All Shafts · All Types
+      <span style="font-weight:500;opacity:0.85;"> — full fleet text mining</span></div>`;
   }
 
   const analysis = tmAnalyseLiveData();
@@ -2475,6 +2517,29 @@ function populateDashboard() {
       <div class="kpi-card blue"><i class="fas fa-percent"></i><h2>${avgAvail}</h2><p>Availability %</p></div>
     `;
 
+    // Reflect active filter on chart titles so executives see exact scope
+    (function updateChartTitles() {
+      const scope = (typeof getActiveFilterLabel === 'function' && getActiveFilterLabel()) || '';
+      const scopeSuffix = scope ? ` — ${scope}` : ' — All Shafts · All Types';
+      const map = [
+        ['availabilityChart', 'Fleet Availability (%)' + scopeSuffix],
+        ['failuresChart', 'Failure Count by Equipment' + scopeSuffix],
+        ['mttfChart', 'Mean Time To Failure (Hours)' + scopeSuffix]
+      ];
+      map.forEach(([canvasId, title]) => {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const wrap = canvas.closest('.chart-wrapper') || canvas.closest('.card');
+        const titleEl = wrap && wrap.querySelector('.chart-title');
+        if (titleEl) {
+          const icon = titleEl.querySelector('i');
+          const iconHtml = icon ? icon.outerHTML + ' ' : '';
+          titleEl.innerHTML = iconHtml + title;
+        }
+      });
+    })();
+
+
     const availData    = locoIds.map(id => parseFloat(getEquipmentStatus(id).availability));
     const failureData  = locoIds.map(id => filteredUp.filter(u => {
       const uid = String(u.equipmentId || '').trim();
@@ -2734,17 +2799,20 @@ const mttfData = locoIds.map(id => {
 
     try {
       if (typeof fillDatalist === 'function') fillDatalist();
+      // Dashboard KPIs + charts (availability / failures / MTTF) rebuild from filtered sets
       if (typeof populateDashboard === 'function') populateDashboard();
+      if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+      // Register, maintenance plan, operations, logs
       if (typeof populateEquipmentTable === 'function') populateEquipmentTable();
       if (typeof populateMaintTable === 'function') populateMaintTable();
       if (typeof populateOperationsReport === 'function') populateOperationsReport();
       if (typeof populateSummaryTable === 'function') populateSummaryTable();
       if (typeof populateLogTable === 'function') populateLogTable();
+      // Text Mining Framework — always re-analyse filtered fault text
       if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
-      if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+      // Maintenance Calendar — always rebuild events for current filter
       if (typeof initCalendar === 'function') {
-        const calSec = document.getElementById('calendar');
-        if (calSec && !calSec.classList.contains('hidden')) initCalendar();
+        try { initCalendar(); } catch (calErr) { console.warn('calendar refresh:', calErr); }
       }
       if (typeof refreshCurrentView === 'function') refreshCurrentView();
     } catch (e) {
@@ -3201,9 +3269,12 @@ function populateMaintTable() {
   
   function getMaintenanceEvents() {
     const events = [];
+    // Honour Dashboard shaft + type filter so calendar matches the rest of the system
+    const maintSource = (typeof getFilteredMaintenance === 'function')
+      ? getFilteredMaintenance() : (maintenance || []);
 
     // Normal + predictive maintenance tasks
-    (maintenance || []).forEach(task => {
+    maintSource.forEach(task => {
       if (isAlertDismissed('maint-' + task.id)) return;
       let due = task.dueDate || calculateNextDue(task.lastDone, task.interval);
       if (!due) return;
@@ -3257,6 +3328,35 @@ function populateMaintTable() {
 
   function initCalendar() {
     const el = document.getElementById('calendar-div');
+    if (!el) return;
+
+    // Scope banner — linked to Dashboard shaft / type filter
+    let scopeBar = document.getElementById('cal-filter-scope');
+    if (!scopeBar) {
+      scopeBar = document.createElement('div');
+      scopeBar.id = 'cal-filter-scope';
+      scopeBar.className = 'summary-alert-bar info';
+      const header = document.querySelector('#calendar .header-bar');
+      if (header && header.parentNode) header.parentNode.insertBefore(scopeBar, header.nextSibling);
+      else if (el.parentNode) el.parentNode.insertBefore(scopeBar, el);
+    }
+    const scopeLbl = (typeof getActiveFilterLabel === 'function' && getActiveFilterLabel()) || '';
+    const calEvents = (typeof getMaintenanceEvents === 'function') ? getMaintenanceEvents() : [];
+    if (scopeLbl) {
+      scopeBar.classList.remove('hidden');
+      scopeBar.innerHTML = `<div><i class="fas fa-filter" style="margin-right:6px;"></i>
+        <strong>Active filter:</strong> ${scopeLbl}
+        <span style="font-weight:500;opacity:0.85;"> — ${calEvents.length} calendar event(s) in this scope</span></div>
+        <div class="bar-actions">
+          <button type="button" class="btn-export" onclick="show('dashboard')"><i class="fas fa-tachometer-alt"></i> Change filter</button>
+        </div>`;
+    } else {
+      scopeBar.classList.remove('hidden');
+      scopeBar.innerHTML = `<div><i class="fas fa-globe" style="margin-right:6px;"></i>
+        <strong>Scope:</strong> All Shafts · All Types
+        <span style="font-weight:500;opacity:0.85;"> — ${calEvents.length} event(s) fleet-wide</span></div>`;
+    }
+
     if (calendar) calendar.destroy();
     const isMobile = window.innerWidth <= 768;
     calendar = new FullCalendar.Calendar(el, {
