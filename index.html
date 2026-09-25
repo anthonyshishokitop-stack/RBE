@@ -583,27 +583,31 @@
   <section id="search-status" class="hidden">
   <div class="header-bar"><h1>Search Equipment History</h1></div>
   
-  <form id="search-form" style="max-width:600px;margin:0 auto;">
+  <form id="search-form" style="max-width:640px;margin:0 auto;">
     
+    <p style="font-size:0.9rem;color:var(--text-3);margin-bottom:1.1rem;line-height:1.45;">
+      Flexible search — use any combination: <strong>Equipment ID</strong>, <strong>Date</strong>, and/or <strong>Reason / Fault</strong>.
+      Leave fields blank to broaden results (e.g. Date only = all breakdowns that day; Fault only = all matching reason text).
+    </p>
+
     <div class="form-group">
-      <label>Equipment ID</label>
-      <input id="s-loco" list="loco-list" placeholder="Type or select Equipment ID" style="width:100%;">
+      <label>Equipment ID <span style="font-weight:400;color:var(--text-3);">(optional)</span></label>
+      <input id="s-loco" list="loco-list" placeholder="Type or select Equipment ID — leave blank for all equipment" style="width:100%;">
     </div>
     
     <div class="form-group">
-      <label>Date (optional)</label>
+      <label>Date <span style="font-weight:400;color:var(--text-3);">(optional)</span></label>
       <input id="s-date" type="date">
     </div>
 
     <div class="form-group">
-      <label>Reason / Fault filter (optional)</label>
-      <input id="s-reason" type="text" placeholder="e.g. brake, antenna, battery — filters history text" style="width:100%;">
+      <label>Reason / Fault filter <span style="font-weight:400;color:var(--text-3);">(optional)</span></label>
+      <input id="s-reason" type="text" placeholder="e.g. brake, antenna, battery, siren — filters history text" style="width:100%;">
     </div>
 
     <div style="margin:1.5rem 0;display:flex;align-items:center;gap:8px;">
-     
-      <input type="checkbox" id="show-all-history" checked>
-      <label for="show-all-history" style="margin:0;font-weight:600;">Show Full History (ignore date)</label>
+      <input type="checkbox" id="show-all-history">
+      <label for="show-all-history" style="margin:0;font-weight:600;">Show Full History (ignore date filter when Equipment ID is set)</label>
     </div>
     
     <button type="submit" class="btn btn-primary" style="padding:0.8rem 2rem;font-size:1.05rem;">
@@ -1204,6 +1208,23 @@
   </div>
 
   <!-- Inspection task detail (calendar click) -->
+  <!-- Breakdown Detail Modal (from Search History) -->
+  <div id="breakdown-detail-modal" class="modal">
+    <div class="modal-content" style="max-width:720px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2 style="margin:0;color:var(--primary);font-size:1.25rem;"><i class="fas fa-clipboard-list"></i> Breakdown Detail</h2>
+        <button type="button" onclick="document.getElementById('breakdown-detail-modal').classList.remove('active')"
+          style="background:none;border:none;font-size:1.7rem;cursor:pointer;color:var(--text);line-height:1;">×</button>
+      </div>
+      <div id="breakdown-detail-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.85rem 1.25rem;font-size:0.94rem;">
+        <!-- populated by JS -->
+      </div>
+      <div style="margin-top:1.35rem;text-align:right;">
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('breakdown-detail-modal').classList.remove('active')">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="inspection-task-modal" class="modal">
     <div class="modal-content" style="max-width:640px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:0.75rem;">
@@ -4101,7 +4122,12 @@ const TARGET_FIELDS = {
   timeStart:   ['time reported', 'time start', 'start time', 'time on'],
   operator:    ['reported by', 'operator'],
   action:      ['actual fault found by', 'action taken', 'feedback', 'action', 'fixed y/n'],
-  shaft:       ['conventional', 'shaft', 'section', 'area']
+  shaft:       ['conventional', 'shaft', 'section', 'area'],
+  workOrder:   ['work order number', 'work order', 'job order', 'wo number', 'workorder'],
+  companyNumber: ['company number', 'company no', 'personnel number', 'employee number'],
+  dateFixed:   ['date fixed', 'fixed date'],
+  signedBy:    ['sign by', 'signed by', 'signatory', 'fixed by'],
+  timeFinished: ['time finished', 'time off', 'end time']
 };
   
 function normalizeHeader(h) {
@@ -4248,13 +4274,18 @@ function autoMapColumns(headers) {
     time:        ['time reported'],
     timeStart:   ['time reported'],
     timeOff:     ['time finished'],
+    timeFinished:['time finished'],
     equipmentId: ['loco number'],
     reason:      ['breakdown reported'],
     actualFault: ['actual fault found by'],
     workplace:   ['working place'],
     operator:    ['reported by'],
     shaft:       ['conventional'],
-    action:      ['actual fault found by', 'fixed y/n']
+    action:      ['actual fault found by', 'fixed y/n'],
+    workOrder:   ['work order number'],
+    companyNumber: ['company number'],
+    dateFixed:   ['date fixed'],
+    signedBy:    ['sign by']
   };
 
   for (const [field, names] of Object.entries(exact)) {
@@ -4452,6 +4483,11 @@ function processCurrentSheet() {
       action: actual,
       workplace: workplace,
       shaft: shaft,
+      workOrder: String(get('workOrder') || '').trim(),
+      companyNumber: String(get('companyNumber') || '').trim(),
+      dateFixed: parseExcelDate(get('dateFixed')) || '',
+      signedBy: String(get('signedBy') || '').trim(),
+      timeFinished: parseExcelTime(get('timeFinished') || get('timeOff')) || '',
       sourceSheet: currentSheetName,
       selected: true
     };
@@ -4904,6 +4940,11 @@ window.importSelectedRows = async function () {
         actionTaken: row.action || '',
         shaft: row.shaft || '',
         workplace: row.workplace || '',
+        workOrder: row.workOrder || '',
+        companyNumber: row.companyNumber || '',
+        dateFixed: row.dateFixed || '',
+        signedBy: row.signedBy || '',
+        timeFinished: row.timeFinished || '',
         source: 'Imported Breakdown Report',
         sourceSheet: row.sourceSheet || '',
         createdAt: serverTimestamp()
@@ -5033,16 +5074,16 @@ window.handleFileUpload = window.handleFileUpload;
 // ====================== SEARCH HISTORY (Recent Searches) ======================
 
 // 1. Save every search to Firebase
-async function addToSearchHistory(jobOrderNumber, pdfName = '') {
-  if (!jobOrderNumber) return;
+async function addToSearchHistory(label, detail = '') {
+  if (!label) return;
   try {
     await addDoc(collection(db, "searchHistory"), {
-      jobOrder: jobOrderNumber.toString().trim(),
-      pdfName: pdfName || `Job Order ${jobOrderNumber}`,
+      jobOrder: String(label).trim(),
+      pdfName: detail || String(label).trim(),
       timestamp: serverTimestamp(),
       searchedAt: new Date().toISOString()
     });
-    console.log(`✅ Saved search: ${jobOrderNumber}`);
+    console.log(`✅ Saved search: ${label}`);
   } catch (e) {
     console.error("❌ Error saving search:", e);
   }
@@ -5092,7 +5133,7 @@ function updateHistoryUI(history) {
     li.className = "list-group-item d-flex justify-content-between align-items-center";
     li.innerHTML = `
       <div>
-        <strong>Job Order: ${item.jobOrder}</strong><br>
+        <strong>${item.jobOrder}</strong><br>
         <small class="text-muted">${item.pdfName || ''}</small>
       </div>
       <small class="text-muted">${item.timestamp.toLocaleString()}</small>
@@ -5237,40 +5278,92 @@ function updateHistoryUI(history) {
   function filterSearchHistoryByReason(q) {
     const all = window._lastSearchHistory || [];
     const needle = String(q || '').trim().toLowerCase();
-    const rows = !needle ? all : all.filter(u => {
-      const text = String(u.reason || u.fault || u.description || '').toLowerCase();
+    const indexed = all.map((u, i) => ({ u, i })).filter(({ u }) => {
+      if (!needle) return true;
+      const text = String(u.reason || u.fault || u.description || u.actionTaken || '').toLowerCase();
       return text.includes(needle);
     });
     const tbody = document.querySelector('#search-history-table tbody');
     const label = document.getElementById('hist-count-label');
-    const eqId = window._lastSearchEquipmentId || '';
     if (label) {
-      label.innerHTML = `(${rows.length} unique event${rows.length === 1 ? '' : 's'}` +
+      label.innerHTML = `(${indexed.length} unique event${indexed.length === 1 ? '' : 's'}` +
         (needle ? ` · reason contains "<em>${needle.replace(/</g,'&lt;')}</em>"` : '') + `)`;
     }
     if (!tbody) return;
-    if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-3);">No history rows match this reason/fault filter.</td></tr>`;
+    if (!indexed.length) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--text-3);">No history rows match this reason/fault filter.</td></tr>`;
       return;
     }
-    tbody.innerHTML = rows.map(u => {
-      const fail = u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
-        String(u.isFailure || '').toLowerCase() === 'yes';
-      return `<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:10px;">${u.date || '-'}</td>
-        <td style="padding:10px;">${u.time || '-'}</td>
-        <td style="padding:10px;">${u.status || '-'}</td>
-        <td style="padding:10px;">${u.shift || '-'}</td>
-        <td style="padding:10px;max-width:320px;white-space:normal;">${String(u.reason || u.fault || '-').replace(/</g,'&lt;')}</td>
-        <td style="padding:10px;">${u.downtimeHours ?? u.downtime ?? '0'}</td>
-        <td style="padding:10px;">${fail ? 'Yes' : 'No'}</td>
-      </tr>`;
-    }).join('');
+    tbody.innerHTML = indexed.map(({ u, i }) => renderSearchHistoryRow(u, i)).join('');
   }
   window.filterSearchHistoryByReason = filterSearchHistoryByReason;
 
+  function renderSearchHistoryRow(u, idx) {
+    const fail = u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
+      String(u.isFailure || '').toLowerCase() === 'yes';
+    const equip = String(u.equipmentId || u.locoNumber || '-').replace(/</g,'&lt;');
+    const reason = String(u.reason || u.fault || '-').replace(/</g,'&lt;');
+    const reportedBy = String(u.operator || u.reportedBy || '-').replace(/</g,'&lt;');
+    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer;" title="Click for full breakdown details"
+        onclick="showBreakdownDetail(${idx})">
+      <td style="padding:10px;">${u.date || '-'}</td>
+      <td style="padding:10px;">${u.time || '-'}</td>
+      <td style="padding:10px;font-weight:600;">${equip}</td>
+      <td style="padding:10px;">${u.status || '-'}</td>
+      <td style="padding:10px;">${u.shift || '-'}</td>
+      <td style="padding:10px;max-width:280px;white-space:normal;">${reason}</td>
+      <td style="padding:10px;">${u.downtimeHours ?? u.downtime ?? '0'}</td>
+      <td style="padding:10px;">${fail ? 'Yes' : 'No'}</td>
+      <td style="padding:10px;">${reportedBy}</td>
+    </tr>`;
+  }
 
+  window.showBreakdownDetail = function(idx) {
+    const all = window._lastSearchHistory || [];
+    const u = all[idx];
+    if (!u) return;
+    const body = document.getElementById('breakdown-detail-body');
+    const modal = document.getElementById('breakdown-detail-modal');
+    if (!body || !modal) return;
 
+    const fail = u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
+      String(u.isFailure || '').toLowerCase() === 'yes';
+    const fixedYn = (String(u.status || '').toLowerCase() === 'fixed' || String(u.fixed || '').toUpperCase() === 'YES')
+      ? 'YES' : (fail ? 'NO (still failure context)' : (u.status || '—'));
+
+    const fields = [
+      ['DATE REPORTED', u.date || '—'],
+      ['TIME REPORTED', u.time || '—'],
+      ['Equipment No', u.equipmentId || u.locoNumber || '—'],
+      ['BREAKDOWN REPORTED', u.reason || u.fault || u.description || '—'],
+      ['REPORTED BY', u.operator || u.reportedBy || '—'],
+      ['COMPANY NUMBER (reporter)', u.reporterCompany || u.companyNumber || u.company || '—'],
+      ['WORKING PLACE', u.workplace || u.level || u.workPlace || '—'],
+      ['Operation / Shaft', u.shaft || '—'],
+      ['ACTUAL FAULT FOUND BY ARTISAN / FOREMAN', u.actionTaken || u.actualFault || u.action || '—'],
+      ['TIME FINISHED', u.timeFinished || u.timeOff || u.endTime || '—'],
+      ['FIXED Y/N', fixedYn],
+      ['WORK ORDER NUMBER', u.workOrder || u.workOrderNumber || u.jobOrder || '—'],
+      ['DATE FIXED', u.dateFixed || (String(u.status||'').toLowerCase()==='fixed' ? (u.date||'—') : '—')],
+      ['SIGN BY', u.signedBy || u.signBy || u.fixedBy || '—'],
+      ['COMPANY NUMBER (signer)', u.signerCompany || '—'],
+      ['Shift', u.shift || '—'],
+      ['Downtime (hrs)', u.downtimeHours ?? u.downtime ?? '0'],
+      ['Is Failure', fail ? 'Yes' : 'No'],
+      ['Status', u.status || '—'],
+      ['Source', u.source || u.sourceSheet || '—']
+    ];
+
+    body.innerHTML = fields.map(([k, v]) => {
+      const val = String(v == null || v === '' ? '—' : v).replace(/</g, '&lt;');
+      return `<div style="background:var(--surface-2);border-radius:8px;padding:0.65rem 0.85rem;border:1px solid var(--border);">
+        <div style="font-size:0.78rem;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:0.25rem;">${k}</div>
+        <div style="font-weight:600;color:var(--text);word-break:break-word;">${val}</div>
+      </div>`;
+    }).join('');
+
+    modal.classList.add('active');
+  };
 
 document.getElementById('search-form').addEventListener('submit', async e => {
   e.preventDefault();
@@ -5280,34 +5373,39 @@ document.getElementById('search-form').addEventListener('submit', async e => {
   const reasonFilter = (document.getElementById('s-reason') && document.getElementById('s-reason').value || '').trim().toLowerCase();
   const showAll = document.getElementById('show-all-history').checked;
 
-  if (!equipmentId) {
-    alert("Please enter or select Equipment ID");
+  if (!equipmentId && !dateFilter && !reasonFilter) {
+    alert("Please enter at least one search criterion: Equipment ID, Date, and/or Reason / Fault.");
     return;
   }
-  if (/^unknown$/i.test(equipmentId)) {
+  if (equipmentId && /^unknown$/i.test(equipmentId)) {
     alert("Equipment ID 'Unknown' is not searchable. Use a real equipment number.");
     return;
   }
 
-  // Save to recent searches
-  await addToSearchHistory(equipmentId);
+  // Build a human-readable label for Recent Searches
+  const parts = [];
+  if (equipmentId) parts.push('Equip: ' + equipmentId);
+  if (dateFilter) parts.push('Date: ' + dateFilter);
+  if (reasonFilter) parts.push('Fault: ' + reasonFilter);
+  const searchLabel = parts.join(' · ') || 'Search';
+  await addToSearchHistory(searchLabel, searchLabel);
 
   const resultsContainer = document.getElementById('search-results');
   const profileCard = document.getElementById('equipment-profile');
   const profileBody = document.getElementById('equipment-profile-body');
-  resultsContainer.innerHTML = `<p class="text-info"><strong>Searching for ${equipmentId}...</strong></p>`;
+  resultsContainer.innerHTML = `<p class="text-info"><strong>Searching…</strong> ${searchLabel.replace(/</g,'&lt;')}</p>`;
 
-  // Equipment profile from register (and fallbacks from latest update)
-  try {
-    const eq = (equipment || []).find(e =>
-      String(e.id || e['Loco Number'] || e.locoNumber || '').trim() === equipmentId
-    );
-    const st = (typeof getEquipmentStatus === 'function') ? getEquipmentStatus(equipmentId) : null;
-    if (profileCard && profileBody) {
+  // Equipment profile only when a single Equipment ID is specified
+  if (equipmentId && profileCard && profileBody) {
+    try {
+      const eq = (equipment || []).find(e =>
+        String(e.id || e['Loco Number'] || e.locoNumber || '').trim() === equipmentId
+      );
+      const st = (typeof getEquipmentStatus === 'function') ? getEquipmentStatus(equipmentId) : null;
       const cells = [
         ['Equipment ID', equipmentId],
         ['Equipment Type', (typeof inferEquipmentType === 'function')
-          ? (eq ? inferEquipmentType(eq) : getEquipmentType(equipmentId))
+          ? (eq ? inferEquipmentType(eq) : (typeof getEquipmentType === 'function' ? getEquipmentType(equipmentId) : '—'))
           : ((eq && eq.equipmentType) || '—')],
         ['Operation / Shaft', (eq && (eq.shaft || eq.Operation)) || '—'],
         ['Work Place / Level', (eq && (eq.level || eq.workPlace || eq['Work Place'] || eq.Level)) || '—'],
@@ -5323,55 +5421,77 @@ document.getElementById('search-form').addEventListener('submit', async e => {
          <div style="font-weight:600;color:var(--text);">${String(v).replace(/</g,'&lt;')}</div></div>`
       ).join('');
       profileCard.style.display = 'block';
+    } catch (profErr) {
+      console.warn('profile build failed', profErr);
+      profileCard.style.display = 'none';
     }
-  } catch (profErr) {
-    console.warn('profile build failed', profErr);
+  } else if (profileCard) {
+    profileCard.style.display = 'none';
   }
 
   try {
     let filteredResults = [];
-    try {
-      const q = query(
-        collection(db, "status_updates"),
-        where("equipmentId", "==", equipmentId),
-        orderBy("date", "desc"),
-        orderBy("time", "desc"),
-        limit(100)
-      );
-      const snapshot = await getDocs(q);
-      filteredResults = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-    } catch (qErr) {
-      // Fallback: in-memory updates (no composite index)
-      console.warn('Search query failed, using local updates:', qErr.message);
-      filteredResults = (updates || []).filter(u =>
-        String(u.equipmentId || u.locoNumber || '').trim() === equipmentId
-      );
+
+    // Prefer in-memory updates for flexible multi-field filtering
+    if (Array.isArray(updates) && updates.length) {
+      filteredResults = updates.slice();
+    } else {
+      // Fallback: try Firestore (equipment-scoped only)
+      try {
+        if (equipmentId) {
+          const q = query(
+            collection(db, "status_updates"),
+            where("equipmentId", "==", equipmentId),
+            orderBy("date", "desc"),
+            orderBy("time", "desc"),
+            limit(200)
+          );
+          const snapshot = await getDocs(q);
+          filteredResults = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+        } else {
+          // Broad fetch limited — prefer ensuring updates are loaded
+          if (typeof ensureUpdatesLoaded === 'function') await ensureUpdatesLoaded();
+          filteredResults = Array.isArray(updates) ? updates.slice() : [];
+        }
+      } catch (qErr) {
+        console.warn('Search query failed, using local updates:', qErr.message);
+        filteredResults = (updates || []).slice();
+      }
     }
 
     // Never show Unknown equipment rows
     filteredResults = filteredResults.filter(u => {
-      const id = String(u.equipmentId || '').trim();
+      const id = String(u.equipmentId || u.locoNumber || '').trim();
       return id && !/^unknown$/i.test(id);
     });
 
-    if (dateFilter && !showAll) {
-      filteredResults = filteredResults.filter(u => u.date === dateFilter);
+    // Equipment ID filter
+    if (equipmentId) {
+      filteredResults = filteredResults.filter(u =>
+        String(u.equipmentId || u.locoNumber || '').trim() === equipmentId
+      );
+    }
+
+    // Date filter (unless show-all with equipment)
+    if (dateFilter && !(showAll && equipmentId)) {
+      filteredResults = filteredResults.filter(u => String(u.date || '') === dateFilter);
     }
 
     // Reason / Fault text filter
     if (reasonFilter) {
       filteredResults = filteredResults.filter(u => {
         const text = String(
-          u.reason || u.fault || u.description || u['Reason/Fault'] || ''
+          u.reason || u.fault || u.description || u['Reason/Fault'] || u.actionTaken || ''
         ).toLowerCase();
         return text.includes(reasonFilter);
       });
     }
 
-    // Deduplicate identical events (same date + time + status + reason + downtime)
+    // Deduplicate identical events (same date + time + status + reason + downtime + equip)
     const seen = new Set();
     filteredResults = filteredResults.filter(u => {
       const key = [
+        u.equipmentId || '',
         u.date || '',
         u.time || '',
         String(u.status || '').toLowerCase(),
@@ -5388,18 +5508,34 @@ document.getElementById('search-form').addEventListener('submit', async e => {
       String((b.date || '') + ' ' + (b.time || '')).localeCompare(String((a.date || '') + ' ' + (a.time || '')))
     );
 
+    // Cap display for safety
+    if (filteredResults.length > 500) {
+      filteredResults = filteredResults.slice(0, 500);
+    }
+
     if (!filteredResults.length) {
-      resultsContainer.innerHTML = `<div class="alert-banner alert-predictive" style="margin-top:1rem;">No status history found for <strong>${equipmentId}</strong>${dateFilter && !showAll ? ' on ' + dateFilter : ''}.</div>`;
+      let msg = 'No status history found';
+      if (equipmentId) msg += ` for <strong>${equipmentId.replace(/</g,'&lt;')}</strong>`;
+      if (dateFilter && !(showAll && equipmentId)) msg += ` on <strong>${dateFilter}</strong>`;
+      if (reasonFilter) msg += ` matching fault "<em>${reasonFilter.replace(/</g,'&lt;')}</em>"`;
+      msg += '.';
+      resultsContainer.innerHTML = `<div class="alert-banner alert-predictive" style="margin-top:1rem;">${msg}</div>`;
+      window._lastSearchHistory = [];
       return;
     }
 
-    // Cache for live reason re-filter without re-query
+    // Cache for live reason re-filter and detail popup
     window._lastSearchHistory = filteredResults.slice();
-    window._lastSearchEquipmentId = equipmentId;
+    window._lastSearchEquipmentId = equipmentId || '';
 
     const reasonNote = reasonFilter
       ? ` · reason contains "<em>${String(reasonFilter).replace(/</g,'&lt;')}</em>"`
       : '';
+    const scopeNote = [
+      equipmentId ? `Equipment <strong>${equipmentId.replace(/</g,'&lt;')}</strong>` : 'All equipment',
+      dateFilter && !(showAll && equipmentId) ? `date <strong>${dateFilter}</strong>` : (showAll && equipmentId ? 'full history' : null),
+    ].filter(Boolean).join(' · ');
+
     let html = `
       <div class="quick-find-bar" style="margin-bottom:0.85rem;">
         <label for="hist-reason-filter"><i class="fas fa-filter"></i> Filter displayed history by reason/fault</label>
@@ -5408,9 +5544,9 @@ document.getElementById('search-form').addEventListener('submit', async e => {
           oninput="filterSearchHistoryByReason(this.value)">
         <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);"
           onclick="document.getElementById('hist-reason-filter').value=''; filterSearchHistoryByReason('');">Clear</button>
-        <span class="qf-hint">Live filter on current results</span>
+        <span class="qf-hint">Click any row for full breakdown card (who reported / who fixed)</span>
       </div>
-      <h2 style="margin:0 0 0.75rem;"><i class="fas fa-history"></i> History for <strong>${equipmentId}</strong>
+      <h2 style="margin:0 0 0.75rem;"><i class="fas fa-history"></i> History — ${scopeNote}
         <span id="hist-count-label" style="font-weight:500;color:var(--text-3);font-size:0.95rem;">(${filteredResults.length} unique event${filteredResults.length === 1 ? '' : 's'}${reasonNote})</span>
       </h2>
       <div style="overflow-x:auto;">
@@ -5419,31 +5555,23 @@ document.getElementById('search-form').addEventListener('submit', async e => {
             <tr>
               <th style="padding:12px;text-align:left;">Date</th>
               <th style="padding:12px;text-align:left;">Time</th>
+              <th style="padding:12px;text-align:left;">Equip ID</th>
               <th style="padding:12px;text-align:left;">Status</th>
               <th style="padding:12px;text-align:left;">Shift</th>
               <th style="padding:12px;text-align:left;">Reason / Fault</th>
               <th style="padding:12px;text-align:left;">Downtime (hrs)</th>
               <th style="padding:12px;text-align:left;">Failure</th>
+              <th style="padding:12px;text-align:left;">Reported By</th>
             </tr>
           </thead>
           <tbody>`;
 
-    filteredResults.forEach(u => {
-      const fail = u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true ||
-        String(u.isFailure || '').toLowerCase() === 'yes';
-      html += `
-        <tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:10px;">${u.date || '-'}</td>
-          <td style="padding:10px;">${u.time || '-'}</td>
-          <td style="padding:10px;">${u.status || '-'}</td>
-          <td style="padding:10px;">${u.shift || '-'}</td>
-          <td style="padding:10px;max-width:320px;white-space:normal;">${String(u.reason || u.fault || '-').replace(/</g,'&lt;')}</td>
-          <td style="padding:10px;">${u.downtimeHours ?? u.downtime ?? '0'}</td>
-          <td style="padding:10px;">${fail ? 'Yes' : 'No'}</td>
-        </tr>`;
+    filteredResults.forEach((u, idx) => {
+      html += renderSearchHistoryRow(u, idx);
     });
 
-    html += `</tbody></table></div>`;
+    html += `</tbody></table></div>
+      <p style="margin-top:0.75rem;font-size:0.85rem;color:var(--text-3);"><i class="fas fa-info-circle"></i> Click a row to open the full breakdown detail card (reported by, actual fault, fixed status, work order, etc.).</p>`;
     resultsContainer.innerHTML = html;
 
   } catch (error) {
@@ -5453,7 +5581,6 @@ document.getElementById('search-form').addEventListener('submit', async e => {
 });
   
 
-  
   // ── Theme toggle ────────────────────────────────────────────────
  
   function toggleTheme() {
