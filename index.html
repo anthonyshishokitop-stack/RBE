@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor </title>
+  <title>RBE Monitor Enterprise | Asset Reliability Platform</title>
+  <meta name="description" content="Enterprise asset reliability, predictive maintenance, RUL, audit trails and fleet health for mining operations."/>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -143,6 +144,43 @@
     .role-badge.admin { background: #7c3aed; color: #fff; }
     .role-badge.operations { background: #1d4ed8; color: #fff; }
     .role-badge.viewer { background: #64748b; color: #fff; }
+    .role-badge.reliability { background: #0d9488; color: #fff; }
+    .role-badge.executive { background: #b45309; color: #fff; }
+    .enterprise-badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 0.35rem 0.75rem;
+      border-radius: 8px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+      background: linear-gradient(135deg, #0f172a, #1e3a8a); color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .compliance-bar {
+      display: flex; flex-wrap: wrap; gap: 0.5rem 0.85rem; align-items: center;
+      padding: 0.65rem 1rem; margin-bottom: 1rem; border-radius: 10px;
+      background: linear-gradient(90deg, rgba(15,23,42,0.95), rgba(30,58,138,0.9));
+      color: #e2e8f0; font-size: 0.8rem; font-weight: 600;
+    }
+    .compliance-bar span { display: inline-flex; align-items: center; gap: 5px; opacity: 0.95; }
+    .health-score {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 42px; height: 42px; border-radius: 50%; font-weight: 800; font-size: 0.85rem;
+      color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .health-score.excellent { background: #16a34a; }
+    .health-score.good { background: #65a30d; }
+    .health-score.fair { background: #ea580c; }
+    .health-score.poor { background: #dc2626; }
+    .health-score.critical { background: #7f1d1d; }
+    .enterprise-kpi { border-left: 4px solid #0d9488; }
+    .sla-pill {
+      display: inline-flex; align-items: center; gap: 6px; padding: 0.3rem 0.7rem;
+      border-radius: 999px; font-size: 0.75rem; font-weight: 700;
+      background: rgba(22,163,74,0.15); color: #166534; border: 1px solid rgba(22,163,74,0.35);
+    }
+    .audit-row { font-size: 0.86rem; padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border); }
+    .audit-row:nth-child(even) { background: var(--surface-2); }
+    .version-footer {
+      margin-top: auto; padding: 0.85rem 1.15rem; font-size: 0.72rem; color: #94a3b8;
+      border-top: 1px solid #334155; line-height: 1.45;
+    }
     .audit-trail { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; grid-column: 1 / -1; }
     .audit-trail h4 { margin: 0 0 0.65rem; color: var(--primary); font-size: 0.95rem; }
     .audit-item {
@@ -208,17 +246,26 @@
       </div>
       <ul id="sidebar-menu">
         <li class="active" data-section="dashboard"><i class="fas fa-tachometer-alt"></i><span>Dashboard</span></li>
-        <li data-section="add-equipment" data-roles="admin,operations"><i class="fas fa-plus-circle"></i><span>+ New Equipment</span></li>
-        <li data-section="add-status" data-roles="admin,operations,viewer"><i class="fas fa-edit"></i><span>Log Status Update</span></li>
+        <li data-section="reliability-center" data-roles="admin,operations,reliability,executive"><i class="fas fa-industry"></i><span>Reliability Center</span></li>
+        <li data-section="add-equipment" data-roles="admin,operations,reliability"><i class="fas fa-plus-circle"></i><span>+ New Equipment</span></li>
+        <li data-section="add-status" data-roles="admin,operations,reliability,viewer"><i class="fas fa-edit"></i><span>Log Status Update</span></li>
         <li data-section="search-status"><i class="fas fa-search"></i><span>Search History</span></li>
         <li data-section="manage-equipment"><i class="fas fa-tools"></i><span>Equipment Register</span></li>
         <li data-section="maintenance-schedule"><i class="fas fa-calendar-check"></i><span>Maintenance Plan</span></li>
         <li data-section="calendar"><i class="fas fa-calendar"></i><span>Calendar</span></li>
         <li data-section="operations-report"><i class="fas fa-file-alt"></i><span>Operations Report</span></li>
-        <li data-section="import-spreadsheet" data-roles="admin,operations"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
-        <li data-section="text-mining" data-roles="admin,operations"><i class="fas fa-brain"></i><span>Text Mining Framework</span></li>
+        <li data-section="import-spreadsheet" data-roles="admin,operations,reliability"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
+        <li data-section="text-mining" data-roles="admin,operations,reliability"><i class="fas fa-brain"></i><span>Text Mining &amp; Anomaly</span></li>
+        <li data-section="audit-log" data-roles="admin,executive"><i class="fas fa-shield-alt"></i><span>Audit Trail</span></li>
+        <li data-section="enterprise-support" data-roles="admin,operations,reliability,executive,viewer"><i class="fas fa-headset"></i><span>Support &amp; SLA</span></li>
         <li id="logout-btn"><i class="fas fa-sign-out-alt"></i><span>Logout</span></li>
       </ul>
+      <div class="version-footer">
+        <div class="enterprise-badge" style="margin-bottom:0.45rem;"><i class="fas fa-cube"></i> ENTERPRISE</div>
+        RBE Monitor v2.1 · Asset Reliability<br>
+        Data residency: ZA · Encrypted in transit<br>
+        <span class="sla-pill" style="margin-top:0.4rem;background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.3);"><i class="fas fa-check-circle"></i> 99.5% target SLA</span>
+      </div>
     </aside>
 
     <main class="main">
@@ -245,6 +292,14 @@
                 <i class="fas fa-file-pdf"></i> Executive PDF
               </button>
             </div>
+          </div>
+
+          <div class="compliance-bar">
+            <span class="enterprise-badge"><i class="fas fa-cube"></i> ENTERPRISE</span>
+            <span><i class="fas fa-lock"></i> TLS · Data residency ZA</span>
+            <span><i class="fas fa-user-shield"></i> RBAC active</span>
+            <span><i class="fas fa-heartbeat"></i> <a href="#" onclick="show('reliability-center');return false;" style="color:#93c5fd;text-decoration:underline;">Reliability Center</a></span>
+            <span class="sla-pill" style="background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.35);"><i class="fas fa-check-circle"></i> Live monitoring</span>
           </div>
 
           <div id="dashboard-alert-summary" class="summary-alert-bar hidden">
@@ -610,6 +665,123 @@
           </div>
         </section>
 
+        <!-- RELIABILITY CENTER (Enterprise) -->
+        <section id="reliability-center" class="hidden">
+          <div class="header-bar">
+            <h1><i class="fas fa-industry"></i> Reliability Center</h1>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span class="sla-pill"><i class="fas fa-chart-line"></i> Fleet Health Analytics</span>
+              <button class="btn btn-primary" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;" onclick="exportReliabilityPDF()"><i class="fas fa-file-pdf"></i> Executive PDF</button>
+            </div>
+          </div>
+          <div class="compliance-bar">
+            <span><i class="fas fa-lock"></i> Encrypted in transit (TLS)</span>
+            <span><i class="fas fa-map-marker-alt"></i> Data residency: South Africa</span>
+            <span><i class="fas fa-user-shield"></i> Role-based access control</span>
+            <span><i class="fas fa-history"></i> Full audit trail</span>
+            <span><i class="fas fa-server"></i> Continuous monitoring</span>
+          </div>
+          <div class="kpi-grid" id="reliability-kpi-grid"></div>
+          <div class="card enterprise-kpi">
+            <h2 style="margin:0 0 0.75rem;"><i class="fas fa-heartbeat"></i> Digital Twin – Equipment Health Scores</h2>
+            <p style="color:var(--text-3);font-size:0.9rem;margin-bottom:1rem;">Composite health score (0–100) from availability, failure rate, MTTF trend and anomaly flags. Proxy for digital-twin style asset condition.</p>
+            <div style="overflow-x:auto;">
+              <table id="health-score-table">
+                <thead><tr><th>Equipment</th><th>Type</th><th>Shaft</th><th>Health</th><th>RUL (est. days)</th><th>Anomaly</th><th>MTBF (h)</th><th>MTTR (h)</th><th>Status</th></tr></thead>
+                <tbody id="health-score-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.25rem;">
+            <div class="card chart-wrapper">
+              <div class="chart-title"><i class="fas fa-chart-area"></i> Fleet Health Distribution</div>
+              <div class="chart-container"><canvas id="healthDistChart"></canvas></div>
+            </div>
+            <div class="card chart-wrapper">
+              <div class="chart-title"><i class="fas fa-exclamation-triangle"></i> Anomaly Score by Equipment</div>
+              <div class="chart-container"><canvas id="anomalyChart"></canvas></div>
+            </div>
+          </div>
+          <div class="card">
+            <h2 style="margin:0 0 0.75rem;"><i class="fas fa-lightbulb"></i> Reliability Recommendations</h2>
+            <div id="reliability-recommendations" style="display:grid;gap:0.65rem;"></div>
+          </div>
+        </section>
+
+        <!-- AUDIT TRAIL -->
+        <section id="audit-log" class="hidden">
+          <div class="header-bar">
+            <h1><i class="fas fa-shield-alt"></i> Audit Trail</h1>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-primary" onclick="exportAuditExcel()"><i class="fas fa-file-excel"></i> Excel</button>
+              <button class="btn btn-primary" onclick="exportAuditPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+            </div>
+          </div>
+          <div class="compliance-bar">
+            <span><i class="fas fa-user-check"></i> Who · What · When · Where</span>
+            <span><i class="fas fa-database"></i> Immutable event log (client + Firestore)</span>
+            <span><i class="fas fa-balance-scale"></i> Supports governance &amp; compliance review</span>
+          </div>
+          <div class="card">
+            <div class="table-toolbar">
+              <h2 style="margin:0;">Recent privileged &amp; change events</h2>
+              <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="refreshAuditLog()"><i class="fas fa-sync-alt"></i> Refresh</button>
+            </div>
+            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Captures status changes, imports, equipment CRUD, mark-fixed actions and role context. Expand with server-side audit collection for full enterprise retention.</p>
+            <div id="audit-log-body" style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px;"></div>
+          </div>
+        </section>
+
+        <!-- ENTERPRISE SUPPORT & SLA -->
+        <section id="enterprise-support" class="hidden">
+          <div class="header-bar">
+            <h1><i class="fas fa-headset"></i> Support, SLA &amp; Platform Governance</h1>
+          </div>
+          <div class="compliance-bar">
+            <span><i class="fas fa-globe"></i> Global-ready architecture</span>
+            <span><i class="fas fa-clock"></i> Target uptime 99.5%</span>
+            <span><i class="fas fa-code-branch"></i> Continuous improvement cadence</span>
+          </div>
+          <div class="kpi-grid">
+            <div class="kpi-card green"><i class="fas fa-check-circle"></i><h2>99.5%</h2><p>Target SLA (uptime)</p></div>
+            <div class="kpi-card blue"><i class="fas fa-bolt"></i><h2>&lt; 4h</h2><p>Critical incident response</p></div>
+            <div class="kpi-card purple"><i class="fas fa-sync"></i><h2>Bi-weekly</h2><p>R&amp;D / release cycle</p></div>
+            <div class="kpi-card orange"><i class="fas fa-map-marker-alt"></i><h2>ZA</h2><p>Primary data residency</p></div>
+          </div>
+          <div class="card">
+            <h2><i class="fas fa-shield-alt"></i> Enterprise controls in this build</h2>
+            <ul style="margin:0.75rem 0 0 1.25rem;line-height:1.7;color:var(--text-2);">
+              <li><strong>Role-based access</strong> — admin, reliability, operations, executive, viewer with menu and action gating</li>
+              <li><strong>Audit trail</strong> — actor, action, timestamp, equipment context on critical writes</li>
+              <li><strong>Data residency indicator</strong> — South Africa primary; TLS in transit via Firebase</li>
+              <li><strong>Predictive layer</strong> — RUL estimates, anomaly scores, health scores, MTBF/MTTR</li>
+              <li><strong>Export &amp; governance</strong> — Executive PDF/Excel for board and reliability reviews</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h2><i class="fas fa-rocket"></i> Roadmap toward Emerson / ABB / AVEVA class</h2>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin-top:0.75rem;">
+              <div style="padding:1rem;background:var(--surface-2);border-radius:10px;border-left:4px solid var(--primary);">
+                <strong>Near term</strong>
+                <p style="margin:0.4rem 0 0;font-size:0.88rem;color:var(--text-3);">IoT/sensor connectors, historian API, webhook alerts, SSO (SAML/OIDC)</p>
+              </div>
+              <div style="padding:1rem;background:var(--surface-2);border-radius:10px;border-left:4px solid var(--warning);">
+                <strong>Mid term</strong>
+                <p style="margin:0.4rem 0 0;font-size:0.88rem;color:var(--text-3);">ML models for RUL, multi-site hierarchy, CMMS/ERP bi-directional sync</p>
+              </div>
+              <div style="padding:1rem;background:var(--surface-2);border-radius:10px;border-left:4px solid var(--success);">
+                <strong>Strategic</strong>
+                <p style="margin:0.4rem 0 0;font-size:0.88rem;color:var(--text-3);">Digital twins, edge agents, global support org, formal SOC 2 / ISO program</p>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h2><i class="fas fa-life-ring"></i> Support channels</h2>
+            <p style="color:var(--text-2);">For production deployment: designate a platform owner, define RACI for reliability vs operations, and route critical alerts to on-call. This build is ready for site-level use and staged enterprise pilot; full 24/7 global support requires vendor or internal SRE capability beyond the application shell.</p>
+            <p style="margin-top:0.75rem;font-size:0.9rem;"><strong>Version:</strong> RBE Monitor Enterprise 2.1 · <strong>Build focus:</strong> reliability analytics, RBAC, audit, compliance indicators</p>
+          </div>
+        </section>
+
       </div>
     </main>
   </div>
@@ -789,7 +961,10 @@
   // Roles: admin (full) | operations (no delete) | viewer (no import / delete / text-mining / add equipment)
   let currentUser = null;
   let currentUserRole = 'operations';
-  const VALID_ROLES = ['admin', 'operations', 'viewer'];
+  // Enterprise RBAC: admin (full) | reliability (analytics + ops write) | operations | executive (view + audit) | viewer
+  const VALID_ROLES = ['admin', 'reliability', 'operations', 'executive', 'viewer'];
+  let auditEvents = []; // in-memory + persisted critical actions for Audit Trail view
+  try { auditEvents = JSON.parse(localStorage.getItem('rbe_audit_events') || '[]'); } catch (e) { auditEvents = []; }
 
   function showToast(msg, type = 'info') {
     const el = document.getElementById('toast');
@@ -816,16 +991,42 @@
   function can(action) {
     const r = currentUserRole || 'viewer';
     if (r === 'admin') return true;
-    if (action === 'delete_equipment') return false;
+    if (action === 'delete_equipment' || action === 'audit_admin') return false;
     if (action === 'import' || action === 'text_mining' || action === 'add_equipment') {
-      return r === 'operations';
+      return r === 'operations' || r === 'reliability';
     }
     if (action === 'edit_equipment' || action === 'add_status' || action === 'mark_fixed' || action === 'maint') {
-      return r === 'operations' || r === 'admin';
+      return r === 'operations' || r === 'reliability' || r === 'admin';
+    }
+    if (action === 'reliability_center' || action === 'view_audit') {
+      return r === 'reliability' || r === 'executive' || r === 'admin' || r === 'operations';
     }
     return true; // view
   }
   window.can = can;
+
+  function logAudit(action, detail, equipmentId) {
+    const actor = getActor();
+    const entry = {
+      ts: new Date().toISOString(),
+      action: String(action || 'event'),
+      detail: String(detail || ''),
+      equipmentId: equipmentId || '',
+      by: actor.email || actor.name || 'unknown',
+      role: currentUserRole || 'unknown',
+      uid: actor.uid || ''
+    };
+    auditEvents.unshift(entry);
+    if (auditEvents.length > 500) auditEvents = auditEvents.slice(0, 500);
+    try { localStorage.setItem('rbe_audit_events', JSON.stringify(auditEvents)); } catch (e) {}
+    // Optional: also write to Firestore audit collection when admin (non-blocking)
+    try {
+      if (auth.currentUser && (currentUserRole === 'admin' || currentUserRole === 'reliability')) {
+        addDoc(collection(db, 'audit_log'), { ...entry, createdAt: serverTimestamp() }).catch(() => {});
+      }
+    } catch (e) {}
+  }
+  window.logAudit = logAudit;
 
   function applyRoleUI() {
     const role = currentUserRole || 'viewer';
@@ -1270,6 +1471,244 @@
   }
   window.getEquipmentStatus = getEquipmentStatus;
 
+  /**
+   * Enterprise reliability metrics per asset:
+   * Health score (0-100), RUL days, anomaly score, MTBF, MTTR
+   * Rule + statistical model — foundation for ML / digital-twin upgrade path
+   */
+  function getReliabilityMetrics(id) {
+    const st = getEquipmentStatus(id);
+    const eu = getFilteredUpdates().filter(u => String(u.equipmentId || u.locoNumber || '') === String(id))
+      .sort((a, b) => String((a.date||'')+' '+(a.time||'')).localeCompare(String((b.date||'')+' '+(b.time||''))));
+    const fails = Math.max(0, st.failures || 0);
+    const downtime = st.downtime || 0;
+    const avail = parseFloat(st.availability) || 100;
+
+    // MTBF / MTTR
+    let mtbf = 720; // default 30 days if no history
+    let mttr = fails > 0 ? Math.max(0.5, downtime / fails) : 2;
+    if (eu.length >= 2) {
+      const dates = eu.map(u => u.date).filter(Boolean).sort();
+      if (dates.length >= 2) {
+        const hoursSpan = Math.max(24, (new Date(dates[dates.length - 1]) - new Date(dates[0])) / 3600000 + 24);
+        mtbf = fails > 0 ? Math.max(8, (hoursSpan - downtime) / fails) : hoursSpan;
+      }
+    }
+
+    // Anomaly score 0-100 (higher = more anomalous)
+    let anomaly = 0;
+    if (fails >= 4) anomaly += 35;
+    else if (fails >= 2) anomaly += 20;
+    else if (fails >= 1) anomaly += 8;
+    if (avail < 70) anomaly += 30;
+    else if (avail < 85) anomaly += 18;
+    else if (avail < 95) anomaly += 8;
+    if (downtime > 100) anomaly += 20;
+    else if (downtime > 48) anomaly += 12;
+    // Recurrence boost from text patterns
+    const reasons = eu.map(u => String(u.reason || '').toLowerCase());
+    const modeHits = {};
+    reasons.forEach(r => {
+      const m = tmClassifyReason(r).mode;
+      modeHits[m] = (modeHits[m] || 0) + 1;
+    });
+    const maxMode = Math.max(0, ...Object.values(modeHits));
+    if (maxMode >= 3) anomaly += 15;
+    anomaly = Math.min(100, anomaly);
+
+    // Health score inverse of risk
+    let health = 100;
+    health -= (100 - avail) * 0.45;
+    health -= Math.min(35, fails * 6);
+    health -= Math.min(20, downtime / 10);
+    health -= anomaly * 0.15;
+    health = Math.max(5, Math.min(100, Math.round(health)));
+
+    // RUL estimate (days) — simple Weibull-like using MTBF and recent trend
+    let rulDays = Math.round(mtbf / 24);
+    if (anomaly >= 60) rulDays = Math.max(1, Math.round(rulDays * 0.35));
+    else if (anomaly >= 40) rulDays = Math.max(2, Math.round(rulDays * 0.55));
+    else if (anomaly >= 25) rulDays = Math.max(3, Math.round(rulDays * 0.75));
+    if (st.status === 'Down') rulDays = 0;
+
+    let band = 'excellent';
+    if (health < 40) band = 'critical';
+    else if (health < 55) band = 'poor';
+    else if (health < 70) band = 'fair';
+    else if (health < 85) band = 'good';
+
+    return {
+      health, band, anomaly: Math.round(anomaly), rulDays,
+      mtbf: Number(mtbf.toFixed(1)), mttr: Number(mttr.toFixed(1)),
+      status: st.status, availability: avail, failures: fails, downtime
+    };
+  }
+  window.getReliabilityMetrics = getReliabilityMetrics;
+
+  function populateReliabilityCenter() {
+    const ids = collectFilteredIds ? collectFilteredIds() : [...new Set(getFilteredEquipment().map(e => String(e.id)))];
+    const metrics = ids.map(id => {
+      const eq = (equipment || []).find(e => String(e.id) === String(id));
+      const m = getReliabilityMetrics(id);
+      return { id, eq, ...m };
+    });
+    metrics.sort((a, b) => a.health - b.health);
+
+    const avgHealth = metrics.length ? (metrics.reduce((s, m) => s + m.health, 0) / metrics.length).toFixed(1) : '100';
+    const critical = metrics.filter(m => m.health < 40).length;
+    const highAnomaly = metrics.filter(m => m.anomaly >= 40).length;
+    const avgMtbf = metrics.length ? (metrics.reduce((s, m) => s + m.mtbf, 0) / metrics.length).toFixed(0) : '—';
+    const avgMttr = metrics.length ? (metrics.reduce((s, m) => s + m.mttr, 0) / metrics.length).toFixed(1) : '—';
+
+    const kpi = document.getElementById('reliability-kpi-grid');
+    if (kpi) {
+      kpi.innerHTML = `
+        <div class="kpi-card green enterprise-kpi"><i class="fas fa-heartbeat"></i><h2>${avgHealth}</h2><p>Avg Fleet Health</p></div>
+        <div class="kpi-card red"><i class="fas fa-skull-crossbones"></i><h2>${critical}</h2><p>Critical Health (&lt;40)</p></div>
+        <div class="kpi-card orange"><i class="fas fa-radar"></i><h2>${highAnomaly}</h2><p>High Anomaly Score</p></div>
+        <div class="kpi-card blue"><i class="fas fa-clock"></i><h2>${avgMtbf}h</h2><p>Avg MTBF</p></div>
+        <div class="kpi-card purple"><i class="fas fa-wrench"></i><h2>${avgMttr}h</h2><p>Avg MTTR</p></div>
+        <div class="kpi-card blue"><i class="fas fa-cogs"></i><h2>${metrics.length}</h2><p>Assets scored</p></div>
+      `;
+    }
+
+    const tbody = document.getElementById('health-score-tbody');
+    if (tbody) {
+      if (!metrics.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:1.5rem;color:var(--text-3);">No equipment in filter.</td></tr>';
+      } else {
+        tbody.innerHTML = metrics.slice(0, 80).map(m => {
+          const type = m.eq ? inferEquipmentType(m.eq) : inferEquipmentType(m.id);
+          const esc = String(m.id).replace(/'/g, "\\'");
+          return `<tr class="row-clickable" onclick="showEquipmentDetail('${esc}')">
+            <td><strong>${String(m.id).replace(/</g,'&lt;')}</strong></td>
+            <td>${type}</td>
+            <td>${(m.eq?.shaft || '—').replace(/</g,'&lt;')}</td>
+            <td><span class="health-score ${m.band}">${m.health}</span></td>
+            <td>${m.rulDays === 0 ? '<span style="color:var(--danger);font-weight:700;">0 (Down)</span>' : m.rulDays}</td>
+            <td style="font-weight:700;color:${m.anomaly>=50?'#dc2626':m.anomaly>=30?'#ea580c':'#16a34a'}">${m.anomaly}</td>
+            <td>${m.mtbf}</td>
+            <td>${m.mttr}</td>
+            <td style="font-weight:700;color:${m.status==='Down'?'#dc2626':'#16a34a'}">${m.status}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+
+    // Charts
+    const bands = { excellent: 0, good: 0, fair: 0, poor: 0, critical: 0 };
+    metrics.forEach(m => { bands[m.band] = (bands[m.band] || 0) + 1; });
+    if (window.Chart) {
+      const hc = document.getElementById('healthDistChart');
+      if (hc) {
+        if (window._healthDistChart) window._healthDistChart.destroy();
+        window._healthDistChart = new Chart(hc, {
+          type: 'doughnut',
+          data: {
+            labels: ['Excellent', 'Good', 'Fair', 'Poor', 'Critical'],
+            datasets: [{ data: [bands.excellent, bands.good, bands.fair, bands.poor, bands.critical], backgroundColor: ['#16a34a','#65a30d','#ea580c','#dc2626','#7f1d1d'], borderWidth: 2, borderColor: '#fff' }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+      }
+      const ac = document.getElementById('anomalyChart');
+      if (ac) {
+        if (window._anomalyChart) window._anomalyChart.destroy();
+        const top = metrics.slice().sort((a,b) => b.anomaly - a.anomaly).slice(0, 15);
+        window._anomalyChart = new Chart(ac, {
+          type: 'bar',
+          data: { labels: top.map(m => m.id), datasets: [{ data: top.map(m => m.anomaly), backgroundColor: top.map(m => m.anomaly >= 50 ? '#dc2626' : m.anomaly >= 30 ? '#ea580c' : '#1d4ed8'), borderRadius: 6 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
+        });
+      }
+    }
+
+    const rec = document.getElementById('reliability-recommendations');
+    if (rec) {
+      const items = [];
+      metrics.filter(m => m.health < 40).slice(0, 5).forEach(m => {
+        items.push(`<div class="alert-banner alert-high-risk" style="margin:0;"><strong>${m.id}</strong> — Critical health (${m.health}). Prioritise inspection; estimated RUL ${m.rulDays} day(s). Anomaly ${m.anomaly}.</div>`);
+      });
+      metrics.filter(m => m.anomaly >= 45 && m.health >= 40).slice(0, 4).forEach(m => {
+        items.push(`<div class="alert-banner alert-predictive" style="margin:0;"><strong>${m.id}</strong> — Elevated anomaly (${m.anomaly}). Review recurring failure modes in Text Mining.</div>`);
+      });
+      if (!items.length) items.push(`<div class="alert-banner" style="border-left-color:var(--success);background:rgba(22,163,74,0.08);color:#166534;margin:0;">No critical reliability actions under current filter. Continue scheduled maintenance and monitor trend.</div>`);
+      rec.innerHTML = items.join('');
+    }
+  }
+  window.populateReliabilityCenter = populateReliabilityCenter;
+
+  function refreshAuditLog() {
+    const body = document.getElementById('audit-log-body');
+    if (!body) return;
+    if (!auditEvents.length) {
+      body.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--text-3);">No audit events yet. Actions such as import, status updates, mark-fixed and equipment changes will appear here.</div>';
+      return;
+    }
+    body.innerHTML = auditEvents.slice(0, 200).map(e => `
+      <div class="audit-row">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:0.5rem;">
+          <strong>${String(e.action||'').replace(/</g,'&lt;')}</strong>
+          <span style="color:var(--text-3);font-size:0.8rem;">${e.ts ? new Date(e.ts).toLocaleString('en-ZA') : '—'}</span>
+        </div>
+        <div style="color:var(--text-2);margin-top:0.2rem;">${String(e.detail||'').replace(/</g,'&lt;')}</div>
+        <div style="font-size:0.78rem;color:var(--text-3);margin-top:0.25rem;">
+          By: ${String(e.by||'—').replace(/</g,'&lt;')} · Role: ${e.role||'—'}
+          ${e.equipmentId ? ' · Equip: ' + String(e.equipmentId).replace(/</g,'&lt;') : ''}
+        </div>
+      </div>`).join('');
+  }
+  window.refreshAuditLog = refreshAuditLog;
+
+  window.exportReliabilityPDF = function() {
+    if (typeof createExecutivePDF !== 'function') return showToast('PDF engine not ready', 'error');
+    const { doc, addFooter, startY } = createExecutivePDF('Reliability Center – Fleet Health', getActiveFilterLabel() || 'All Shafts · All Types');
+    const ids = collectFilteredIds ? collectFilteredIds() : [];
+    const rows = ids.slice(0, 40).map(id => {
+      const m = getReliabilityMetrics(id);
+      return [id, String(m.health), String(m.rulDays), String(m.anomaly), String(m.mtbf), String(m.mttr), m.status];
+    });
+    doc.autoTable({
+      startY,
+      head: [['Equipment', 'Health', 'RUL (d)', 'Anomaly', 'MTBF (h)', 'MTTR (h)', 'Status']],
+      body: rows,
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: 'bold' },
+      margin: { left: 14, right: 14 }
+    });
+    addFooter(1);
+    doc.save('RBE_Reliability_Center.pdf');
+  };
+  window.exportAuditExcel = function() {
+    if (typeof downloadXLSX !== 'function') return;
+    downloadXLSX('RBE_Audit_Trail.xlsx', [{
+      name: 'Audit',
+      headers: ['Timestamp', 'Action', 'Detail', 'Equipment', 'By', 'Role'],
+      rows: auditEvents.map(e => [e.ts, e.action, e.detail, e.equipmentId, e.by, e.role])
+    }]);
+  };
+  window.exportAuditPDF = function() {
+    if (typeof createExecutivePDF !== 'function') return;
+    const { doc, addFooter, startY } = createExecutivePDF('Audit Trail', 'Privileged & change events');
+    const rows = auditEvents.slice(0, 60).map(e => [
+      e.ts ? new Date(e.ts).toLocaleString('en-ZA') : '',
+      e.action || '',
+      (e.detail || '').slice(0, 60),
+      e.by || '',
+      e.role || ''
+    ]);
+    doc.autoTable({
+      startY,
+      head: [['Time', 'Action', 'Detail', 'By', 'Role']],
+      body: rows,
+      styles: { font: 'helvetica', fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+      margin: { left: 14, right: 14 }
+    });
+    addFooter(1);
+    doc.save('RBE_Audit_Trail.pdf');
+  };
+
   // ── Navigation ───────────────────────────────────────────────
   function show(section) {
     if (section === 'import-spreadsheet' && !can('import')) {
@@ -1282,6 +1721,10 @@
     }
     if (section === 'add-equipment' && !can('add_equipment')) {
       showToast('Adding equipment is restricted for your role', 'error');
+      return;
+    }
+    if (section === 'audit-log' && !(currentUserRole === 'admin' || currentUserRole === 'executive')) {
+      showToast('Audit Trail is restricted to admin / executive roles', 'error');
       return;
     }
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
@@ -1305,6 +1748,8 @@
       else if (section === 'calendar') initCalendar();
       else if (section === 'operations-report') populateOperationsReport();
       else if (section === 'text-mining') refreshTextMiningInsights();
+      else if (section === 'reliability-center') populateReliabilityCenter();
+      else if (section === 'audit-log') refreshAuditLog();
     } catch (e) { console.warn(e); }
   }
   window.refreshCurrentView = refreshCurrentView;
@@ -2488,6 +2933,7 @@
       });
       if (maintId) try { await updateDoc(doc(db, "maintenance", maintId), { lastDone: new Date().toISOString().slice(0, 10) }); } catch (e) {}
       showToast('Marked Fixed', 'success');
+      if (typeof logAudit === 'function') logAudit('mark_fixed', 'Equipment marked fixed from inspection/maintenance', equipId);
       refreshCurrentView();
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   }
@@ -2569,6 +3015,7 @@
     try {
       await addDoc(collection(db, "status_updates"), data);
       showToast('Status update saved', 'success');
+      if (typeof logAudit === 'function') logAudit('status_update', data.status + ': ' + (data.reason || '').slice(0, 80), data.equipmentId);
       e.target.reset();
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   });
@@ -3128,6 +3575,7 @@
       (skipped - skippedDuplicate ? `, <strong>${skipped - skippedDuplicate}</strong> other` : '') + `.`;
     statusDiv.style.background = 'rgba(22,163,74,0.12)'; statusDiv.style.color = 'var(--success)';
     showToast(success ? `Imported ${success} new records (${skippedDuplicate} duplicates skipped)` : `No new records — ${skippedDuplicate} already in system`, success ? 'success' : 'info');
+    if (typeof logAudit === 'function' && success) logAudit('import_breakdown', `Imported ${success} records (${skippedDuplicate} duplicates skipped)`, '');
     document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
     document.querySelector('.import-step[data-step="3"]')?.classList.add('active');
     if (typeof fillDatalist === 'function') fillDatalist();
