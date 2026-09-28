@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor – Executive Operations Platform</title>
+  <title>RBE Monitor </title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -779,6 +779,15 @@
     const s = String(id || '').trim();
     return !s || /^(unknown|n\/?a|none|null|undefined|-|—)$/i.test(s);
   }
+  function sanitizeEquipmentId(raw) {
+    let id = String(raw || '').trim();
+    if (!id || isUnknownEquipmentId(id)) return null;
+    id = id.replace(/[\/\\#?[\]]+/g, '-').replace(/\s+/g, ' ').trim();
+    id = id.replace(/-+/g, '-').replace(/^-|-$/g, '');
+    if (id === '.' || id === '..' || !id) return null;
+    if (id.length > 200) id = id.slice(0, 200);
+    return id;
+  }
   function getFilteredEquipment() {
     let list = equipment || [];
     if (currentShaftFilter) list = list.filter(e => String(e.shaft || '').trim() === currentShaftFilter);
@@ -823,13 +832,30 @@
   }
   window.clearSystemFilters = clearSystemFilters;
 
+  const RBE_SHAFTS = [
+    '0 Shaft','1 Shaft','2 Shaft','3 Shaft','4 Shaft','5 Shaft','6 Shaft','7 Shaft','7A Shaft','8 Shaft','9 Shaft','10 Shaft','10D',
+    '11 Shaft','11C Shaft','11D','12 Shaft','12 North Shaft','12S','14 Shaft','14D','16 Shaft','17 Shaft','20 Shaft',
+    'TRANSPORT','CONCENTRATOR','SMELTER','CLAPHAM','DRIKOP','E&F Shaft','NORTH SHAFT','SOUTH SHAFT','STYLDRIFT','Winnaarshoek','Forest Hill',
+    'Offset Underground','UG2 Main Decline','Merensky Main Decline','UG2 North Decline',
+    '367-KT (Kalkfontein)','368-KT (Buffelshoek)','370-KT (Richmond)','372-KT (Dwarsrivier)',
+    '373-KT (De Grooteboom)','374-KT (Tweefontein)','Leeuwkop Shaft','UTS'
+  ];
+
   function populateShaftFilter() {
+    const shafts = RBE_SHAFTS.slice();
+    // Also include any shafts already present on equipment (future-proof)
+    (equipment || []).forEach(e => {
+      const s = String(e.shaft || '').trim();
+      if (s && !shafts.includes(s)) shafts.push(s);
+    });
+    shafts.sort();
+
     const sel = document.getElementById('shaft-filter');
-    if (!sel) return;
-    const current = sel.value;
-    const shafts = [...new Set((equipment || []).map(e => String(e.shaft || '').trim()).filter(Boolean))].sort();
-    sel.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
-    if (current && shafts.includes(current)) sel.value = current;
+    if (sel) {
+      const current = sel.value;
+      sel.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+      if (current && shafts.includes(current)) sel.value = current;
+    }
     const tsel = document.getElementById('type-filter');
     if (tsel) {
       const curT = tsel.value;
@@ -841,6 +867,18 @@
       const cur = addSel.value;
       addSel.innerHTML = '<option value="">Select Operation</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
       if (cur) addSel.value = cur;
+    }
+    const editShaft = document.getElementById('edit-eq-shaft');
+    if (editShaft) {
+      const curE = editShaft.value;
+      editShaft.innerHTML = '<option value="">— Unassigned —</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+      if (curE) editShaft.value = curE;
+    }
+    const importShaft = document.getElementById('import-shaft');
+    if (importShaft) {
+      const curI = importShaft.value;
+      importShaft.innerHTML = '<option value="">Auto-detect</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+      if (curI) importShaft.value = curI;
     }
   }
   function fillDatalist() {
@@ -1914,18 +1952,22 @@
 
   document.getElementById('add-eq-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const id = document.getElementById('loco-number').value.trim().replace(/[\/\\#?[\]]+/g, '-');
-    if (!id) return alert('ID required');
+    const rawId = document.getElementById('loco-number').value.trim();
+    const id = sanitizeEquipmentId(rawId);
+    if (!id) return alert('Valid Equipment ID required (invalid characters such as / will be cleaned)');
     try {
-      await setDoc(doc(db, "equipment", id), {
+      const payload = {
         shaft: document.getElementById('shaft').value,
         level: document.getElementById('level').value,
         equipmentType: document.getElementById('eq-type').value || '',
         oem: document.getElementById('eq-oem').value.trim() || '',
         locoSize: document.getElementById('loco-size').value,
         section: document.getElementById('section').value
-      }, { merge: true });
-      alert('Saved'); e.target.reset();
+      };
+      if (rawId && rawId !== id) payload.originalId = rawId;
+      await setDoc(doc(db, "equipment", id), payload, { merge: true });
+      alert(rawId !== id ? `Equipment saved as "${id}"` : 'Equipment saved');
+      e.target.reset();
     } catch (err) { alert('Error: ' + err.message); }
   });
 
@@ -2145,10 +2187,10 @@
   }
   function fillImportShaftSelect() {
     const sel = document.getElementById('import-shaft');
-    if (!sel || sel.options.length > 2) return;
-    ['0 Shaft','1 Shaft','2 Shaft','3 Shaft','4 Shaft','5 Shaft','6 Shaft','7 Shaft','7A Shaft','8 Shaft','9 Shaft','10 Shaft','11 Shaft','12 Shaft','14 Shaft','16 Shaft','17 Shaft','20 Shaft','TRANSPORT','CONCENTRATOR','SMELTER','STYLDRIFT'].forEach(s => {
-      const opt = document.createElement('option'); opt.value = s; opt.textContent = s; sel.appendChild(opt);
-    });
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">Auto-detect</option>' + RBE_SHAFTS.map(s => `<option value="${s}">${s}</option>`).join('');
+    if (prev) sel.value = prev;
   }
   window.handleFileUpload = function() {
     fillImportShaftSelect();
@@ -2282,29 +2324,42 @@
     const toImport = excelData.filter(r => r.selected);
     if (!toImport.length) return alert('No rows selected');
     const statusDiv = document.getElementById('import-status');
-    statusDiv.style.display = 'block'; statusDiv.innerHTML = `Importing ${toImport.length}…`;
+    statusDiv.style.display = 'block';
+    statusDiv.style.background = 'rgba(29,78,216,0.08)';
+    statusDiv.style.color = 'var(--primary)';
+    statusDiv.innerHTML = `Importing <strong>${toImport.length}</strong> records…`;
     let success = 0, skipped = 0;
-    for (const row of toImport) {
+    for (let i = 0; i < toImport.length; i++) {
+      const row = toImport[i];
       try {
-        const equipId = String(row.equipmentId || '').replace(/[\/\\#?[\]]+/g, '-').trim();
-        if (!equipId || /^unknown$/i.test(equipId)) { skipped++; continue; }
-        await addDoc(collection(db, 'status_updates'), {
-          equipmentId: equipId, date: row.date, time: row.time, status: 'Down', shift: row.shift,
+        const rawId = String(row.equipmentId || '').trim();
+        const equipId = sanitizeEquipmentId(rawId);
+        if (!equipId) { skipped++; continue; }
+        const statusPayload = {
+          equipmentId: equipId, date: row.date, time: row.time, status: 'Down', shift: row.shift || 'Night',
           reason: row.reason, downtimeHours: Number(row.downtimeHours) || 0, isFailure: '1',
           operator: row.operator || '', shaft: row.shaft || '', workplace: row.workplace || '',
           source: 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp()
-        });
+        };
+        if (rawId && rawId !== equipId) statusPayload.originalEquipmentId = rawId;
+        await addDoc(collection(db, 'status_updates'), statusPayload);
         await setDoc(doc(db, 'equipment', equipId), {
-          shaft: row.shaft || '', level: row.workplace || '', equipmentType: inferEquipmentType(equipId),
+          shaft: row.shaft || '', level: row.workplace || '',
+          equipmentType: (typeof inferEquipmentType === 'function') ? inferEquipmentType(equipId) : 'Loco',
           source: 'Imported Breakdown Report', updatedAt: new Date().toISOString()
         }, { merge: true });
         success++;
       } catch (e) { skipped++; }
+      if ((i + 1) % 20 === 0 || i === toImport.length - 1) {
+        statusDiv.innerHTML = `Importing… <strong>${success}</strong> saved, <strong>${skipped}</strong> skipped (${i + 1}/${toImport.length})`;
+      }
     }
     statusDiv.innerHTML = `🎉 Imported <strong>${success}</strong>. Skipped ${skipped}.`;
     statusDiv.style.background = 'rgba(22,163,74,0.12)'; statusDiv.style.color = 'var(--success)';
     document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
     document.querySelector('.import-step[data-step="3"]')?.classList.add('active');
+    if (typeof fillDatalist === 'function') fillDatalist();
+    if (typeof populateShaftFilter === 'function') populateShaftFilter();
     if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
     if (typeof populateDashboard === 'function') populateDashboard();
     show('text-mining');
@@ -2312,6 +2367,7 @@
 
   // ── Initial ──────────────────────────────────────────────────
   fillDatalist();
+  populateShaftFilter();
   show('dashboard');
 </script>
 </body>
