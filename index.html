@@ -336,8 +336,43 @@
 
           <div class="kpi-grid" id="kpi-grid"></div>
 
+          <!-- Trend period selector -->
+          <div class="card" style="padding:0.85rem 1.15rem;margin-bottom:1rem;">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.75rem;">
+              <div style="display:flex;align-items:center;gap:0.65rem;flex-wrap:wrap;">
+                <strong style="color:var(--primary);"><i class="fas fa-chart-line"></i> Trend analysis period</strong>
+                <select id="trend-period" onchange="window.onTrendPeriodChange && window.onTrendPeriodChange()" style="min-width:160px;padding:0.5rem 0.85rem;border-radius:8px;border:1px solid var(--border);font-weight:600;background:var(--surface);">
+                  <option value="daily">Daily (last 14 days)</option>
+                  <option value="weekly" selected>Weekly (last 12 weeks)</option>
+                  <option value="monthly">Monthly (last 12 months)</option>
+                  <option value="quarterly">Quarterly (last 8 quarters)</option>
+                </select>
+              </div>
+              <div id="trend-summary-chips" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.25rem;margin-bottom:1.25rem;">
+            <div class="card chart-wrapper" style="margin-bottom:0;">
+              <div class="chart-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+                <span><i class="fas fa-arrow-trend-up"></i> Fleet Availability Trend</span>
+                <span id="avail-trend-badge" style="font-size:0.78rem;font-weight:700;padding:0.25rem 0.65rem;border-radius:999px;"></span>
+              </div>
+              <p style="font-size:0.82rem;color:var(--text-3);margin:-0.35rem 0 0.75rem;">Shows whether fleet availability is <strong>increasing</strong> or <strong>decreasing</strong> over the selected period.</p>
+              <div class="chart-container"><canvas id="availTrendChart"></canvas></div>
+            </div>
+            <div class="card chart-wrapper" style="margin-bottom:0;">
+              <div class="chart-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+                <span><i class="fas fa-hourglass-half"></i> Downtime / Delay Trend</span>
+                <span id="delay-trend-badge" style="font-size:0.78rem;font-weight:700;padding:0.25rem 0.65rem;border-radius:999px;"></span>
+              </div>
+              <p style="font-size:0.82rem;color:var(--text-3);margin:-0.35rem 0 0.75rem;">Total downtime hours and breakdown closures — lower is better (improvement).</p>
+              <div class="chart-container"><canvas id="delayTrendChart"></canvas></div>
+            </div>
+          </div>
+
           <div class="card chart-wrapper">
-            <div class="chart-title"><i class="fas fa-chart-bar"></i> Fleet Availability (%)</div>
+            <div class="chart-title"><i class="fas fa-chart-bar"></i> Fleet Availability by Equipment (%)</div>
             <div class="chart-container"><canvas id="availabilityChart"></canvas></div>
           </div>
           <div class="card chart-wrapper">
@@ -1758,6 +1793,282 @@
     li.addEventListener('click', () => { if (li.id !== 'logout-btn') show(li.dataset.section); });
   });
 
+  // ── Dashboard trend series (availability ↑/↓ & downtime improvement) ──
+  function getTrendPeriodConfig() {
+    const period = document.getElementById('trend-period')?.value || 'weekly';
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const buckets = [];
+    if (period === 'daily') {
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(now); d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        buckets.push({ key, label: key.slice(5), start: new Date(d), end: new Date(d.getTime() + 86400000 - 1) });
+      }
+    } else if (period === 'weekly') {
+      // ISO-ish week buckets: last 12 weeks ending this week
+      const day = now.getDay() || 7; // Mon=1..Sun=7 style
+      const thisMonday = new Date(now); thisMonday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+      for (let i = 11; i >= 0; i--) {
+        const start = new Date(thisMonday); start.setDate(thisMonday.getDate() - i * 7);
+        const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
+        const key = start.toISOString().slice(0, 10);
+        buckets.push({ key, label: 'W' + key.slice(5), start, end });
+      }
+    } else if (period === 'monthly') {
+      for (let i = 11; i >= 0; i--) {
+        const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+        const key = start.getFullYear() + '-' + String(start.getMonth() + 1).padStart(2, '0');
+        buckets.push({ key, label: key, start, end });
+      }
+    } else {
+      // quarterly – last 8 quarters
+      const q = Math.floor(now.getMonth() / 3);
+      for (let i = 7; i >= 0; i--) {
+        let y = now.getFullYear();
+        let qq = q - i;
+        while (qq < 0) { qq += 4; y -= 1; }
+        const start = new Date(y, qq * 3, 1);
+        const end = new Date(y, qq * 3 + 3, 0, 23, 59, 59, 999);
+        const key = y + '-Q' + (qq + 1);
+        buckets.push({ key, label: key, start, end });
+      }
+    }
+    return { period, buckets };
+  }
+
+  function parseUpdateDate(u) {
+    const d = String(u.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const t = String(u.time || '12:00').slice(0, 5);
+    const dt = new Date(d + 'T' + (t.length === 5 ? t : '12:00') + ':00');
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  function isDownLike(u) {
+    const s = String(u.status || '').toLowerCase();
+    return u.isFailure === '1' || u.isFailure === 1 || s === 'down' || s === 'offline' || s === 'failed' || s === 'broken';
+  }
+
+  function isFixedLike(u) {
+    const s = String(u.status || '').toLowerCase();
+    if (s === 'fixed' || s === 'up' || s === 'operational') return true;
+    return typeof isAttendedOrFixed === 'function' && isAttendedOrFixed(u.reason || u.fault || '', u.status);
+  }
+
+  /**
+   * Build per-bucket series:
+   * - availabilityPct: estimated fleet availability for events in bucket
+   * - downtimeHours: sum of downtimeHours logged in bucket
+   * - breakdowns: count of Down/failure events
+   * - closures: count of Fixed/attended events
+   * - avgCloseHours: average downtime on closed events (when downtimeHours present)
+   */
+  function computeTrendSeries() {
+    const { period, buckets } = getTrendPeriodConfig();
+    const filteredUp = getFilteredUpdates();
+    const filteredEq = getFilteredEquipment();
+    const fleetSize = Math.max(1, filteredEq.length || new Set(filteredUp.map(u => u.equipmentId || u.locoNumber).filter(Boolean)).size || 1);
+
+    const series = buckets.map(b => ({
+      key: b.key, label: b.label,
+      availabilityPct: null,
+      downtimeHours: 0,
+      breakdowns: 0,
+      closures: 0,
+      closeHoursSum: 0,
+      closeHoursN: 0
+    }));
+
+    filteredUp.forEach(u => {
+      const dt = parseUpdateDate(u);
+      if (!dt) return;
+      const idx = buckets.findIndex(b => dt >= b.start && dt <= b.end);
+      if (idx < 0) return;
+      const row = series[idx];
+      const downH = Number(u.downtimeHours || u.downtime || 0) || 0;
+      if (isDownLike(u)) {
+        row.breakdowns += 1;
+        row.downtimeHours += downH;
+      }
+      if (isFixedLike(u)) {
+        row.closures += 1;
+        if (downH > 0) {
+          row.closeHoursSum += downH;
+          row.closeHoursN += 1;
+        }
+      }
+    });
+
+    // Availability proxy per bucket:
+    // start from 100%, subtract (downtimeHours / (fleetSize * periodHours)) * 100, clamp 0-100
+    series.forEach((row, i) => {
+      const b = buckets[i];
+      const periodHours = Math.max(1, (b.end - b.start) / 3600000);
+      const capacity = fleetSize * periodHours;
+      const lostPct = capacity > 0 ? (row.downtimeHours / capacity) * 100 : 0;
+      // Also penalise open breakdowns without downtime hours (assume 4h each if no hours logged)
+      const assumed = row.breakdowns > 0 && row.downtimeHours === 0 ? row.breakdowns * 4 : 0;
+      const lost2 = capacity > 0 ? ((row.downtimeHours + assumed) / capacity) * 100 : 0;
+      let avail = 100 - Math.min(100, lost2);
+      // If no activity in bucket, leave as null (gap) unless we want 100
+      if (row.breakdowns === 0 && row.closures === 0 && row.downtimeHours === 0) {
+        row.availabilityPct = null; // chart will skip / use previous
+      } else {
+        row.availabilityPct = Number(Math.max(0, Math.min(100, avail)).toFixed(1));
+      }
+      row.avgCloseHours = row.closeHoursN > 0 ? Number((row.closeHoursSum / row.closeHoursN).toFixed(1)) : null;
+    });
+
+    // Forward-fill availability for empty buckets (stable trend line)
+    let lastAvail = 100;
+    series.forEach(row => {
+      if (row.availabilityPct == null) row.availabilityPct = lastAvail;
+      else lastAvail = row.availabilityPct;
+    });
+
+    return { period, series, fleetSize };
+  }
+
+  function trendDirection(values, higherIsBetter) {
+    const nums = values.filter(v => v != null && !isNaN(v));
+    if (nums.length < 2) return { dir: 'flat', delta: 0, label: 'Insufficient data', color: '#64748b', bg: 'rgba(100,116,139,0.15)' };
+    // Compare average of first third vs last third
+    const n = nums.length;
+    const a = Math.max(1, Math.floor(n / 3));
+    const first = nums.slice(0, a).reduce((s, v) => s + v, 0) / a;
+    const last = nums.slice(n - a).reduce((s, v) => s + v, 0) / a;
+    const delta = last - first;
+    const abs = Math.abs(delta);
+    if (abs < 0.5) return { dir: 'flat', delta, label: 'Stable', color: '#64748b', bg: 'rgba(100,116,139,0.15)' };
+    const improving = higherIsBetter ? delta > 0 : delta < 0;
+    if (improving) {
+      return { dir: 'up', delta, label: higherIsBetter ? 'Improving ↑' : 'Improving ↓', color: '#166534', bg: 'rgba(22,163,74,0.15)' };
+    }
+    return { dir: 'down', delta, label: higherIsBetter ? 'Declining ↓' : 'Worsening ↑', color: '#991b1b', bg: 'rgba(220,38,38,0.12)' };
+  }
+
+  function renderTrendCharts() {
+    const { series } = computeTrendSeries();
+    const labels = series.map(s => s.label);
+    const availData = series.map(s => s.availabilityPct);
+    const downData = series.map(s => Number(s.downtimeHours.toFixed(1)));
+    const closeData = series.map(s => s.closures);
+    const breakdownData = series.map(s => s.breakdowns);
+
+    const availDir = trendDirection(availData, true);
+    const delayDir = trendDirection(downData, false); // lower downtime = better
+
+    const availBadge = document.getElementById('avail-trend-badge');
+    if (availBadge) {
+      availBadge.textContent = availDir.label + (Math.abs(availDir.delta) >= 0.5 ? ` (${availDir.delta > 0 ? '+' : ''}${availDir.delta.toFixed(1)} pts)` : '');
+      availBadge.style.color = availDir.color;
+      availBadge.style.background = availDir.bg;
+    }
+    const delayBadge = document.getElementById('delay-trend-badge');
+    if (delayBadge) {
+      delayBadge.textContent = delayDir.label + (Math.abs(delayDir.delta) >= 0.5 ? ` (${delayDir.delta > 0 ? '+' : ''}${delayDir.delta.toFixed(1)} h)` : '');
+      delayBadge.style.color = delayDir.color;
+      delayBadge.style.background = delayDir.bg;
+    }
+
+    const chips = document.getElementById('trend-summary-chips');
+    if (chips) {
+      const totalDown = downData.reduce((a, b) => a + b, 0);
+      const totalBd = breakdownData.reduce((a, b) => a + b, 0);
+      const totalCl = closeData.reduce((a, b) => a + b, 0);
+      chips.innerHTML = `
+        <span class="filter-chip" style="background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);">${labels.length} periods</span>
+        <span class="filter-chip" style="background:rgba(29,78,216,0.1);color:#1e3a8a;border:1px solid rgba(29,78,216,0.25);">Σ downtime ${totalDown.toFixed(1)} h</span>
+        <span class="filter-chip" style="background:rgba(220,38,38,0.08);color:#991b1b;border:1px solid rgba(220,38,38,0.2);">${totalBd} breakdowns</span>
+        <span class="filter-chip" style="background:rgba(22,163,74,0.1);color:#166534;border:1px solid rgba(22,163,74,0.25);">${totalCl} closures</span>
+      `;
+    }
+
+    function lineChart(canvasId, datasets, yBeginZero, ySuggestedMax) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas || !window.Chart) return;
+      if (charts[canvasId]) charts[canvasId].destroy();
+      charts[canvasId] = new Chart(canvas, {
+        type: 'line',
+        data: { labels: labels.length ? labels : ['No data'], datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}` } }
+          },
+          scales: {
+            y: {
+              beginAtZero: !!yBeginZero,
+              suggestedMax: ySuggestedMax,
+              ticks: { precision: 0 },
+              grid: { color: 'rgba(148,163,184,0.25)' }
+            },
+            x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    lineChart('availTrendChart', [{
+      label: 'Fleet availability %',
+      data: availData.length ? availData : [100],
+      borderColor: '#1d4ed8',
+      backgroundColor: 'rgba(29,78,216,0.12)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 3,
+      pointBackgroundColor: '#1d4ed8',
+      borderWidth: 2
+    }], false, 100);
+
+    lineChart('delayTrendChart', [
+      {
+        label: 'Downtime hours',
+        data: downData.length ? downData : [0],
+        borderColor: '#dc2626',
+        backgroundColor: 'rgba(220,38,38,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointBackgroundColor: '#dc2626',
+        borderWidth: 2,
+        yAxisID: 'y'
+      },
+      {
+        label: 'Breakdowns opened',
+        data: breakdownData.length ? breakdownData : [0],
+        borderColor: '#ea580c',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.25,
+        pointRadius: 2,
+        borderWidth: 2,
+        borderDash: [5, 4],
+        yAxisID: 'y'
+      },
+      {
+        label: 'Closures (fixed)',
+        data: closeData.length ? closeData : [0],
+        borderColor: '#16a34a',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.25,
+        pointRadius: 2,
+        borderWidth: 2,
+        yAxisID: 'y'
+      }
+    ], true, undefined);
+  }
+  window.renderTrendCharts = renderTrendCharts;
+  window.onTrendPeriodChange = function() {
+    try { renderTrendCharts(); } catch (e) { console.warn(e); }
+  };
+
   // ── Dashboard ────────────────────────────────────────────────
   function populateDashboard() {
     const filteredEq = getFilteredEquipment();
@@ -1819,6 +2130,7 @@
     makeChart('failuresChart', 'bar', failLabels, failData, '#dc2626');
     makeChart('mttfChart', 'bar', mttfLabels, mttfData, '#16a34a');
 
+    try { renderTrendCharts(); } catch (e) { console.warn('Trend charts', e); }
     renderUpcomingMaintenance();
   }
 
