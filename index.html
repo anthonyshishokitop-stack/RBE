@@ -992,7 +992,7 @@
 
   // Roles: admin (full) | operations (no delete) | viewer (no import / delete / text-mining / add equipment)
   let currentUser = null;
-  let currentUserRole = 'operations';
+  let currentUserRole = 'admin';
   // Enterprise RBAC: admin (full) | reliability (analytics + ops write) | operations | executive (view + audit) | viewer
   const VALID_ROLES = ['admin', 'reliability', 'operations', 'executive', 'viewer'];
   let auditEvents = []; // in-memory + persisted critical actions for Audit Trail view
