@@ -992,7 +992,7 @@
 
   // Roles: admin (full) | operations (no delete) | viewer (no import / delete / text-mining / add equipment)
   let currentUser = null;
-  let currentUserRole = 'admin';
+  let currentUserRole = 'operations';
   // Enterprise RBAC: admin (full) | reliability (analytics + ops write) | operations | executive (view + audit) | viewer
   const VALID_ROLES = ['admin', 'reliability', 'operations', 'executive', 'viewer'];
   let auditEvents = []; // in-memory + persisted critical actions for Audit Trail view
@@ -1597,7 +1597,7 @@
       kpi.innerHTML = `
         <div class="kpi-card green enterprise-kpi"><i class="fas fa-heartbeat"></i><h2>${avgHealth}</h2><p>Avg Fleet Health</p></div>
         <div class="kpi-card red"><i class="fas fa-skull-crossbones"></i><h2>${critical}</h2><p>Critical Health (&lt;40)</p></div>
-        <div class="kpi-card orange"><i class="fas fa-radar"></i><h2>${highAnomaly}</h2><p>High Anomaly Score</p></div>
+        <div class="kpi-card orange"><i class="fas fa-score"></i><h2>${highAnomaly}</h2><p>High Anomaly Score</p></div>
         <div class="kpi-card blue"><i class="fas fa-clock"></i><h2>${avgMtbf}h</h2><p>Avg MTBF</p></div>
         <div class="kpi-card purple"><i class="fas fa-wrench"></i><h2>${avgMttr}h</h2><p>Avg MTTR</p></div>
         <div class="kpi-card blue"><i class="fas fa-cogs"></i><h2>${metrics.length}</h2><p>Assets scored</p></div>
