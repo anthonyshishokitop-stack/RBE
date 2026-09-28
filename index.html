@@ -933,8 +933,17 @@
       fillDatalist(); populateShaftFilter(); refreshCurrentView(); updatePredictiveNotifications();
     }));
     const applyUpdates = snap => {
-      updates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      updates.sort((a, b) => `${b.date||''} ${b.time||''}`.localeCompare(`${a.date||''} ${a.time||''}`));
+      const mapped = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      mapped.sort((a, b) => `${b.date||''} ${b.time||''}`.localeCompare(`${a.date||''} ${a.time||''}`));
+      // Keep only unique status events (same equip/date/time/status/reason) so UI never shows repeats
+      const seen = new Set();
+      updates = [];
+      for (const u of mapped) {
+        const key = (typeof statusUpdateFingerprint === 'function') ? statusUpdateFingerprint(u) : `${u.equipmentId}|${u.date}|${u.time}|${u.status}|${u.reason}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        updates.push(u);
+      }
       refreshCurrentView(); updatePredictiveNotifications();
       if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
     };
@@ -986,6 +995,27 @@
     if (id.length > 200) id = id.slice(0, 200);
     return id;
   }
+
+  /** Stable fingerprint for a status update — used to skip re-imports and de-dupe audit trail */
+  function statusUpdateFingerprint(u) {
+    const equip = String(u.equipmentId || u.locoNumber || '').trim().toLowerCase();
+    const date = String(u.date || '').trim().slice(0, 10);
+    const time = String(u.time || '').trim().slice(0, 5);
+    const status = String(u.status || '').trim().toLowerCase();
+    const reason = String(u.reason || u.fault || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const down = String(u.downtimeHours ?? u.downtime ?? '').trim();
+    return [equip, date, time, status, reason, down].join('|');
+  }
+
+  /** Soft key without time (import reports sometimes omit exact minutes) */
+  function statusUpdateSoftKey(u) {
+    const equip = String(u.equipmentId || u.locoNumber || '').trim().toLowerCase();
+    const date = String(u.date || '').trim().slice(0, 10);
+    const status = String(u.status || '').trim().toLowerCase();
+    const reason = String(u.reason || u.fault || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    return [equip, date, status, reason].join('|');
+  }
+
   function getFilteredEquipment() {
     let list = equipment || [];
     if (currentShaftFilter) list = list.filter(e => String(e.shaft || '').trim() === currentShaftFilter);
@@ -1357,8 +1387,17 @@
   function showEquipmentDetail(id) {
     const eq = (equipment || []).find(e => String(e.id) === String(id));
     const st = getEquipmentStatus(id);
-    const eu = getFilteredUpdates().filter(u => String(u.equipmentId || u.locoNumber || '') === String(id))
+    const euRaw = getFilteredUpdates().filter(u => String(u.equipmentId || u.locoNumber || '') === String(id))
       .sort((a, b) => String((b.date||'')+' '+(b.time||'')).localeCompare(String((a.date||'')+' '+(a.time||''))));
+    // De-dupe identical status events so audit trail does not repeat the same task
+    const euSeen = new Set();
+    const eu = [];
+    for (const u of euRaw) {
+      const key = statusUpdateFingerprint(u);
+      if (euSeen.has(key)) continue;
+      euSeen.add(key);
+      eu.push(u);
+    }
     const last = eu[0];
     const titleEl = document.getElementById('equip-detail-title');
     const body = document.getElementById('equip-detail-body');
@@ -2787,8 +2826,33 @@
     statusDiv.style.display = 'block';
     statusDiv.style.background = 'rgba(29,78,216,0.08)';
     statusDiv.style.color = 'var(--primary)';
-    statusDiv.innerHTML = `Importing <strong>${toImport.length}</strong> records…`;
-    let success = 0, skipped = 0;
+    statusDiv.innerHTML = `Checking against existing records…`;
+
+    // Build lookup of existing status_updates so already-imported rows are skipped
+    const existingExact = new Set();
+    const existingSoft = new Set();
+    try {
+      const snap = await getDocs(collection(db, 'status_updates'));
+      snap.forEach(d => {
+        const u = d.data();
+        existingExact.add(statusUpdateFingerprint(u));
+        existingSoft.add(statusUpdateSoftKey(u));
+      });
+    } catch (err) {
+      console.warn('Could not load existing updates for de-dupe', err);
+    }
+    // Also include in-memory updates (live listener may already have them)
+    (updates || []).forEach(u => {
+      existingExact.add(statusUpdateFingerprint(u));
+      existingSoft.add(statusUpdateSoftKey(u));
+    });
+
+    // Skip duplicates within the spreadsheet itself
+    const batchExact = new Set();
+    const batchSoft = new Set();
+
+    statusDiv.innerHTML = `Importing <strong>${toImport.length}</strong> records (skipping already-in-system)…`;
+    let success = 0, skipped = 0, skippedDuplicate = 0;
     for (let i = 0; i < toImport.length; i++) {
       const row = toImport[i];
       try {
@@ -2804,6 +2868,15 @@
           changedAt: new Date().toISOString()
         };
         if (rawId && rawId !== equipId) statusPayload.originalEquipmentId = rawId;
+
+        const fp = statusUpdateFingerprint(statusPayload);
+        const soft = statusUpdateSoftKey(statusPayload);
+        if (existingExact.has(fp) || existingSoft.has(soft) || batchExact.has(fp) || batchSoft.has(soft)) {
+          skippedDuplicate++;
+          skipped++;
+          continue;
+        }
+
         await addDoc(collection(db, 'status_updates'), statusPayload);
         await setDoc(doc(db, 'equipment', equipId), {
           shaft: row.shaft || '', level: row.workplace || '',
@@ -2811,15 +2884,20 @@
           source: 'Imported Breakdown Report', updatedAt: new Date().toISOString(),
           updatedBy: actor.name, updatedByEmail: actor.email
         }, { merge: true });
+        batchExact.add(fp);
+        batchSoft.add(soft);
+        existingExact.add(fp);
+        existingSoft.add(soft);
         success++;
       } catch (e) { skipped++; }
       if ((i + 1) % 20 === 0 || i === toImport.length - 1) {
-        statusDiv.innerHTML = `Importing… <strong>${success}</strong> saved, <strong>${skipped}</strong> skipped (${i + 1}/${toImport.length})`;
+        statusDiv.innerHTML = `Importing… <strong>${success}</strong> saved, <strong>${skippedDuplicate}</strong> already in system, <strong>${skipped - skippedDuplicate}</strong> other skipped (${i + 1}/${toImport.length})`;
       }
     }
-    statusDiv.innerHTML = `🎉 Imported <strong>${success}</strong>. Skipped ${skipped}.`;
+    statusDiv.innerHTML = `🎉 Imported <strong>${success}</strong> new records. Skipped <strong>${skippedDuplicate}</strong> already in system` +
+      (skipped - skippedDuplicate ? `, <strong>${skipped - skippedDuplicate}</strong> other` : '') + `.`;
     statusDiv.style.background = 'rgba(22,163,74,0.12)'; statusDiv.style.color = 'var(--success)';
-    showToast(`Imported ${success} records`, 'success');
+    showToast(success ? `Imported ${success} new records (${skippedDuplicate} duplicates skipped)` : `No new records — ${skippedDuplicate} already in system`, success ? 'success' : 'info');
     document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
     document.querySelector('.import-step[data-step="3"]')?.classList.add('active');
     if (typeof fillDatalist === 'function') fillDatalist();
