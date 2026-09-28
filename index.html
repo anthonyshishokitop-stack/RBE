@@ -518,6 +518,12 @@
             <div style="margin-top:1.75rem;padding-top:1.25rem;border-top:1px solid var(--border);">
               <button onclick="importSelectedRows()" class="btn btn-success" style="width:100%;padding:0.9rem;font-size:1.05rem;"><i class="fas fa-cloud-upload-alt"></i> Import Selected Rows</button>
             </div>
+            <div id="cleanup-duplicates-panel" data-roles="admin" style="margin-top:1.25rem;padding:1.1rem 1.25rem;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.25);border-radius:var(--radius-md);">
+              <h3 style="margin:0 0 0.4rem;color:var(--danger);font-size:1rem;"><i class="fas fa-broom"></i> Clean up duplicate status records</h3>
+              <p style="margin:0 0 0.85rem;font-size:0.88rem;color:var(--text-2);">One-time database cleanup: keeps one copy of each unique event (same equipment, date, time, status, reason) and permanently deletes the rest. Admin only. Safe to re-run.</p>
+              <button type="button" class="btn btn-danger" id="btn-cleanup-duplicates" onclick="cleanupDuplicateStatusUpdates()"><i class="fas fa-trash-alt"></i> Remove duplicates from database</button>
+              <div id="cleanup-status" style="display:none;margin-top:0.85rem;padding:0.75rem 1rem;border-radius:8px;font-weight:500;"></div>
+            </div>
           </div>
         </section>
 
@@ -828,6 +834,11 @@
     document.querySelectorAll('#sidebar-menu li[data-roles]').forEach(li => {
       const allowed = (li.dataset.roles || '').split(',').map(s => s.trim());
       li.style.display = allowed.includes(role) ? '' : 'none';
+    });
+    // Hide any non-menu elements tagged with data-roles (e.g. admin cleanup panel)
+    document.querySelectorAll('[data-roles]:not(#sidebar-menu li)').forEach(el => {
+      const allowed = (el.dataset.roles || '').split(',').map(s => s.trim());
+      el.style.display = allowed.includes(role) ? '' : 'none';
     });
     // If current section is hidden, go to dashboard
     const active = document.querySelector('#sidebar-menu li.active');
@@ -2814,6 +2825,121 @@
     processCurrentSheet();
     document.getElementById('manual-mapping-panel').style.display = 'none';
   };
+  window.cleanupDuplicateStatusUpdates = async function() {
+    if (!can('delete_equipment') && (currentUserRole || '') !== 'admin') {
+      // Strict: admin only (can('delete_equipment') is admin-only in this app)
+      showToast('Only admins can clean up duplicates', 'error');
+      return;
+    }
+    if (!confirm('This will permanently delete duplicate status updates from the database.\\n\\nOne record is kept per unique event (equipment + date + time + status + reason).\\n\\nContinue?')) return;
+
+    const statusEl = document.getElementById('cleanup-status');
+    const btn = document.getElementById('btn-cleanup-duplicates');
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'rgba(29,78,216,0.08)';
+      statusEl.style.color = 'var(--primary)';
+      statusEl.innerHTML = 'Scanning status_updates…';
+    }
+    if (btn) btn.disabled = true;
+
+    try {
+      const snap = await getDocs(collection(db, 'status_updates'));
+      const groups = new Map(); // fingerprint -> [{ ref, data, score }]
+      snap.forEach(d => {
+        const data = d.data();
+        const fp = statusUpdateFingerprint(data);
+        const list = groups.get(fp) || [];
+        // Prefer: has createdAt, has updatedBy, not re-imported noise — score higher = keep
+        let score = 0;
+        if (data.createdAt) score += 3;
+        if (data.updatedByEmail || data.updatedBy) score += 2;
+        if (data.source && String(data.source).toLowerCase().indexOf('import') === -1) score += 1;
+        if (data.changedAt) score += 1;
+        // Prefer earlier createdAt when scores equal (stable audit)
+        let createdMs = 0;
+        try {
+          if (data.createdAt && typeof data.createdAt.toMillis === 'function') createdMs = data.createdAt.toMillis();
+          else if (data.changedAt) createdMs = new Date(data.changedAt).getTime() || 0;
+          else if (data.date) createdMs = new Date(String(data.date) + 'T' + String(data.time || '00:00')).getTime() || 0;
+        } catch (e) {}
+        list.push({ ref: d.ref, id: d.id, score, createdMs, data });
+        groups.set(fp, list);
+      });
+
+      let toDelete = [];
+      let uniqueGroups = 0;
+      let multiGroups = 0;
+      groups.forEach(list => {
+        uniqueGroups++;
+        if (list.length <= 1) return;
+        multiGroups++;
+        // Sort: highest score first, then earliest createdMs, then id
+        list.sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          if (a.createdMs !== b.createdMs) return a.createdMs - b.createdMs;
+          return String(a.id).localeCompare(String(b.id));
+        });
+        // Keep list[0], delete the rest
+        for (let i = 1; i < list.length; i++) toDelete.push(list[i]);
+      });
+
+      if (statusEl) {
+        statusEl.innerHTML = `Found <strong>${snap.size}</strong> records · <strong>${multiGroups}</strong> groups with duplicates · will delete <strong>${toDelete.length}</strong>…`;
+      }
+
+      if (!toDelete.length) {
+        if (statusEl) {
+          statusEl.style.background = 'rgba(22,163,74,0.12)';
+          statusEl.style.color = 'var(--success)';
+          statusEl.innerHTML = '✅ No duplicates found. Database is clean.';
+        }
+        showToast('No duplicates found', 'success');
+        if (btn) btn.disabled = false;
+        return;
+      }
+
+      let deleted = 0, failed = 0;
+      // Batch delete in small chunks to avoid overwhelming client
+      for (let i = 0; i < toDelete.length; i++) {
+        try {
+          await deleteDoc(toDelete[i].ref);
+          deleted++;
+        } catch (e) {
+          failed++;
+          console.warn('Failed to delete', toDelete[i].id, e);
+        }
+        if ((i + 1) % 25 === 0 || i === toDelete.length - 1) {
+          if (statusEl) {
+            statusEl.innerHTML = `Deleting… <strong>${deleted}</strong> removed, <strong>${failed}</strong> failed (${i + 1}/${toDelete.length})`;
+          }
+        }
+      }
+
+      if (statusEl) {
+        statusEl.style.background = failed ? 'rgba(234,88,12,0.12)' : 'rgba(22,163,74,0.12)';
+        statusEl.style.color = failed ? 'var(--warning)' : 'var(--success)';
+        statusEl.innerHTML = `🎉 Cleanup complete. Deleted <strong>${deleted}</strong> duplicate record(s).` +
+          (failed ? ` <strong>${failed}</strong> failed.` : '') +
+          ` Unique events kept: <strong>${uniqueGroups}</strong>.`;
+      }
+      showToast(`Removed ${deleted} duplicate status updates`, 'success');
+      // Live listener will refresh updates automatically
+      if (typeof populateDashboard === 'function') populateDashboard();
+      if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+    } catch (err) {
+      console.error(err);
+      if (statusEl) {
+        statusEl.style.background = 'rgba(220,38,38,0.1)';
+        statusEl.style.color = 'var(--danger)';
+        statusEl.innerHTML = '❌ Cleanup failed: ' + (err.message || String(err));
+      }
+      showToast('Cleanup failed: ' + (err.message || String(err)), 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
+
   window.importSelectedRows = async function() {
     if (!can('import')) {
       showToast('Your role cannot import reports', 'error');
