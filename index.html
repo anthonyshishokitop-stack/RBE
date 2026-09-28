@@ -851,29 +851,57 @@
   }
 
   /**
-   * CRITICAL BUSINESS RULE:
-   * Only real status_updates with status = "Down" (or offline/failed/broken) mark equipment as Down.
-   * Predictive / pattern-based maintenance tasks NEVER force a unit into Down status.
-   * Equipment with only predictive inspections remains Operational / Up.
+   * IMPROVED BUSINESS RULE (fixes the Problem Equipment table):
+   * 1. Explicit status = "Fixed"  →  Up
+   * 2. Latest reason/fault contains clear “fixed / adjusted / repaired / attended / completed”
+   *    language  →  Up   (e.g. "FAILING BRAKES | ADJUSTED BRAKES", "FIXED LOOSE CONNECTION")
+   * 3. Only genuine open Downs remain Down
+   * 4. Predictive inspections never force a unit Down
    */
+  function isAttendedOrFixed(reasonText, statusText) {
+    const s = String(statusText || '').toLowerCase().trim();
+    if (s === 'fixed' || s === 'up' || s === 'operational' || s === 'running') return true;
+
+    const r = String(reasonText || '').toLowerCase();
+    // Strong indicators that the breakdown was attended / completed
+    const fixedPatterns = [
+      /\badjusted\b/, /\bfixed\b/, /\brepaired\b/, /\battended\b/,
+      /\bcompleted\b/, /\bresolved\b/, /\breplaced\b/, /\brestored\b/,
+      /\bworking\b/, /\boperational\b/, /\bok\b/, /\bdone\b/,
+      /fixed loose/, /adjusted brakes/, /brakes adjusted/,
+      /connection fixed/, /antenna fixed/, /repaired and/
+    ];
+    return fixedPatterns.some(p => p.test(r));
+  }
+
   function getEquipmentStatus(id) {
     const eu = getFilteredUpdates()
       .filter(u => String(u.equipmentId || u.locoNumber || '') === String(id))
       .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
 
-    // Only count genuine Down status entries
-    const isRealDown = (u) => {
-      const s = String(u.status || '').toLowerCase();
-      return s === 'down' || s === 'offline' || s === 'failed' || s === 'broken';
-    };
-
     const last = eu[0];
-    const currentlyDown = last && isRealDown(last);
+    let currentlyDown = false;
+
+    if (last) {
+      const status = String(last.status || '').toLowerCase();
+      const reason = last.reason || last.fault || last.description || '';
+
+      // Rule 1 & 2: attended / fixed language overrides a "Down" label
+      if (isAttendedOrFixed(reason, status)) {
+        currentlyDown = false;
+      } else if (status === 'down' || status === 'offline' || status === 'failed' || status === 'broken') {
+        currentlyDown = true;
+      } else {
+        currentlyDown = false;
+      }
+    }
 
     const downtime = eu.reduce((s, u) => s + (Number(u.downtimeHours || u.downtime || 0) || 0), 0);
-    const failures = eu.filter(u =>
-      u.isFailure === '1' || u.isFailure === 1 || String(u.isFailure || '').toLowerCase() === 'yes' || isRealDown(u)
-    ).length;
+    const failures = eu.filter(u => {
+      const s = String(u.status || '').toLowerCase();
+      return u.isFailure === '1' || u.isFailure === 1 || String(u.isFailure || '').toLowerCase() === 'yes' ||
+             s === 'down' || s === 'offline';
+    }).length;
 
     const dates = eu.map(u => u.date).filter(Boolean).sort();
     let totalDays = 1;
@@ -926,7 +954,7 @@
     li.addEventListener('click', () => { if (li.id !== 'logout-btn') show(li.dataset.section); });
   });
 
-  // ── Dashboard (respects real Down only) ──────────────────────
+  // ── Dashboard ────────────────────────────────────────────────
   function populateDashboard() {
     const filteredEq = getFilteredEquipment();
     const filteredUp = getFilteredUpdates();
@@ -956,7 +984,6 @@
       `;
     }
 
-    // Charts
     const availLabels = [], availData = [], failLabels = [], failData = [], mttfLabels = [], mttfData = [];
     ids.slice(0, 25).forEach(id => {
       const st = getEquipmentStatus(id);
@@ -1023,7 +1050,7 @@
     }
   }
 
-  // ── Alerts (predictive never forces Down) ────────────────────
+  // ── Alerts ───────────────────────────────────────────────────
   function isAlertDismissed(key) { return dismissedAlerts.has(key); }
   function dismissAlert(key) {
     dismissedAlerts.add(key);
@@ -1274,6 +1301,7 @@
       const lastDown = eu.find(u => String(u.status || '').toLowerCase() === 'down');
       const lastReason = lastDown ? (lastDown.reason || '') : (eu[0]?.reason || '-');
 
+      // Problem list still shows historical downtime / failures, but Status column now uses the improved rule
       if (st.status === 'Down' || totalDownHrs > 0 || fails > 0) {
         problemRows.push([id, st.status, st.color, lastReason, totalDownHrs.toFixed(1)]);
       }
@@ -1547,7 +1575,6 @@
       setSummaryBar('tm-recur-summary', rows.length > 10 ? `<div><strong>Recurrence:</strong> ${rows.length}</div><div class="bar-actions"><button type="button" class="btn-view-more" onclick="toggleTableExpand('tm-recur')">View more</button></div>` : '', 'purple');
     }
 
-    // Charts
     if (window.Chart) {
       const modeLabels = Object.keys(analysis.modeCounts);
       const modeData = Object.values(analysis.modeCounts);
@@ -2008,7 +2035,6 @@
       seen.add(key); return true;
     }).sort((a, b) => String((b.date||'')+' '+(b.time||'')).localeCompare(String((a.date||'')+' '+(a.time||''))));
 
-    // Profile
     const profileCard = document.getElementById('equipment-profile');
     const profileBody = document.getElementById('equipment-profile-body');
     if (equipmentId && profileCard && profileBody) {
