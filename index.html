@@ -125,6 +125,36 @@
     .import-step span { width: 22px; height: 22px; border-radius: 50%; background: #94a3b8; color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; }
     .import-step.active { background: rgba(29,78,216,0.12); color: var(--primary); }
     .import-step.active span { background: var(--primary); }
+    .toast {
+      position: fixed; bottom: 72px; right: 16px; z-index: 3000;
+      padding: 0.75rem 1.2rem; border-radius: 10px; font-weight: 600; font-size: 0.9rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18); max-width: 340px; color: #fff;
+      transform: translateY(20px); opacity: 0; transition: all 0.25s; pointer-events: none;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { background: #16a34a; }
+    .toast.error { background: #dc2626; }
+    .toast.info { background: #1d4ed8; }
+    .role-badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 0.25rem 0.65rem;
+      border-radius: 999px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.03em; background: rgba(255,255,255,0.12); color: #e2e8f0;
+    }
+    .role-badge.admin { background: #7c3aed; color: #fff; }
+    .role-badge.operations { background: #1d4ed8; color: #fff; }
+    .role-badge.viewer { background: #64748b; color: #fff; }
+    .audit-trail { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; grid-column: 1 / -1; }
+    .audit-trail h4 { margin: 0 0 0.65rem; color: var(--primary); font-size: 0.95rem; }
+    .audit-item {
+      display: flex; flex-direction: column; gap: 0.15rem; padding: 0.55rem 0.75rem;
+      background: var(--surface-2); border-radius: 8px; border-left: 3px solid var(--primary);
+      margin-bottom: 0.45rem; font-size: 0.86rem;
+    }
+    .audit-item .audit-meta { color: var(--text-3); font-size: 0.78rem; }
+    .sidebar-user {
+      padding: 0.75rem 1.15rem; border-bottom: 1px solid #334155; font-size: 0.82rem; color: #94a3b8;
+    }
+    .sidebar-user strong { color: #e2e8f0; display: block; margin-bottom: 0.25rem; word-break: break-all; }
     @media (min-width: 1025px) {
       .sidebar { position: sticky; top: 0; height: 100vh; transform: translateX(0) !important; }
       .hamburger { display: none; }
@@ -169,17 +199,21 @@
         <img src="Side.jpeg" alt="RBE" class="logo-img" onerror="this.style.display='none'">
         <button onclick="document.getElementById('sidebar').classList.remove('open')" style="background:none;border:none;color:white;font-size:2.3rem;cursor:pointer;">×</button>
       </div>
+      <div class="sidebar-user" id="sidebar-user">
+        <strong id="sidebar-user-email">—</strong>
+        <span class="role-badge" id="sidebar-role-badge">operations</span>
+      </div>
       <ul id="sidebar-menu">
         <li class="active" data-section="dashboard"><i class="fas fa-tachometer-alt"></i><span>Dashboard</span></li>
-        <li data-section="add-equipment"><i class="fas fa-plus-circle"></i><span>+ New Equipment</span></li>
-        <li data-section="add-status"><i class="fas fa-edit"></i><span>Log Status Update</span></li>
+        <li data-section="add-equipment" data-roles="admin,operations"><i class="fas fa-plus-circle"></i><span>+ New Equipment</span></li>
+        <li data-section="add-status" data-roles="admin,operations,viewer"><i class="fas fa-edit"></i><span>Log Status Update</span></li>
         <li data-section="search-status"><i class="fas fa-search"></i><span>Search History</span></li>
         <li data-section="manage-equipment"><i class="fas fa-tools"></i><span>Equipment Register</span></li>
         <li data-section="maintenance-schedule"><i class="fas fa-calendar-check"></i><span>Maintenance Plan</span></li>
         <li data-section="calendar"><i class="fas fa-calendar"></i><span>Calendar</span></li>
         <li data-section="operations-report"><i class="fas fa-file-alt"></i><span>Operations Report</span></li>
-        <li data-section="import-spreadsheet"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
-        <li data-section="text-mining"><i class="fas fa-brain"></i><span>Text Mining Framework</span></li>
+        <li data-section="import-spreadsheet" data-roles="admin,operations"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
+        <li data-section="text-mining" data-roles="admin,operations"><i class="fas fa-brain"></i><span>Text Mining Framework</span></li>
         <li id="logout-btn"><i class="fas fa-sign-out-alt"></i><span>Logout</span></li>
       </ul>
     </aside>
@@ -571,6 +605,7 @@
     </main>
   </div>
   <div class="live-indicator"><i class="fas fa-circle" style="font-size:0.7rem;"></i> LIVE</div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <datalist id="loco-list"></datalist>
 
   <!-- MODALS -->
@@ -717,7 +752,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-  import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, deleteDoc, updateDoc, where, getDocs, limit } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, deleteDoc, updateDoc, where, getDocs, getDoc, limit } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCnDsQVhQxk9Q7axCPcMSpHDcqOonBbNMc",
@@ -742,6 +777,95 @@
   const TABLE_PAGE_SIZE = 10;
   window._tableExpandState = {}; window._tableFullRows = {};
 
+  // Roles: admin (full) | operations (no delete) | viewer (no import / delete / text-mining / add equipment)
+  let currentUser = null;
+  let currentUserRole = 'operations';
+  const VALID_ROLES = ['admin', 'operations', 'viewer'];
+
+  function showToast(msg, type = 'info') {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = `toast ${type} show`;
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+  }
+  window.showToast = showToast;
+
+  function getActor() {
+    const u = auth.currentUser;
+    if (!u) return { uid: '', email: 'unknown', name: 'Unknown' };
+    return {
+      uid: u.uid || '',
+      email: u.email || 'unknown',
+      name: (u.displayName || u.email || 'Unknown').split('@')[0]
+    };
+  }
+
+  function can(action) {
+    const r = currentUserRole || 'viewer';
+    if (r === 'admin') return true;
+    if (action === 'delete_equipment') return false;
+    if (action === 'import' || action === 'text_mining' || action === 'add_equipment') {
+      return r === 'operations';
+    }
+    if (action === 'edit_equipment' || action === 'add_status' || action === 'mark_fixed' || action === 'maint') {
+      return r === 'operations' || r === 'admin';
+    }
+    return true; // view
+  }
+  window.can = can;
+
+  function applyRoleUI() {
+    const role = currentUserRole || 'viewer';
+    const emailEl = document.getElementById('sidebar-user-email');
+    const badge = document.getElementById('sidebar-role-badge');
+    if (emailEl) emailEl.textContent = currentUser?.email || '—';
+    if (badge) {
+      badge.textContent = role;
+      badge.className = 'role-badge ' + role;
+    }
+    document.querySelectorAll('#sidebar-menu li[data-roles]').forEach(li => {
+      const allowed = (li.dataset.roles || '').split(',').map(s => s.trim());
+      li.style.display = allowed.includes(role) ? '' : 'none';
+    });
+    // If current section is hidden, go to dashboard
+    const active = document.querySelector('#sidebar-menu li.active');
+    if (active && active.style.display === 'none') show('dashboard');
+  }
+  window.applyRoleUI = applyRoleUI;
+
+  async function ensureUserProfile(user) {
+    if (!user) return;
+    const ref = doc(db, 'users', user.uid);
+    try {
+      const existing = await getDoc(ref);
+      if (!existing.exists()) {
+        await setDoc(ref, {
+          email: user.email || '',
+          role: 'operations',
+          displayName: (user.email || '').split('@')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        currentUserRole = 'operations';
+      } else {
+        const data = existing.data() || {};
+        let role = String(data.role || 'operations').toLowerCase();
+        if (!VALID_ROLES.includes(role)) role = 'operations';
+        currentUserRole = role;
+        if (!data.email && user.email) {
+          await setDoc(ref, { email: user.email, updatedAt: new Date().toISOString() }, { merge: true });
+        }
+      }
+    } catch (err) {
+      console.warn('User profile load failed, defaulting to operations', err);
+      currentUserRole = 'operations';
+    }
+    currentUser = { uid: user.uid, email: user.email, role: currentUserRole };
+    applyRoleUI();
+  }
+
   // ── Auth ─────────────────────────────────────────────────────
   const authSection = document.getElementById('auth-section');
   const appDiv = document.getElementById('app');
@@ -759,26 +883,44 @@
     const password = document.getElementById('password').value;
     document.getElementById('auth-error').textContent = "";
     try {
-      if (isLoginMode) await signInWithEmailAndPassword(auth, email, password);
-      else await createUserWithEmailAndPassword(auth, email, password);
+      if (isLoginMode) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          email,
+          role: 'operations',
+          displayName: email.split('@')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        showToast('Account created — role: operations', 'success');
+      }
     } catch (err) {
       let msg = err.message;
-      if (msg.includes('wrong-password')) msg = 'Wrong password';
+      if (msg.includes('wrong-password') || msg.includes('invalid-credential')) msg = 'Wrong email or password';
       else if (msg.includes('user-not-found')) msg = 'Account not found';
       else if (msg.includes('email-already-in-use')) msg = 'Email already in use';
       document.getElementById('auth-error').textContent = msg;
     }
   };
-  document.getElementById('logout-btn').onclick = () => signOut(auth);
-  onAuthStateChanged(auth, user => {
+  document.getElementById('logout-btn').onclick = () => {
+    currentUser = null;
+    currentUserRole = 'operations';
+    signOut(auth);
+  };
+  onAuthStateChanged(auth, async user => {
     if (user) {
       authSection.classList.add('hidden');
       appDiv.classList.remove('hidden');
+      await ensureUserProfile(user);
       startRealtimeListeners();
       startSearchHistoryListener();
     } else {
       authSection.classList.remove('hidden');
       appDiv.classList.add('hidden');
+      currentUser = null;
+      currentUserRole = 'operations';
     }
   });
 
@@ -1019,6 +1161,18 @@
 
   // ── Navigation ───────────────────────────────────────────────
   function show(section) {
+    if (section === 'import-spreadsheet' && !can('import')) {
+      showToast('Import is restricted for your role', 'error');
+      return;
+    }
+    if (section === 'text-mining' && !can('text_mining')) {
+      showToast('Text Mining is restricted for your role', 'error');
+      return;
+    }
+    if (section === 'add-equipment' && !can('add_equipment')) {
+      showToast('Adding equipment is restricted for your role', 'error');
+      return;
+    }
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     const el = document.getElementById(section);
     if (el) el.classList.remove('hidden');
@@ -1225,21 +1379,38 @@
       ['Color Risk', st.color || '—'],
       ['Last Update', st.lastUpdate || '—'],
       ['Last Reason / Fault', st.lastReason || last?.reason || '—'],
+      ['Last changed by', last?.updatedByEmail || last?.updatedBy || last?.operator || '—'],
       ['Status History Events', String(eu.length)]
     ];
+    const auditHtml = `<div class="audit-trail">
+      <h4><i class="fas fa-history"></i> Audit trail (who / when)</h4>
+      ${eu.length ? eu.slice(0, 12).map(u => {
+        const who = u.updatedByEmail || u.updatedBy || u.operator || 'Unknown';
+        const when = [u.date, u.time].filter(Boolean).join(' ') || '—';
+        const status = u.status || '—';
+        const reason = String(u.reason || u.fault || '').slice(0, 120);
+        return `<div class="audit-item">
+          <div><strong>${String(status).replace(/</g,'&lt;')}</strong> · ${String(reason).replace(/</g,'&lt;') || '—'}</div>
+          <div class="audit-meta"><i class="fas fa-user"></i> ${String(who).replace(/</g,'&lt;')} · <i class="fas fa-clock"></i> ${when}${u.source ? ' · ' + String(u.source).replace(/</g,'&lt;') : ''}</div>
+        </div>`;
+      }).join('') : '<p style="color:var(--text-3);font-size:0.9rem;">No status history yet.</p>'}
+    </div>`;
     if (body) {
       body.innerHTML = fields.map(([k, v]) => `<div style="background:var(--surface-2);border-radius:8px;padding:0.65rem 0.85rem;border:1px solid var(--border);">
         <div style="font-size:0.78rem;color:var(--text-3);font-weight:600;text-transform:uppercase;margin-bottom:0.25rem;">${k}</div>
         <div style="font-weight:600;word-break:break-word;">${String(v == null || v === '' ? '—' : v).replace(/</g,'&lt;')}</div>
-      </div>`).join('');
+      </div>`).join('') + auditHtml;
     }
     const escId = String(id).replace(/'/g, "\\'");
     if (actions) {
-      actions.innerHTML = `
-        <button type="button" class="btn btn-primary" onclick="document.getElementById('equip-detail-modal').classList.remove('active');show('search-status');document.getElementById('s-loco').value='${escId}';document.getElementById('search-form').requestSubmit();"><i class="fas fa-search"></i> View History</button>
-        <button type="button" class="btn btn-success" onclick="markEquipmentFixed('${escId}','');document.getElementById('equip-detail-modal').classList.remove('active');"><i class="fas fa-check"></i> Mark Fixed</button>
-        <button type="button" class="btn btn-primary" onclick="document.getElementById('equip-detail-modal').classList.remove('active');openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit Register</button>
-      `;
+      let btns = `<button type="button" class="btn btn-primary" onclick="document.getElementById('equip-detail-modal').classList.remove('active');show('search-status');document.getElementById('s-loco').value='${escId}';document.getElementById('search-form').requestSubmit();"><i class="fas fa-search"></i> View History</button>`;
+      if (can('mark_fixed')) {
+        btns += `<button type="button" class="btn btn-success" onclick="markEquipmentFixed('${escId}','');document.getElementById('equip-detail-modal').classList.remove('active');"><i class="fas fa-check"></i> Mark Fixed</button>`;
+      }
+      if (can('edit_equipment')) {
+        btns += `<button type="button" class="btn btn-primary" onclick="document.getElementById('equip-detail-modal').classList.remove('active');openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit Register</button>`;
+      }
+      actions.innerHTML = btns;
     }
     document.getElementById('equip-list-modal')?.classList.remove('active');
     document.getElementById('equip-detail-modal')?.classList.add('active');
@@ -1509,11 +1680,14 @@
 
   function openEquipmentRowActions(id) {
     const escId = String(id).replace(/'/g, "\\'");
-    showRowActions('Equipment: ' + id, `
-      <button type="button" class="btn btn-primary" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');showEquipmentDetail('${escId}');"><i class="fas fa-id-card"></i> View Profile / Detail</button>
-      <button type="button" class="btn btn-primary" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit</button>
-      <button type="button" class="btn btn-danger" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');removeEquipment('${escId}');"><i class="fas fa-trash"></i> Delete</button>
-    `);
+    let html = `<button type="button" class="btn btn-primary" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');showEquipmentDetail('${escId}');"><i class="fas fa-id-card"></i> View Profile / Detail</button>`;
+    if (can('edit_equipment')) {
+      html += `<button type="button" class="btn btn-primary" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit</button>`;
+    }
+    if (can('delete_equipment')) {
+      html += `<button type="button" class="btn btn-danger" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');removeEquipment('${escId}');"><i class="fas fa-trash"></i> Delete</button>`;
+    }
+    showRowActions('Equipment: ' + id, html);
   }
   window.openEquipmentRowActions = openEquipmentRowActions;
 
@@ -2129,6 +2303,10 @@
   window.clearCalendarFind = clearCalendarFind;
 
   function removeEquipment(id) {
+    if (!can('delete_equipment')) {
+      showToast('Only admins can delete equipment', 'error');
+      return;
+    }
     if (!confirm(`Delete equipment "${id}" and all related records?`)) return;
     (async () => {
       try {
@@ -2137,8 +2315,9 @@
         for (const d of usnap.docs) await deleteDoc(d.ref);
         const msnap = await getDocs(query(collection(db, "maintenance"), where("equipment", "==", id)));
         for (const d of msnap.docs) await deleteDoc(d.ref);
-        alert('Removed'); refreshCurrentView();
-      } catch (err) { alert('Error: ' + err.message); }
+        showToast('Equipment removed', 'success');
+        refreshCurrentView();
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
     })();
   }
   window.removeEquipment = removeEquipment;
@@ -2165,16 +2344,24 @@
   window.openEditEquipment = openEditEquipment;
 
   async function markEquipmentFixed(equipId, maintId) {
+    if (!can('mark_fixed')) {
+      showToast('Your role cannot mark equipment fixed', 'error');
+      return;
+    }
+    const actor = getActor();
     try {
       await addDoc(collection(db, "status_updates"), {
         equipmentId: equipId, date: new Date().toISOString().slice(0, 10),
         time: new Date().toTimeString().slice(0, 5), status: 'Fixed', shift: 'Morning',
         reason: 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
-        source: 'Mark Fixed', createdAt: serverTimestamp()
+        source: 'Mark Fixed', createdAt: serverTimestamp(),
+        updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
+        changedAt: new Date().toISOString()
       });
       if (maintId) try { await updateDoc(doc(db, "maintenance", maintId), { lastDone: new Date().toISOString().slice(0, 10) }); } catch (e) {}
-      alert('Marked Fixed'); refreshCurrentView();
-    } catch (err) { alert('Error: ' + err.message); }
+      showToast('Marked Fixed', 'success');
+      refreshCurrentView();
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
   }
   window.markEquipmentFixed = markEquipmentFixed;
 
@@ -2200,9 +2387,14 @@
 
   document.getElementById('add-eq-form').addEventListener('submit', async e => {
     e.preventDefault();
+    if (!can('add_equipment')) {
+      showToast('Your role cannot add equipment', 'error');
+      return;
+    }
+    const actor = getActor();
     const rawId = document.getElementById('loco-number').value.trim();
     const id = sanitizeEquipmentId(rawId);
-    if (!id) return alert('Valid Equipment ID required (invalid characters such as / will be cleaned)');
+    if (!id) return showToast('Valid Equipment ID required', 'error');
     try {
       const payload = {
         shaft: document.getElementById('shaft').value,
@@ -2210,17 +2402,25 @@
         equipmentType: document.getElementById('eq-type').value || '',
         oem: document.getElementById('eq-oem').value.trim() || '',
         locoSize: document.getElementById('loco-size').value,
-        section: document.getElementById('section').value
+        section: document.getElementById('section').value,
+        updatedBy: actor.name,
+        updatedByEmail: actor.email,
+        updatedAt: new Date().toISOString()
       };
       if (rawId && rawId !== id) payload.originalId = rawId;
       await setDoc(doc(db, "equipment", id), payload, { merge: true });
-      alert(rawId !== id ? `Equipment saved as "${id}"` : 'Equipment saved');
+      showToast(rawId !== id ? `Equipment saved as "${id}"` : 'Equipment saved', 'success');
       e.target.reset();
-    } catch (err) { alert('Error: ' + err.message); }
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
   });
 
   document.getElementById('add-status-form').addEventListener('submit', async e => {
     e.preventDefault();
+    if (!can('add_status')) {
+      showToast('Your role cannot log status updates', 'error');
+      return;
+    }
+    const actor = getActor();
     const data = {
       equipmentId: document.getElementById('u-loco').value.trim(),
       date: document.getElementById('u-date').value,
@@ -2230,13 +2430,18 @@
       reason: document.getElementById('u-reason').value.trim(),
       downtimeHours: Number(document.getElementById('u-downtime').value) || 0,
       isFailure: document.getElementById('u-failure').value,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      updatedBy: actor.name,
+      updatedByEmail: actor.email,
+      updatedByUid: actor.uid,
+      changedAt: new Date().toISOString()
     };
-    if (!data.equipmentId || !data.date || !data.reason) return alert('Required fields missing');
+    if (!data.equipmentId || !data.date || !data.reason) return showToast('Required fields missing', 'error');
     try {
       await addDoc(collection(db, "status_updates"), data);
-      alert('Saved'); e.target.reset();
-    } catch (err) { alert('Error: ' + err.message); }
+      showToast('Status update saved', 'success');
+      e.target.reset();
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
   });
 
   document.getElementById('edit-maint-form').addEventListener('submit', async e => {
@@ -2386,7 +2591,9 @@
       ['WORK ORDER', u.workOrder||u.workOrderNumber||'—'],
       ['DATE FIXED', u.dateFixed||'—'], ['SIGN BY', u.signedBy||u.fixedBy||'—'],
       ['Shift', u.shift||'—'], ['Downtime (hrs)', u.downtimeHours??u.downtime??'0'],
-      ['Is Failure', fail ? 'Yes' : 'No'], ['Status', u.status||'—'], ['Source', u.source||u.sourceSheet||'—']
+      ['Is Failure', fail ? 'Yes' : 'No'], ['Status', u.status||'—'], ['Source', u.source||u.sourceSheet||'—'],
+      ['Changed by', u.updatedByEmail || u.updatedBy || u.operator || '—'],
+      ['Changed at', u.changedAt || ([u.date, u.time].filter(Boolean).join(' ') || '—')]
     ];
     body.innerHTML = fields.map(([k, v]) => `<div style="background:var(--surface-2);border-radius:8px;padding:0.65rem 0.85rem;border:1px solid var(--border);">
       <div style="font-size:0.78rem;color:var(--text-3);font-weight:600;text-transform:uppercase;margin-bottom:0.25rem;">${k}</div>
@@ -2569,8 +2776,13 @@
     document.getElementById('manual-mapping-panel').style.display = 'none';
   };
   window.importSelectedRows = async function() {
+    if (!can('import')) {
+      showToast('Your role cannot import reports', 'error');
+      return;
+    }
     const toImport = excelData.filter(r => r.selected);
-    if (!toImport.length) return alert('No rows selected');
+    if (!toImport.length) return showToast('No rows selected', 'error');
+    const actor = getActor();
     const statusDiv = document.getElementById('import-status');
     statusDiv.style.display = 'block';
     statusDiv.style.background = 'rgba(29,78,216,0.08)';
@@ -2587,14 +2799,17 @@
           equipmentId: equipId, date: row.date, time: row.time, status: 'Down', shift: row.shift || 'Night',
           reason: row.reason, downtimeHours: Number(row.downtimeHours) || 0, isFailure: '1',
           operator: row.operator || '', shaft: row.shaft || '', workplace: row.workplace || '',
-          source: 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp()
+          source: 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp(),
+          updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
+          changedAt: new Date().toISOString()
         };
         if (rawId && rawId !== equipId) statusPayload.originalEquipmentId = rawId;
         await addDoc(collection(db, 'status_updates'), statusPayload);
         await setDoc(doc(db, 'equipment', equipId), {
           shaft: row.shaft || '', level: row.workplace || '',
           equipmentType: (typeof inferEquipmentType === 'function') ? inferEquipmentType(equipId) : 'Loco',
-          source: 'Imported Breakdown Report', updatedAt: new Date().toISOString()
+          source: 'Imported Breakdown Report', updatedAt: new Date().toISOString(),
+          updatedBy: actor.name, updatedByEmail: actor.email
         }, { merge: true });
         success++;
       } catch (e) { skipped++; }
@@ -2604,13 +2819,15 @@
     }
     statusDiv.innerHTML = `🎉 Imported <strong>${success}</strong>. Skipped ${skipped}.`;
     statusDiv.style.background = 'rgba(22,163,74,0.12)'; statusDiv.style.color = 'var(--success)';
+    showToast(`Imported ${success} records`, 'success');
     document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
     document.querySelector('.import-step[data-step="3"]')?.classList.add('active');
     if (typeof fillDatalist === 'function') fillDatalist();
     if (typeof populateShaftFilter === 'function') populateShaftFilter();
     if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
     if (typeof populateDashboard === 'function') populateDashboard();
-    show('text-mining');
+    if (can('text_mining')) show('text-mining');
+    else show('dashboard');
   };
 
   // ── Initial ──────────────────────────────────────────────────
