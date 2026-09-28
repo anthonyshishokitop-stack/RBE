@@ -151,6 +151,9 @@
       margin-bottom: 0.45rem; font-size: 0.86rem;
     }
     .audit-item .audit-meta { color: var(--text-3); font-size: 0.78rem; }
+    .alert-li-clickable { cursor: pointer; border-radius: 8px; padding: 0.45rem 0.55rem; transition: background 0.15s; }
+    .alert-li-clickable:hover { background: rgba(29,78,216,0.1); }
+    .alert-li-clickable .alert-focus-label { color: var(--primary); font-size: 0.78rem; font-weight: 600; margin-left: 4px; }
     .sidebar-user {
       padding: 0.75rem 1.15rem; border-bottom: 1px solid #334155; font-size: 0.82rem; color: #94a3b8;
     }
@@ -800,11 +803,13 @@
 
   function getActor() {
     const u = auth.currentUser;
-    if (!u) return { uid: '', email: 'unknown', name: 'Unknown' };
+    if (!u) return { uid: '', email: 'unknown', name: 'Unknown', companyNumber: '' };
+    const profileCn = (currentUser && (currentUser.companyNumber || currentUser.companyNo || currentUser.employeeNumber)) || '';
     return {
       uid: u.uid || '',
       email: u.email || 'unknown',
-      name: (u.displayName || u.email || 'Unknown').split('@')[0]
+      name: (u.displayName || u.email || 'Unknown').split('@')[0],
+      companyNumber: profileCn || ''
     };
   }
 
@@ -1026,6 +1031,71 @@
     const reason = String(u.reason || u.fault || '').trim().toLowerCase().replace(/\s+/g, ' ');
     return [equip, date, status, reason].join('|');
   }
+
+  function looksLikeCompanyNumber(val) {
+    const s = String(val || '').trim();
+    if (!s) return false;
+    if (/^[A-Za-z]{0,3}[\s\-]?[0-9]{3,12}$/.test(s)) return true;
+    if (/^[0-9]{3,12}$/.test(s)) return true;
+    return false;
+  }
+
+  /** Prefer company number; only show a personal name when no company number is available. */
+  function formatPersonDisplay(companyNo, nameOrFallback) {
+    const cn = String(companyNo || '').trim();
+    const nm = String(nameOrFallback || '').trim();
+    if (cn && looksLikeCompanyNumber(cn)) return cn;
+    if (nm && looksLikeCompanyNumber(nm)) return nm;
+    if (cn && !nm) return cn;
+    if (nm) return nm;
+    if (cn) return cn;
+    return '—';
+  }
+
+  function personFromUpdate(u, role) {
+    if (!u) return '—';
+    if (role === 'reported') {
+      const cn = u.reportedByCompanyNumber || u.reportedByCompany || u.operatorCompanyNumber || u.companyNumber || '';
+      const nm = u.reportedBy || u.operator || u.reportedByName || '';
+      return formatPersonDisplay(cn, nm);
+    }
+    if (role === 'signed') {
+      const cn = u.signedByCompanyNumber || u.signedByCompany || u.fixedByCompanyNumber || '';
+      const nm = u.signedBy || u.fixedBy || u.signedByName || '';
+      return formatPersonDisplay(cn, nm);
+    }
+    const cn = u.updatedByCompanyNumber || u.changedByCompanyNumber || u.companyNumber || '';
+    const nm = u.updatedByEmail || u.updatedBy || u.changedBy || u.operator || '';
+    return formatPersonDisplay(cn, nm);
+  }
+
+  function focusAlertTarget(kind, id) {
+    const equipId = String(id || '').trim();
+    if (!equipId) return;
+    const details = document.getElementById('dash-alert-details');
+    if (details && details.classList.contains('collapsed')) {
+      details.classList.remove('collapsed');
+      const btn = document.querySelector('#dashboard-alert-summary .btn-view-more');
+      if (btn) btn.textContent = 'Hide details';
+    }
+    if (kind === 'maint') {
+      show('maintenance-schedule');
+      setTimeout(function() {
+        const qf = document.getElementById('qf-maint');
+        if (qf) { qf.value = equipId; quickFindInTable('maint-table', equipId); }
+      }, 80);
+      return;
+    }
+    if (typeof showEquipmentDetail === 'function') showEquipmentDetail(equipId);
+    else {
+      show('manage-equipment');
+      setTimeout(function() {
+        const qf = document.getElementById('qf-equipment');
+        if (qf) { qf.value = equipId; quickFindInTable('equipment-table', equipId); }
+      }, 80);
+    }
+  }
+  window.focusAlertTarget = focusAlertTarget;
 
   function getFilteredEquipment() {
     let list = equipment || [];
@@ -1429,19 +1499,26 @@
       ['Color Risk', st.color || '—'],
       ['Last Update', st.lastUpdate || '—'],
       ['Last Reason / Fault', st.lastReason || last?.reason || '—'],
-      ['Last changed by', last?.updatedByEmail || last?.updatedBy || last?.operator || '—'],
+      ['Last changed by', last ? personFromUpdate(last, 'changed') : '—'],
       ['Status History Events', String(eu.length)]
     ];
     const auditHtml = `<div class="audit-trail">
       <h4><i class="fas fa-history"></i> Audit trail (who / when)</h4>
       ${eu.length ? eu.slice(0, 12).map(u => {
-        const who = u.updatedByEmail || u.updatedBy || u.operator || 'Unknown';
+        const reported = personFromUpdate(u, 'reported');
+        const signed = personFromUpdate(u, 'signed');
+        const changed = personFromUpdate(u, 'changed');
         const when = [u.date, u.time].filter(Boolean).join(' ') || '—';
         const status = u.status || '—';
         const reason = String(u.reason || u.fault || '').slice(0, 120);
+        const whoBits = [];
+        if (reported && reported !== '—') whoBits.push('Reported: ' + reported);
+        if (signed && signed !== '—') whoBits.push('Signed: ' + signed);
+        if (changed && changed !== '—') whoBits.push('Changed: ' + changed);
+        const whoLine = whoBits.length ? whoBits.join(' · ') : 'Unknown';
         return `<div class="audit-item">
           <div><strong>${String(status).replace(/</g,'&lt;')}</strong> · ${String(reason).replace(/</g,'&lt;') || '—'}</div>
-          <div class="audit-meta"><i class="fas fa-user"></i> ${String(who).replace(/</g,'&lt;')} · <i class="fas fa-clock"></i> ${when}${u.source ? ' · ' + String(u.source).replace(/</g,'&lt;') : ''}</div>
+          <div class="audit-meta"><i class="fas fa-user"></i> ${String(whoLine).replace(/</g,'&lt;')}<br><i class="fas fa-clock"></i> ${when}${u.source ? ' · ' + String(u.source).replace(/</g,'&lt;') : ''}</div>
         </div>`;
       }).join('') : '<p style="color:var(--text-3);font-size:0.9rem;">No status history yet.</p>'}
     </div>`;
@@ -1601,9 +1678,9 @@
       const st = getEquipmentStatus(id);
       if (st.failures >= 2 || parseFloat(st.availability) < 85 || st.downtime > 48) {
         highRisk++;
-        if (highList) highList.innerHTML += `<li style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;">
-          <span><strong>${id}</strong> – ${st.failures} failures · ${st.availability}% · ${st.downtime.toFixed(1)}h</span>
-          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="dismissAlert('high-${id}')">Dismiss</button></li>`;
+        if (highList) highList.innerHTML += `<li class="alert-li-clickable" style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;align-items:center;" onclick="focusAlertTarget('high','${String(id).replace(/'/g,"\\'")}')">
+          <span><strong>${id}</strong> – ${st.failures} failures · ${st.availability}% · ${st.downtime.toFixed(1)}h <span class="alert-focus-label">· View</span></span>
+          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();dismissAlert('high-${id}')">Dismiss</button></li>`;
       }
     });
 
@@ -1614,18 +1691,18 @@
       if (days < 0) overdue++; else if (days <= 7) dueSoon++;
       if (m.source === 'failure-pattern') patternCount++;
       if (predList && days <= 14) {
-        predList.innerHTML += `<li style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;">
-          <span><strong>${m.equipment}</strong> – ${m.task} · ${days < 0 ? Math.abs(days) + ' overdue' : days + 'd left'}</span>
-          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="dismissAlert('maint-${m.id}')">Dismiss</button></li>`;
+        predList.innerHTML += `<li class="alert-li-clickable" style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;align-items:center;" onclick="focusAlertTarget('maint','${String(m.equipment||'').replace(/'/g,"\\'")}')">
+          <span><strong>${m.equipment}</strong> – ${m.task} · ${days < 0 ? Math.abs(days) + ' overdue' : days + 'd left'} <span class="alert-focus-label">· Focus</span></span>
+          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();dismissAlert('maint-${m.id}')">Dismiss</button></li>`;
       }
     });
 
     patterns.forEach(p => {
       if (isAlertDismissed('fail-' + p.equipment)) return;
       patternCount++;
-      if (failList) failList.innerHTML += `<li style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;">
-        <span><strong>${p.equipment}</strong> – ${p.topMode} · ${p.predictedNext} (${p.daysUntil < 0 ? 'overdue' : p.daysUntil + 'd'}) · ${p.failures} fails</span>
-        <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="dismissAlert('fail-${p.equipment}')">Dismiss</button></li>`;
+      if (failList) failList.innerHTML += `<li class="alert-li-clickable" style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;align-items:center;" onclick="focusAlertTarget('fail','${String(p.equipment||'').replace(/'/g,"\\'")}')">
+        <span><strong>${p.equipment}</strong> – ${p.topMode} · ${p.predictedNext} (${p.daysUntil < 0 ? 'overdue' : p.daysUntil + 'd'}) · ${p.failures} fails <span class="alert-focus-label">· View</span></span>
+        <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();dismissAlert('fail-${p.equipment}')">Dismiss</button></li>`;
     });
 
     const summary = document.getElementById('dashboard-alert-summary');
@@ -2406,6 +2483,7 @@
         reason: 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
         source: 'Mark Fixed', createdAt: serverTimestamp(),
         updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
+        updatedByCompanyNumber: actor.companyNumber || '',
         changedAt: new Date().toISOString()
       });
       if (maintId) try { await updateDoc(doc(db, "maintenance", maintId), { lastDone: new Date().toISOString().slice(0, 10) }); } catch (e) {}
@@ -2484,6 +2562,7 @@
       updatedBy: actor.name,
       updatedByEmail: actor.email,
       updatedByUid: actor.uid,
+      updatedByCompanyNumber: actor.companyNumber || '',
       changedAt: new Date().toISOString()
     };
     if (!data.equipmentId || !data.date || !data.reason) return showToast('Required fields missing', 'error');
@@ -2632,17 +2711,17 @@
       ['DATE REPORTED', u.date||'—'], ['TIME REPORTED', u.time||'—'],
       ['Equipment No', u.equipmentId||u.locoNumber||'—'],
       ['BREAKDOWN REPORTED', u.reason||u.fault||'—'],
-      ['REPORTED BY', u.operator||u.reportedBy||'—'],
+      ['REPORTED BY', personFromUpdate(u, 'reported')],
       ['WORKING PLACE', u.workplace||u.level||'—'],
       ['Operation / Shaft', u.shaft||'—'],
       ['ACTUAL FAULT', u.actionTaken||u.actualFault||'—'],
       ['TIME FINISHED', u.timeFinished||u.timeOff||'—'],
       ['FIXED Y/N', String(u.status||'').toLowerCase()==='fixed' ? 'YES' : (fail ? 'NO' : u.status||'—')],
       ['WORK ORDER', u.workOrder||u.workOrderNumber||'—'],
-      ['DATE FIXED', u.dateFixed||'—'], ['SIGN BY', u.signedBy||u.fixedBy||'—'],
+      ['DATE FIXED', u.dateFixed||'—'], ['SIGN BY', personFromUpdate(u, 'signed')],
       ['Shift', u.shift||'—'], ['Downtime (hrs)', u.downtimeHours??u.downtime??'0'],
       ['Is Failure', fail ? 'Yes' : 'No'], ['Status', u.status||'—'], ['Source', u.source||u.sourceSheet||'—'],
-      ['Changed by', u.updatedByEmail || u.updatedBy || u.operator || '—'],
+      ['Changed by', personFromUpdate(u, 'changed')],
       ['Changed at', u.changedAt || ([u.date, u.time].filter(Boolean).join(' ') || '—')]
     ];
     body.innerHTML = fields.map(([k, v]) => `<div style="background:var(--surface-2);border-radius:8px;padding:0.65rem 0.85rem;border:1px solid var(--border);">
@@ -2662,7 +2741,11 @@
     reason: ['breakdown reported','breakdown','fault','failure','reason','problem','description'],
     actualFault: ['actual fault found by','actual fault found','fault found'],
     downtime: ['total downtime','downtime','down hrs','hours'],
-    shift: ['shift'], operator: ['reported by','operator'],
+    shift: ['shift'],
+    operator: ['reported by','operator','reported by name'],
+    reportedByCompany: ['reported by company number','reported by company no','reporter company number','company number','company no','payroll number','employee number','emp no','persal'],
+    signedBy: ['sign by','signed by','fixed by'],
+    signedByCompany: ['signed by company number','sign by company number','signed by company no','fixer company number'],
     action: ['actual fault found by','action taken','fixed y/n'],
     shaft: ['conventional','shaft','section','area']
   };
@@ -2773,11 +2856,26 @@
       if (!reason && actual) reason = actual;
       else if (reason && actual && actual.length > 3) reason = reason + ' | ' + actual;
       if (!reason) reason = 'No reason provided';
+      const opRaw = String(get('operator') || '').trim();
+      const reportedCnRaw = String(get('reportedByCompany') || '').trim();
+      const signedRaw = String(get('signedBy') || '').trim();
+      const signedCnRaw = String(get('signedByCompany') || '').trim();
+      let operatorName = opRaw, reportedByCompanyNumber = reportedCnRaw;
+      if (!reportedByCompanyNumber && looksLikeCompanyNumber(opRaw)) {
+        reportedByCompanyNumber = opRaw;
+        operatorName = '';
+      }
+      let signedByName = signedRaw, signedByCompanyNumber = signedCnRaw;
+      if (!signedByCompanyNumber && looksLikeCompanyNumber(signedRaw)) {
+        signedByCompanyNumber = signedRaw;
+        signedByName = '';
+      }
       return {
         _rawIndex: idx, date: parseExcelDate(get('date')) || new Date().toISOString().slice(0,10),
         time: parseExcelTime(get('time')), equipmentId: equip || 'Unknown', reason,
         downtimeHours: parseFloat(get('downtime')) || 0, shift: String(get('shift') || 'Night').trim() || 'Night',
-        operator: String(get('operator') || '').trim(), action: actual,
+        operator: operatorName, reportedByCompanyNumber, signedBy: signedByName, signedByCompanyNumber,
+        action: actual,
         workplace: String(get('workplace') || '').trim(),
         shaft: document.getElementById('import-shaft')?.value || '',
         sourceSheet: currentSheetName, selected: true
@@ -2988,9 +3086,15 @@
         const statusPayload = {
           equipmentId: equipId, date: row.date, time: row.time, status: 'Down', shift: row.shift || 'Night',
           reason: row.reason, downtimeHours: Number(row.downtimeHours) || 0, isFailure: '1',
-          operator: row.operator || '', shaft: row.shaft || '', workplace: row.workplace || '',
+          operator: row.operator || '',
+          reportedBy: row.operator || '',
+          reportedByCompanyNumber: row.reportedByCompanyNumber || '',
+          signedBy: row.signedBy || '',
+          signedByCompanyNumber: row.signedByCompanyNumber || '',
+          shaft: row.shaft || '', workplace: row.workplace || '',
           source: 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp(),
           updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
+          updatedByCompanyNumber: actor.companyNumber || '',
           changedAt: new Date().toISOString()
         };
         if (rawId && rawId !== equipId) statusPayload.originalEquipmentId = rawId;
