@@ -867,8 +867,8 @@
     const fixedPatterns = [
       /\badjusted\b/, /\bfixed\b/, /\brepaired\b/, /\battended\b/,
       /\bcompleted\b/, /\bresolved\b/, /\breplaced\b/, /\brestored\b/,
-      /\bworking\b/, /\boperational\b/, /\bok\b/, /\bdone\b/,
-      /fixed loose/, /adjusted brakes/, /brakes adjusted/,
+      /\bworking\b/, /\boperational\b/, /\bok\b/, /\bdone\b/,/\bprogrammed\b/,/\bcommissioned\b/,/\bre-reailed\b/,/\bback\b/,/\bon\b/,/\bbalanced\b/,/\bchanged\b/,/\bcharged\b/,/\bcharge\b/,/\bchange\b/,/\binstalled\b/,/\bjoined\b/,/\bwas\b/,/\btightened\b/,/\bdisconnected\b/,
+      /fixed loose/, /adjusted brakes/, /brakes adjusted/,/false report/,/bshort circuit/,/filed cable/,/\breset\b/,/\bcallibrated\b/,
       /connection fixed/, /antenna fixed/, /repaired and/
     ];
     return fixedPatterns.some(p => p.test(r));
