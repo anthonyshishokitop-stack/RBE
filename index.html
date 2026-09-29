@@ -251,17 +251,26 @@
     }
 
     .main {
-      flex: 1; padding: 1.25rem 1.5rem;
-      overflow-y: auto; background: var(--bg);
+      flex: 1;
+      padding: 0;
+      overflow-y: auto;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
     }
-    .container { max-width: 1800px; margin: 0 auto; }
+    .container {
+      max-width: 1800px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 0 1.5rem 1.5rem;
+    }
 
     .header-bar {
       background: linear-gradient(135deg, #0c4a6e 0%, #0369a1 100%);
       color: white;
-      padding: 1rem 1.35rem;
+      padding: 1rem 1.5rem;
       border-radius: 0;
-      margin: -1.25rem -1.5rem 1.25rem;
+      margin: 0 0 1.25rem 0;
       display: flex; flex-wrap: wrap; gap: 1rem;
       justify-content: space-between; align-items: center;
       box-shadow: var(--shadow-md);
@@ -269,6 +278,7 @@
       position: sticky;
       top: 0;
       z-index: 50;
+      width: 100%;
     }
     .header-bar h1 {
       font-size: clamp(1.25rem, 4vw, 1.55rem);
@@ -576,8 +586,9 @@
     @media (min-width: 1025px) {
       .sidebar { position: sticky; top: 0; height: 100vh; }
       .hamburger { display: none; }
-      .main { padding: 0 2rem 1.5rem; }
-      .header-bar { margin: 0 -2rem 1.25rem; border-radius: 0; }
+      .main { padding: 0; }
+      .header-bar { margin: 0 0 1.25rem 0; border-radius: 0; padding: 1rem 2rem; }
+      .container { padding: 0 2rem 1.5rem; }
       #sidebar-close-mobile { display: none !important; }
     }
     @media (max-width: 1024px) {
@@ -588,13 +599,15 @@
       .sidebar.open { transform: translateX(0); }
       .sidebar.collapsed { width: 82vw; max-width: 290px; }
       .hamburger { display: flex; }
-      .main { padding-top: 72px; }
+      .main { padding-top: 72px; padding-left: 0; padding-right: 0; }
       .header-bar {
         flex-direction: column; align-items: flex-start; gap: 0.8rem;
         position: sticky; top: 0; z-index: 40;
-        margin: -72px -1.25rem 1.25rem; /* pull up under the hamburger space */
-        padding-top: 1.4rem;
+        margin: 0 0 1.25rem 0;
+        padding: 1.2rem 1.25rem;
+        width: 100%;
       }
+      .container { padding: 0 1rem 1rem; }
       .sidebar-toggle-btn#sidebar-collapse-btn { display: none; }
       #sidebar-close-mobile { display: flex !important; }
     }
