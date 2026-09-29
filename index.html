@@ -31,6 +31,10 @@
       --shadow: 0 4px 14px -2px rgba(0,0,0,0.09);
       --shadow-lg: 0 10px 28px -5px rgba(0,0,0,0.13);
       --sidebar-width: 280px;
+      --sidebar-collapsed: 72px;
+      --sidebar-bg: #0f172a;
+      --sidebar-hover: #1e293b;
+      --sidebar-active: #1e3a8a;
     }
     [data-theme="dark"] {
       --bg: #0f172a; --surface: #1e293b; --surface-2: #334155;
@@ -41,16 +45,138 @@
     body { background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
     [data-theme="dark"] body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
     .wrapper { display: flex; min-height: 100vh; }
-    .sidebar { width: var(--sidebar-width); background: #1e293b; color: #f8fafc; z-index: 1000; overflow-y: auto; box-shadow: 4px 0 25px rgba(0,0,0,0.25); flex-shrink: 0; transition: transform 0.35s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
-    .sidebar-header { padding: 1.25rem 1.1rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
-    .logo-img { max-width: 138px; border-radius: 8px; }
-    #sidebar-menu { list-style: none; padding: 0.8rem 0.5rem; flex: 1; display: flex; flex-direction: column; }
-    #sidebar-menu li { padding: 0.9rem 1.15rem; margin: 0.3rem 0; border-radius: 8px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 12px; color: #e2e8f0; transition: all 0.2s; }
-    #sidebar-menu li i { font-size: 1.3rem; width: 24px; }
-    #sidebar-menu li:hover, #sidebar-menu li.active { background: #334155; color: white; transform: translateX(4px); }
-    #sidebar-menu li#logout-btn { margin-top: auto; color: #fca5a5; border-top: 1px solid #334155; margin-top: 1rem; padding-top: 1rem; }
+    /* ── Enterprise Sidebar (Emerson / AVEVA / IBM style) ── */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--sidebar-bg);
+      color: #f8fafc;
+      z-index: 1000;
+      overflow: hidden;
+      box-shadow: 4px 0 25px rgba(0,0,0,0.25);
+      flex-shrink: 0;
+      transition: width 0.28s cubic-bezier(0.4,0,0.2,1);
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .sidebar.collapsed { width: var(--sidebar-collapsed); }
+    .sidebar-header {
+      padding: 1rem 0.85rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1e293b;
+      min-height: 64px;
+      gap: 8px;
+    }
+    .logo-img { max-width: 138px; border-radius: 8px; transition: opacity 0.2s; }
+    .sidebar.collapsed .logo-img { opacity: 0; width: 0; overflow: hidden; }
+    .sidebar-brand {
+      display: flex; align-items: center; gap: 10px; overflow: hidden;
+    }
+    .sidebar-brand-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.95rem; flex-shrink: 0; color: #fff;
+    }
+    .sidebar-brand-text { font-weight: 700; font-size: 0.95rem; white-space: nowrap; }
+    .sidebar.collapsed .sidebar-brand-text { display: none; }
+    .sidebar-toggle-btn {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #e2e8f0;
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .sidebar-toggle-btn:hover { background: rgba(255,255,255,0.16); color: #fff; }
+    .sidebar.collapsed .sidebar-toggle-btn { margin: 0 auto; }
+    #sidebar-menu { list-style: none; padding: 0.5rem 0.4rem; flex: 1; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 2px; }
+    #sidebar-menu::-webkit-scrollbar { width: 4px; }
+    #sidebar-menu::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    .menu-group-label {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      color: #64748b; padding: 0.75rem 0.9rem 0.35rem; white-space: nowrap; overflow: hidden;
+    }
+    .sidebar.collapsed .menu-group-label { opacity: 0; height: 0; padding: 0; margin: 0; pointer-events: none; }
+    #sidebar-menu li {
+      padding: 0.7rem 0.9rem; margin: 0; border-radius: 8px; cursor: pointer; font-weight: 500;
+      display: flex; align-items: center; gap: 12px; color: #cbd5e1; transition: all 0.18s;
+      position: relative; white-space: nowrap; overflow: hidden;
+    }
+    #sidebar-menu li i { font-size: 1.15rem; width: 24px; text-align: center; flex-shrink: 0; opacity: 0.9; }
+    #sidebar-menu li span.menu-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    #sidebar-menu li:hover { background: var(--sidebar-hover); color: #fff; }
+    #sidebar-menu li.active {
+      background: var(--sidebar-active); color: #fff;
+      box-shadow: 0 2px 8px rgba(29,78,216,0.35);
+    }
+    #sidebar-menu li.active::before {
+      content: ''; position: absolute; left: 0; top: 20%; bottom: 20%;
+      width: 3px; background: #60a5fa; border-radius: 0 3px 3px 0;
+    }
+    .sidebar.collapsed #sidebar-menu li { justify-content: center; padding: 0.75rem 0.5rem; }
+    .sidebar.collapsed #sidebar-menu li span.menu-label,
+    .sidebar.collapsed #sidebar-menu li .menu-badge { display: none; }
+    .menu-badge {
+      background: #dc2626; color: #fff; font-size: 0.68rem; font-weight: 700;
+      padding: 0.12rem 0.45rem; border-radius: 999px; min-width: 18px; text-align: center;
+    }
+    .menu-badge.warn { background: #ea580c; }
+    .menu-badge.info { background: #1d4ed8; }
+    #sidebar-menu li#logout-btn {
+      margin-top: auto; color: #fca5a5; border-top: 1px solid #1e293b;
+      margin-top: 0.5rem; padding-top: 0.9rem; border-radius: 0;
+    }
     #sidebar-menu li#logout-btn:hover { background: #7f1d1d; color: #fecaca; }
-    .hamburger { position: fixed; top: 14px; left: 14px; z-index: 1101; width: 46px; height: 46px; background: #1d4ed8; color: white; border: none; border-radius: 50%; font-size: 1.45rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(29,78,216,0.4); cursor: pointer; }
+    #sidebar-menu li#logout-btn.active::before { display: none; }
+    .sidebar-user {
+      padding: 0.85rem 1rem; border-bottom: 1px solid #1e293b; font-size: 0.8rem; color: #94a3b8;
+      display: flex; align-items: center; gap: 10px; overflow: hidden;
+    }
+    .sidebar-user-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; color: #fff; flex-shrink: 0; font-size: 0.85rem;
+    }
+    .sidebar-user-info { overflow: hidden; min-width: 0; }
+    .sidebar-user strong { color: #e2e8f0; display: block; margin-bottom: 0.15rem; word-break: break-all; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar.collapsed .sidebar-user-info { display: none; }
+    .sidebar.collapsed .sidebar-user { justify-content: center; padding: 0.85rem 0.5rem; }
+    .sidebar-search { padding: 0.65rem 0.85rem; border-bottom: 1px solid #1e293b; }
+    .sidebar-search-wrap { position: relative; }
+    .sidebar-search-wrap i {
+      position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%);
+      color: #64748b; font-size: 0.85rem; pointer-events: none;
+    }
+    .sidebar-search input {
+      width: 100%; padding: 0.5rem 0.75rem 0.5rem 2.1rem; border-radius: 8px;
+      border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 0.85rem; outline: none;
+    }
+    .sidebar-search input::placeholder { color: #64748b; }
+    .sidebar-search input:focus { border-color: #3b82f6; }
+    .sidebar.collapsed .sidebar-search { display: none; }
+    .version-footer {
+      margin-top: auto; padding: 0.75rem 1rem; font-size: 0.7rem; color: #64748b;
+      border-top: 1px solid #1e293b; line-height: 1.45; overflow: hidden;
+    }
+    .sidebar.collapsed .version-footer { display: none; }
+    .sidebar.collapsed #sidebar-menu li[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+      background: #0f172a; color: #fff; padding: 0.4rem 0.75rem; border-radius: 6px;
+      font-size: 0.8rem; font-weight: 600; white-space: nowrap; z-index: 2000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); pointer-events: none;
+    }
+    .hamburger { position: fixed; top: 14px; left: 14px; z-index: 1101; width: 46px; height: 46px; background: #1d4ed8; color: white; border: none; border-radius: 50%; font-size: 1.45rem; display: none; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(29,78,216,0.4); cursor: pointer; }
     .main { flex: 1; padding: 1rem; overflow-y: auto; background: var(--bg); }
     .container { max-width: 1800px; margin: 0 auto; }
     .header-bar { background: linear-gradient(135deg, #1d4ed8, #3b82f6); color: white; padding: 1.1rem 1.3rem; border-radius: var(--radius-lg) var(--radius-lg) 0 0; margin: -1rem -1rem 1.25rem; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; box-shadow: var(--shadow); }
@@ -197,15 +323,23 @@
     }
     .sidebar-user strong { color: #e2e8f0; display: block; margin-bottom: 0.25rem; word-break: break-all; }
     @media (min-width: 1025px) {
-      .sidebar { position: sticky; top: 0; height: 100vh; transform: translateX(0) !important; }
+      .sidebar { position: sticky; top: 0; height: 100vh; }
       .hamburger { display: none; }
       .main { padding: 1.5rem 2rem; }
+      #sidebar-close-mobile { display: none !important; }
     }
     @media (max-width: 1024px) {
-      .sidebar { position: fixed; inset: 0 auto 0 0; width: 82vw; max-width: 300px; transform: translateX(-100%); }
+      .sidebar {
+        position: fixed; inset: 0 auto 0 0; width: 82vw; max-width: 300px;
+        transform: translateX(-100%); transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+      }
       .sidebar.open { transform: translateX(0); }
+      .sidebar.collapsed { width: 82vw; max-width: 300px; }
+      .hamburger { display: flex; }
       .main { padding-top: 74px; }
       .header-bar { flex-direction: column; align-items: flex-start; gap: 0.9rem; }
+      .sidebar-toggle-btn#sidebar-collapse-btn { display: none; }
+      #sidebar-close-mobile { display: flex !important; }
     }
     @media (max-width: 640px) {
       .kpi-grid { grid-template-columns: 1fr; gap: 0.9rem; }
@@ -233,39 +367,92 @@
 
 <!-- APP -->
 <div id="app" class="hidden">
-  <button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+  <button class="hamburger" id="hamburger-btn" aria-label="Open menu">☰</button>
   <div class="wrapper">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <img src="Side.jpeg" alt="RBE" class="logo-img" onerror="this.style.display='none'">
-        <button onclick="document.getElementById('sidebar').classList.remove('open')" style="background:none;border:none;color:white;font-size:2.3rem;cursor:pointer;">×</button>
+        <div class="sidebar-brand">
+          <div class="sidebar-brand-icon">RBE</div>
+          <div class="sidebar-brand-text">RBE Monitor</div>
+        </div>
+        <button class="sidebar-toggle-btn" id="sidebar-collapse-btn" title="Collapse menu" aria-label="Collapse sidebar">
+          <i class="fas fa-angles-left" id="collapse-icon"></i>
+        </button>
+        <button class="sidebar-toggle-btn" id="sidebar-close-mobile" title="Close menu" aria-label="Close sidebar" style="display:none;">
+          <i class="fas fa-times"></i>
+        </button>
       </div>
+
       <div class="sidebar-user" id="sidebar-user">
-        <strong id="sidebar-user-email">—</strong>
-        <span class="role-badge" id="sidebar-role-badge">operations</span>
+        <div class="sidebar-user-avatar" id="sidebar-avatar">OP</div>
+        <div class="sidebar-user-info">
+          <strong id="sidebar-user-email">—</strong>
+          <span class="role-badge" id="sidebar-role-badge">operations</span>
+        </div>
       </div>
+
+      <div class="sidebar-search">
+        <div class="sidebar-search-wrap">
+          <i class="fas fa-search"></i>
+          <input type="text" id="menu-search" placeholder="Search modules…" autocomplete="off">
+        </div>
+      </div>
+
       <ul id="sidebar-menu">
-        <li class="active" data-section="dashboard"><i class="fas fa-tachometer-alt"></i><span>Dashboard</span></li>
-      
-        <li data-section="text-mining" data-roles="admin,operations,reliability"><i class="fas fa-brain"></i><span>Text Mining &amp; Anomaly</span></li>
-        <li data-section="reliability-center" data-roles="admin,operations,reliability,executive"><i class="fas fa-industry"></i><span>Reliability Center</span></li>
-        <li data-section="search-status"><i class="fas fa-search"></i><span>Search History</span></li>
-        <li data-section="import-spreadsheet" data-roles="admin,operations,reliability"><i class="fas fa-file-upload"></i><span>Import Down Report</span></li>
-      
-        <li data-section="add-status" data-roles="admin,operations,reliability,viewer"><i class="fas fa-edit"></i><span>Log Status Update</span></li>
-        <li data-section="add-equipment" data-roles="admin,operations,reliability"><i class="fas fa-plus-circle"></i><span>+ New Equipment</span></li>
-      
-        <li data-section="manage-equipment"><i class="fas fa-tools"></i><span>Equipment Register</span></li>
-        <li data-section="maintenance-schedule"><i class="fas fa-calendar-check"></i><span>Maintenance Plan</span></li>
-        <li data-section="calendar"><i class="fas fa-calendar"></i><span>Calendar</span></li>
-        <li data-section="operations-report"><i class="fas fa-file-alt"></i><span>Operations Report</span></li>
-        <li data-section="audit-log" data-roles="admin,executive"><i class="fas fa-shield-alt"></i><span>Audit Trail</span></li>
-      
-        <li id="logout-btn"><i class="fas fa-sign-out-alt"></i><span>Logout</span></li>
+        <li class="menu-group-label" data-group="overview">Overview</li>
+        <li class="active" data-section="dashboard" data-tooltip="Dashboard" data-keywords="dashboard home overview kpi">
+          <i class="fas fa-tachometer-alt"></i><span class="menu-label">Dashboard</span>
+        </li>
+
+        <li class="menu-group-label" data-group="analytics">Monitoring &amp; Analytics</li>
+        <li data-section="text-mining" data-roles="admin,operations,reliability" data-tooltip="Text Mining & Anomaly" data-keywords="text mining anomaly nlp failure pattern">
+          <i class="fas fa-brain"></i><span class="menu-label">Text Mining &amp; Anomaly</span>
+        </li>
+        <li data-section="reliability-center" data-roles="admin,operations,reliability,executive" data-tooltip="Reliability Center" data-keywords="reliability center health score rul mttf">
+          <i class="fas fa-industry"></i><span class="menu-label">Reliability Center</span>
+        </li>
+
+        <li class="menu-group-label" data-group="operations">Operations</li>
+        <li data-section="search-status" data-tooltip="Search History" data-keywords="search history fault reason equipment">
+          <i class="fas fa-search"></i><span class="menu-label">Search History</span>
+        </li>
+        <li data-section="import-spreadsheet" data-roles="admin,operations,reliability" data-tooltip="Import Down Report" data-keywords="import excel breakdown report spreadsheet">
+          <i class="fas fa-file-upload"></i><span class="menu-label">Import Down Report</span>
+        </li>
+        <li data-section="add-status" data-roles="admin,operations,reliability,viewer" data-tooltip="Log Status Update" data-keywords="log status update fixed down">
+          <i class="fas fa-edit"></i><span class="menu-label">Log Status Update</span>
+        </li>
+        <li data-section="add-equipment" data-roles="admin,operations,reliability" data-tooltip="New Equipment" data-keywords="new equipment add asset">
+          <i class="fas fa-plus-circle"></i><span class="menu-label">+ New Equipment</span>
+        </li>
+
+        <li class="menu-group-label" data-group="assets">Assets &amp; Planning</li>
+        <li data-section="manage-equipment" data-tooltip="Equipment Register" data-keywords="equipment register assets fleet">
+          <i class="fas fa-tools"></i><span class="menu-label">Equipment Register</span>
+        </li>
+        <li data-section="maintenance-schedule" data-tooltip="Maintenance Plan" data-keywords="maintenance plan schedule pm">
+          <i class="fas fa-calendar-check"></i><span class="menu-label">Maintenance Plan</span>
+          <span class="menu-badge warn" id="menu-badge-maint" style="display:none;">0</span>
+        </li>
+        <li data-section="calendar" data-tooltip="Calendar" data-keywords="calendar schedule events">
+          <i class="fas fa-calendar"></i><span class="menu-label">Calendar</span>
+        </li>
+
+        <li class="menu-group-label" data-group="reporting">Reporting &amp; Governance</li>
+        <li data-section="operations-report" data-tooltip="Operations Report" data-keywords="operations report status problem high risk">
+          <i class="fas fa-file-alt"></i><span class="menu-label">Operations Report</span>
+        </li>
+        <li data-section="audit-log" data-roles="admin,executive" data-tooltip="Audit Trail" data-keywords="audit trail log compliance">
+          <i class="fas fa-shield-alt"></i><span class="menu-label">Audit Trail</span>
+        </li>
+
+        <li id="logout-btn" data-tooltip="Logout">
+          <i class="fas fa-sign-out-alt"></i><span class="menu-label">Logout</span>
+        </li>
       </ul>
+
       <div class="version-footer">
         <div class="enterprise-badge" style="margin-bottom:0.45rem;"><i class="fas fa-cube"></i> ENTERPRISE</div>
-
         <span class="sla-pill" style="margin-top:0.4rem;background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.3);"><i class="fas fa-check-circle"></i> 99.5% target SLA</span>
       </div>
     </aside>
@@ -1765,7 +1952,12 @@
     document.querySelectorAll('#sidebar-menu li').forEach(li => li.classList.remove('active'));
     const menuItem = document.querySelector(`[data-section="${section}"]`);
     if (menuItem) menuItem.classList.add('active');
-    if (window.innerWidth < 1025) document.getElementById('sidebar').classList.remove('open');
+    if (window.innerWidth < 1025) {
+      const sb = document.getElementById('sidebar');
+      if (sb) sb.classList.remove('open');
+      const cm = document.getElementById('sidebar-close-mobile');
+      if (cm) cm.style.display = 'none';
+    }
     refreshCurrentView();
   }
   window.show = show;
@@ -1787,7 +1979,19 @@
   window.refreshCurrentView = refreshCurrentView;
 
   document.querySelectorAll('#sidebar-menu li').forEach(li => {
-    li.addEventListener('click', () => { if (li.id !== 'logout-btn') show(li.dataset.section); });
+    li.addEventListener('click', () => {
+      if (li.id === 'logout-btn') return;
+      if (li.classList.contains('menu-group-label')) return;
+      if (!li.dataset.section) return;
+      show(li.dataset.section);
+      // Close mobile drawer after navigation
+      const sb = document.getElementById('sidebar');
+      if (sb && window.innerWidth <= 1024) {
+        sb.classList.remove('open');
+        const cm = document.getElementById('sidebar-close-mobile');
+        if (cm) cm.style.display = 'none';
+      }
+    });
   });
 
   // ── Dashboard trend series (availability ↑/↓ & downtime improvement) ──
@@ -3900,5 +4104,122 @@
   populateShaftFilter();
   show('dashboard');
 </script>
+
+<script>
+/* ── Enterprise Sidebar Controller ── */
+(function() {
+  const sidebar = document.getElementById('sidebar');
+  const collapseBtn = document.getElementById('sidebar-collapse-btn');
+  const collapseIcon = document.getElementById('collapse-icon');
+  const hamburger = document.getElementById('hamburger-btn');
+  const closeMobile = document.getElementById('sidebar-close-mobile');
+  const menuSearch = document.getElementById('menu-search');
+  const COLLAPSE_KEY = 'rbe_sidebar_collapsed';
+
+  function isDesktop() { return window.innerWidth > 1024; }
+
+  function applyCollapsed(collapsed) {
+    if (!sidebar) return;
+    if (collapsed) {
+      sidebar.classList.add('collapsed');
+      if (collapseIcon) collapseIcon.className = 'fas fa-angles-right';
+      if (collapseBtn) collapseBtn.title = 'Expand menu';
+    } else {
+      sidebar.classList.remove('collapsed');
+      if (collapseIcon) collapseIcon.className = 'fas fa-angles-left';
+      if (collapseBtn) collapseBtn.title = 'Collapse menu';
+    }
+    try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {}
+  }
+
+  if (isDesktop()) {
+    try {
+      if (localStorage.getItem(COLLAPSE_KEY) === '1') applyCollapsed(true);
+    } catch (e) {}
+  }
+
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (!isDesktop()) return;
+      applyCollapsed(!sidebar.classList.contains('collapsed'));
+    });
+  }
+
+  if (hamburger) {
+    hamburger.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.add('open');
+      if (closeMobile) closeMobile.style.display = 'flex';
+    });
+  }
+
+  if (closeMobile) {
+    closeMobile.addEventListener('click', function(e) {
+      e.stopPropagation();
+      sidebar.classList.remove('open');
+      closeMobile.style.display = 'none';
+    });
+  }
+
+  document.addEventListener('click', function(e) {
+    if (!isDesktop() && sidebar && sidebar.classList.contains('open')) {
+      if (!sidebar.contains(e.target) && e.target !== hamburger && !(hamburger && hamburger.contains(e.target))) {
+        sidebar.classList.remove('open');
+        if (closeMobile) closeMobile.style.display = 'none';
+      }
+    }
+  });
+
+  if (menuSearch) {
+    menuSearch.addEventListener('input', function() {
+      const q = menuSearch.value.trim().toLowerCase();
+      const items = sidebar.querySelectorAll('#sidebar-menu li[data-section], #sidebar-menu li#logout-btn');
+      const groups = sidebar.querySelectorAll('.menu-group-label');
+      items.forEach(function(li) {
+        const keywords = (li.getAttribute('data-keywords') || '') + ' ' + (li.getAttribute('data-tooltip') || '') + ' ' + (li.textContent || '');
+        li.style.display = (!q || keywords.toLowerCase().indexOf(q) !== -1) ? '' : 'none';
+      });
+      groups.forEach(function(g) {
+        let next = g.nextElementSibling;
+        let anyVisible = false;
+        while (next && !next.classList.contains('menu-group-label') && next.id !== 'logout-btn') {
+          if (next.style.display !== 'none' && next.getAttribute('data-section')) anyVisible = true;
+          next = next.nextElementSibling;
+        }
+        g.style.display = (anyVisible || !q) ? '' : 'none';
+      });
+    });
+  }
+
+  window.addEventListener('resize', function() {
+    if (!isDesktop()) {
+      sidebar.classList.remove('collapsed');
+      if (collapseIcon) collapseIcon.className = 'fas fa-angles-left';
+    } else {
+      try {
+        if (localStorage.getItem(COLLAPSE_KEY) === '1') applyCollapsed(true);
+      } catch (e) {}
+      sidebar.classList.remove('open');
+    }
+  });
+
+  // Keep avatar initials in sync when email is set (hook after auth)
+  const emailEl = document.getElementById('sidebar-user-email');
+  const avatarEl = document.getElementById('sidebar-avatar');
+  if (emailEl && avatarEl) {
+    const obs = new MutationObserver(function() {
+      const email = (emailEl.textContent || '').trim();
+      if (email && email !== '—') {
+        const parts = email.split('@')[0].split(/[._-]/);
+        const initials = parts.slice(0, 2).map(function(p) { return (p[0] || '').toUpperCase(); }).join('') || 'OP';
+        avatarEl.textContent = initials.slice(0, 2);
+      }
+    });
+    obs.observe(emailEl, { childList: true, characterData: true, subtree: true });
+  }
+})();
+</script>
+
 </body>
 </html>
