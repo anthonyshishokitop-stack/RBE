@@ -631,7 +631,7 @@
       <button type="submit" class="btn btn-primary" id="auth-submit">Sign In</button>
     </form>
     <p style="margin-top:1.5rem;text-align:center;" id="public-signup-wrap"><span id="toggle-auth" class="toggle-link">Create an account</span></p>
-    <p style="margin-top:0.75rem;font-size:0.8rem;color:#64748b;text-align:center;" id="invite-only-hint" class="hidden">Invite-only accounts. Contact your administrator for access.</p>
+    <p style="margin-top:0.75rem;font-size:0.8rem;color:#64748b;text-align:center;" id="invite-only-hint" class="hidden">Contact your administrator for access.</p>
     <p id="auth-error" style="color:var(--danger);text-align:center;min-height:1.3em;margin-top:1rem;"></p>
   </div>
 </div>
@@ -1078,7 +1078,7 @@
             </div>
             <div id="cleanup-duplicates-panel" data-roles="admin" style="margin-top:1.25rem;padding:1.1rem 1.25rem;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.25);border-radius:var(--radius-md);">
               <h3 style="margin:0 0 0.4rem;color:var(--danger);font-size:1rem;"><i class="fas fa-broom"></i> Clean up duplicate status records</h3>
-              <p style="margin:0 0 0.85rem;font-size:0.88rem;color:var(--text-2);">One-time database cleanup: keeps one copy of each unique event (same equipment, date, time, status, reason) and permanently deletes the rest. Admin only. Safe to re-run.</p>
+              <p style="margin:0 0 0.85rem;font-size:0.88rem;color:var(--text-2);">Database cleanup</p>
               <button type="button" class="btn btn-danger" id="btn-cleanup-duplicates" onclick="cleanupDuplicateStatusUpdates()"><i class="fas fa-trash-alt"></i> Remove duplicates from database</button>
               <div id="cleanup-status" style="display:none;margin-top:0.85rem;padding:0.75rem 1rem;border-radius:8px;font-weight:500;"></div>
             </div>
@@ -1222,7 +1222,7 @@
               <h2 style="margin:0;">Recent privileged &amp; change events</h2>
               <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="refreshAuditLog()"><i class="fas fa-sync-alt"></i> Refresh</button>
             </div>
-            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Captures status changes, imports, equipment CRUD, mark-fixed actions and role context. Expand with server-side audit collection for full enterprise retention.</p>
+            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Captures status changes</p>
             <div id="audit-log-body" style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px;"></div>
           </div>
         </section>
@@ -1240,7 +1240,7 @@
           </div>
           <div class="card">
             <h2 style="margin:0 0 0.75rem;"><i class="fas fa-user-plus"></i> Invite / register user</h2>
-            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Creates a pending user profile. In production, pair with Firebase Auth invite link or Admin SDK account creation. First successful login activates the profile.</p>
+            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Creates user profile</p>
             <form id="invite-user-form" style="display:grid;gap:0.85rem;max-width:720px;">
               <div class="form-group" style="margin:0;"><label>Email</label><input id="invite-email" type="email" required placeholder="user@company.com"></div>
               <div class="form-group" style="margin:0;"><label>Role</label>
@@ -1253,14 +1253,14 @@
                 </select>
               </div>
               <div class="form-group" style="margin:0;">
-                <label>Allowed shafts (hold Ctrl/Cmd for multi-select; empty = no operational access until set)</label>
+                <label>Allowed shafts</label>
                 <select id="invite-shafts" multiple size="8" style="min-height:140px;"></select>
                 <div style="margin-top:0.4rem;display:flex;gap:8px;flex-wrap:wrap;">
                   <button type="button" class="btn btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem;" onclick="selectAllInviteShafts(true)">Select all</button>
                   <button type="button" class="btn btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem;background:#64748b;" onclick="selectAllInviteShafts(false)">Clear</button>
                 </div>
               </div>
-              <div class="form-group" style="margin:0;"><label>Company / employee number (optional)</label><input id="invite-company" type="text" placeholder="e.g. payroll / company number"></div>
+              <div class="form-group" style="margin:0;"><label>Company / employee number</label><input id="invite-company" type="text" placeholder="e.g. payroll / company number"></div>
               <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Save invite / profile</button>
             </form>
             <p id="invite-status" style="margin-top:0.75rem;font-size:0.88rem;"></p>
@@ -1280,11 +1280,11 @@
           <div class="card" style="border-left:4px solid var(--primary);">
             <h2><i class="fas fa-book"></i> Admin runbook (short)</h2>
             <ol style="margin:0.5rem 0 0 1.2rem;line-height:1.7;color:var(--text-2);font-size:0.92rem;">
-              <li><strong>Invite:</strong> Enter email + role + allowedShafts → Save. Create matching Firebase Auth user via Admin SDK or console (or send password-reset / invite link).</li>
-              <li><strong>Assign scope:</strong> Edit user row → set role and multi-select shafts. Empty allowedShafts blocks operational read/write when ENFORCE_SHAFT_SCOPE is on (admins exempt).</li>
-              <li><strong>Disable:</strong> Set status to <code>disabled</code> — client blocks login session; pair with Firebase disable in console for hard lock.</li>
-              <li><strong>Technical users:</strong> Mint short-lived custom tokens from Cloud Functions / service account; never store end-user passwords for integrations. Log actorType=service in audit.</li>
-              <li><strong>Production checklist:</strong> Deploy firestore.rules · set DISABLE_PUBLIC_SIGNUP=true · configure OIDC/SAML · rotate service credentials · verify audit_log writes.</li>
+              <li><strong>Invite</strong></li>
+              <li><strong>Assign scope:</strong></li>
+              <li><strong>Disable:</strong></li>
+              <li><strong>Technical users:</strong></li>
+              <li><strong>Production checklist:</strong></li>
             </ol>
           </div>
         </section>
