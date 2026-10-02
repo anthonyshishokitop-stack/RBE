@@ -630,7 +630,8 @@
       <div class="form-group"><label>Password</label><input id="password" type="password" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-primary" id="auth-submit">Sign In</button>
     </form>
-    <p style="margin-top:1.5rem;text-align:center;"><span id="toggle-auth" class="toggle-link">Create an account</span></p>
+    <p style="margin-top:1.5rem;text-align:center;" id="public-signup-wrap"><span id="toggle-auth" class="toggle-link">Create an account</span></p>
+    <p style="margin-top:0.75rem;font-size:0.8rem;color:#64748b;text-align:center;" id="invite-only-hint" class="hidden">Invite-only accounts. Contact your administrator for access.</p>
     <p id="auth-error" style="color:var(--danger);text-align:center;min-height:1.3em;margin-top:1rem;"></p>
   </div>
 </div>
@@ -658,6 +659,7 @@
         <div class="sidebar-user-info">
           <strong id="sidebar-user-email">—</strong>
           <span class="role-badge" id="sidebar-role-badge">operations</span>
+          <div id="sidebar-shafts-hint" style="font-size:0.68rem;color:#94a3b8;margin-top:0.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="">Shafts: —</div>
         </div>
       </div>
 
@@ -715,6 +717,9 @@
         <li data-section="audit-log" data-roles="admin,executive" data-tooltip="Audit Trail" data-keywords="audit trail log compliance">
           <i class="fas fa-shield-alt"></i><span class="menu-label">Audit Trail</span>
         </li>
+        <li data-section="user-admin" data-roles="admin" data-tooltip="User Management" data-keywords="users invite role shafts admin">
+          <i class="fas fa-users-cog"></i><span class="menu-label">User Management</span>
+        </li>
 
         <li id="logout-btn" data-tooltip="Logout">
           <i class="fas fa-sign-out-alt"></i><span class="menu-label">Logout</span>
@@ -757,6 +762,7 @@
             <span class="enterprise-badge"><i class="fas fa-cube"></i> ENTERPRISE</span>
             <span><i class="fas fa-lock"></i> TLS · Data residency ZA</span>
             <span><i class="fas fa-user-shield"></i> RBAC active</span>
+            <span><i class="fas fa-user-lock"></i> Invite-only accounts · Shaft-scoped RBAC · Dual audit</span>
             <span><i class="fas fa-heartbeat"></i> <a href="#" onclick="show('reliability-center');return false;" style="color:#93c5fd;text-decoration:underline;">Reliability Center</a></span>
             <span class="sla-pill" style="background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.35);"><i class="fas fa-check-circle"></i> Live monitoring</span>
           </div>
@@ -1221,6 +1227,68 @@
           </div>
         </section>
 
+
+        <!-- USER MANAGEMENT (admin) -->
+        <section id="user-admin" class="hidden">
+          <div class="header-bar">
+            <h1><i class="fas fa-users-cog"></i> User Management</h1>
+          </div>
+          <div class="compliance-bar">
+            <span><i class="fas fa-user-lock"></i> Invite-only accounts</span>
+            <span><i class="fas fa-map-marker-alt"></i> Shaft-scoped RBAC</span>
+            <span><i class="fas fa-shield-alt"></i> Admin SDK / controlled create</span>
+          </div>
+          <div class="card">
+            <h2 style="margin:0 0 0.75rem;"><i class="fas fa-user-plus"></i> Invite / register user</h2>
+            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Creates a pending user profile. In production, pair with Firebase Auth invite link or Admin SDK account creation. First successful login activates the profile.</p>
+            <form id="invite-user-form" style="display:grid;gap:0.85rem;max-width:720px;">
+              <div class="form-group" style="margin:0;"><label>Email</label><input id="invite-email" type="email" required placeholder="user@company.com"></div>
+              <div class="form-group" style="margin:0;"><label>Role</label>
+                <select id="invite-role" required>
+                  <option value="operations">operations</option>
+                  <option value="reliability">reliability</option>
+                  <option value="executive">executive</option>
+                  <option value="viewer">viewer</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Allowed shafts (hold Ctrl/Cmd for multi-select; empty = no operational access until set)</label>
+                <select id="invite-shafts" multiple size="8" style="min-height:140px;"></select>
+                <div style="margin-top:0.4rem;display:flex;gap:8px;flex-wrap:wrap;">
+                  <button type="button" class="btn btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem;" onclick="selectAllInviteShafts(true)">Select all</button>
+                  <button type="button" class="btn btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem;background:#64748b;" onclick="selectAllInviteShafts(false)">Clear</button>
+                </div>
+              </div>
+              <div class="form-group" style="margin:0;"><label>Company / employee number (optional)</label><input id="invite-company" type="text" placeholder="e.g. payroll / company number"></div>
+              <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Save invite / profile</button>
+            </form>
+            <p id="invite-status" style="margin-top:0.75rem;font-size:0.88rem;"></p>
+          </div>
+          <div class="card">
+            <div class="table-toolbar">
+              <h2 style="margin:0;"><i class="fas fa-list"></i> Users</h2>
+              <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="refreshUserAdminList()"><i class="fas fa-sync-alt"></i> Refresh</button>
+            </div>
+            <div style="overflow-x:auto;">
+              <table id="user-admin-table">
+                <thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Allowed shafts</th><th>Actions</th></tr></thead>
+                <tbody id="user-admin-tbody"><tr><td colspan="5">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card" style="border-left:4px solid var(--primary);">
+            <h2><i class="fas fa-book"></i> Admin runbook (short)</h2>
+            <ol style="margin:0.5rem 0 0 1.2rem;line-height:1.7;color:var(--text-2);font-size:0.92rem;">
+              <li><strong>Invite:</strong> Enter email + role + allowedShafts → Save. Create matching Firebase Auth user via Admin SDK or console (or send password-reset / invite link).</li>
+              <li><strong>Assign scope:</strong> Edit user row → set role and multi-select shafts. Empty allowedShafts blocks operational read/write when ENFORCE_SHAFT_SCOPE is on (admins exempt).</li>
+              <li><strong>Disable:</strong> Set status to <code>disabled</code> — client blocks login session; pair with Firebase disable in console for hard lock.</li>
+              <li><strong>Technical users:</strong> Mint short-lived custom tokens from Cloud Functions / service account; never store end-user passwords for integrations. Log actorType=service in audit.</li>
+              <li><strong>Production checklist:</strong> Deploy firestore.rules · set DISABLE_PUBLIC_SIGNUP=true · configure OIDC/SAML · rotate service credentials · verify audit_log writes.</li>
+            </ol>
+          </div>
+        </section>
+
         <!-- ENTERPRISE SUPPORT & SLA -->
         <section id="enterprise-support" class="hidden">
           <div class="header-bar">
@@ -1434,6 +1502,60 @@
     measurementId: "G-15E0HZJ2X6"
   };
 
+
+  /*
+   * Example firestore.rules (deploy via Firebase CLI) — production-grade shaft-scoped RBAC
+   *
+   * rules_version = '2';
+   * service cloud.firestore {
+   *   match /databases/{database}/documents {
+   *     function isSignedIn() { return request.auth != null; }
+   *     function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+   *     function isAdmin() { return isSignedIn() && userDoc().role == 'admin'; }
+   *     function isActive() { return isSignedIn() && userDoc().status != 'disabled'; }
+   *     function shaftAllowed(shaft) {
+   *       return isAdmin()
+   *         || (shaft == null || shaft == '')
+   *         || (userDoc().allowedShafts is list && shaft in userDoc().allowedShafts);
+   *     }
+   *
+   *     match /users/{uid} {
+   *       allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+   *       allow create, update: if isAdmin();
+   *       allow delete: if false;
+   *     }
+   *     match /user_invites/{id} {
+   *       allow read, write: if isAdmin();
+   *     }
+   *     match /equipment/{id} {
+   *       allow read: if isActive() && shaftAllowed(resource.data.shaft);
+   *       allow create, update: if isActive() && shaftAllowed(request.resource.data.shaft);
+   *       allow delete: if isAdmin();
+   *     }
+   *     match /status_updates/{id} {
+   *       allow read: if isActive();
+   *       allow create: if isActive() && shaftAllowed(request.resource.data.shaft);
+   *       allow update, delete: if isAdmin();
+   *     }
+   *     match /maintenance/{id} {
+   *       allow read: if isActive();
+   *       allow write: if isActive();
+   *     }
+   *     match /audit_log/{id} {
+   *       allow read: if isActive() && (isAdmin() || userDoc().role in ['executive','reliability']);
+   *       allow create: if isSignedIn();
+   *       allow update, delete: if false;
+   *     }
+   *     match /{document=**} {
+   *       allow read, write: if false;
+   *     }
+   *   }
+   * }
+   *
+   * Technical users: mint short-lived custom tokens via Cloud Functions / service accounts.
+   * Never store end-user passwords for integrations. Set custom claims role + allowedShafts when possible.
+   */
+
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
@@ -1452,6 +1574,11 @@
   let currentUserRole = 'operations';
   // Enterprise RBAC: admin (full) | reliability (analytics + ops write) | operations | executive (view + audit) | viewer
   const VALID_ROLES = ['admin', 'reliability', 'operations', 'executive', 'viewer'];
+  // Production feature flags (set true for production hardening)
+  const DISABLE_PUBLIC_SIGNUP = true;   // hide self-registration; invite-only
+  const ENFORCE_SHAFT_SCOPE = true;     // deny actions outside allowedShafts (admins exempt)
+  let currentAllowedShafts = [];        // empty = no operational access when ENFORCE_SHAFT_SCOPE
+  let currentUserStatus = 'active';     // active | disabled | pending
   let auditEvents = []; // in-memory + persisted critical actions for Audit Trail view
   try { auditEvents = JSON.parse(localStorage.getItem('rbe_audit_events') || '[]'); } catch (e) { auditEvents = []; }
 
@@ -1477,40 +1604,107 @@
     };
   }
 
-  function can(action) {
+  function can(action, context) {
     const r = currentUserRole || 'viewer';
-    if (r === 'admin') return true;
-    if (action === 'delete_equipment' || action === 'audit_admin') return false;
-    if (action === 'import' || action === 'text_mining' || action === 'add_equipment') {
-      return r === 'operations' || r === 'reliability';
+    context = context || {};
+    // Disabled accounts cannot act
+    if (currentUserStatus === 'disabled') return false;
+    // Role matrix
+    let roleOk = false;
+    if (r === 'admin') roleOk = true;
+    else if (action === 'delete_equipment' || action === 'audit_admin' || action === 'manage_users') roleOk = false;
+    else if (action === 'import' || action === 'text_mining' || action === 'add_equipment') {
+      roleOk = (r === 'operations' || r === 'reliability');
+    } else if (action === 'edit_equipment' || action === 'add_status' || action === 'mark_fixed' || action === 'maint') {
+      roleOk = (r === 'operations' || r === 'reliability');
+    } else if (action === 'reliability_center' || action === 'view_audit') {
+      roleOk = (r === 'reliability' || r === 'executive' || r === 'operations');
+    } else {
+      roleOk = true; // view
     }
-    if (action === 'edit_equipment' || action === 'add_status' || action === 'mark_fixed' || action === 'maint') {
-      return r === 'operations' || r === 'reliability' || r === 'admin';
+    if (!roleOk) return false;
+    // Shaft scope (admins exempt)
+    if (ENFORCE_SHAFT_SCOPE && r !== 'admin') {
+      const shaft = context.shaft != null ? String(context.shaft).trim() : '';
+      if (shaft) {
+        if (!currentAllowedShafts || !currentAllowedShafts.length) return false;
+        if (!currentAllowedShafts.includes(shaft)) return false;
+      }
+      // If equipmentId provided without shaft, resolve from equipment cache
+      if (!shaft && context.equipmentId) {
+        const eq = (equipment || []).find(e => String(e.id) === String(context.equipmentId));
+        const eqShaft = eq ? String(eq.shaft || '').trim() : '';
+        if (eqShaft) {
+          if (!currentAllowedShafts || !currentAllowedShafts.length) return false;
+          if (!currentAllowedShafts.includes(eqShaft)) return false;
+        }
+      }
     }
-    if (action === 'reliability_center' || action === 'view_audit') {
-      return r === 'reliability' || r === 'executive' || r === 'admin' || r === 'operations';
-    }
-    return true; // view
+    return true;
   }
   window.can = can;
 
-  function logAudit(action, detail, equipmentId) {
+  function assertCan(action, context, friendly) {
+    if (can(action, context)) return true;
+    const msg = friendly || (ENFORCE_SHAFT_SCOPE && context && context.shaft
+      ? ('Not authorized for this shaft (' + context.shaft + ')')
+      : 'Not authorized for this action');
+    showToast(msg, 'error');
+    try { logAudit('authz_denied', action + ': ' + msg, (context && context.equipmentId) || ''); } catch (e) {}
+    return false;
+  }
+  window.assertCan = assertCan;
+
+  function userCanAccessShaft(shaft) {
+    if (!ENFORCE_SHAFT_SCOPE) return true;
+    if ((currentUserRole || '') === 'admin') return true;
+    const s = String(shaft || '').trim();
+    if (!s) return true; // unassigned visible
+    return Array.isArray(currentAllowedShafts) && currentAllowedShafts.includes(s);
+  }
+  window.userCanAccessShaft = userCanAccessShaft;
+
+  function filterByAllowedShafts(list, shaftKey) {
+    if (!ENFORCE_SHAFT_SCOPE || (currentUserRole || '') === 'admin') return list || [];
+    const key = shaftKey || 'shaft';
+    const allowed = currentAllowedShafts || [];
+    if (!allowed.length) return []; // no operational access
+    return (list || []).filter(item => {
+      const s = String(item[key] || item.shaft || '').trim();
+      if (!s) return true;
+      return allowed.includes(s);
+    });
+  }
+  window.filterByAllowedShafts = filterByAllowedShafts;
+
+  function logAudit(action, detail, equipmentId, extra) {
     const actor = getActor();
+    extra = extra || {};
+    let shaft = extra.shaft || '';
+    if (!shaft && equipmentId) {
+      const eq = (equipment || []).find(e => String(e.id) === String(equipmentId));
+      if (eq) shaft = eq.shaft || '';
+    }
     const entry = {
       ts: new Date().toISOString(),
       action: String(action || 'event'),
       detail: String(detail || ''),
       equipmentId: equipmentId || '',
+      shaft: shaft || '',
       by: actor.email || actor.name || 'unknown',
+      email: actor.email || '',
       role: currentUserRole || 'unknown',
-      uid: actor.uid || ''
+      uid: actor.uid || '',
+      companyNumber: actor.companyNumber || '',
+      actorType: extra.actorType || 'user',
+      source: extra.source || 'ui'
     };
     auditEvents.unshift(entry);
     if (auditEvents.length > 500) auditEvents = auditEvents.slice(0, 500);
     try { localStorage.setItem('rbe_audit_events', JSON.stringify(auditEvents)); } catch (e) {}
-    // Optional: also write to Firestore audit collection when admin (non-blocking)
+    // Always attempt Firestore audit_log for privileged / change actions (rules enforce immutability)
     try {
-      if (auth.currentUser && (currentUserRole === 'admin' || currentUserRole === 'reliability')) {
+      if (auth.currentUser) {
         addDoc(collection(db, 'audit_log'), { ...entry, createdAt: serverTimestamp() }).catch(() => {});
       }
     } catch (e) {}
@@ -1526,16 +1720,30 @@
       badge.textContent = role;
       badge.className = 'role-badge ' + role;
     }
+    const shaftsHint = document.getElementById('sidebar-shafts-hint');
+    if (shaftsHint) {
+      if (role === 'admin') {
+        shaftsHint.textContent = 'Shafts: ALL (admin)';
+        shaftsHint.title = 'Administrator — all shafts';
+      } else if (!currentAllowedShafts || !currentAllowedShafts.length) {
+        shaftsHint.textContent = ENFORCE_SHAFT_SCOPE ? 'Shafts: none assigned' : 'Shafts: all (scope off)';
+        shaftsHint.title = 'No allowedShafts on profile';
+      } else {
+        const label = currentAllowedShafts.length <= 3
+          ? currentAllowedShafts.join(', ')
+          : (currentAllowedShafts.slice(0, 2).join(', ') + ' +' + (currentAllowedShafts.length - 2) + ' more');
+        shaftsHint.textContent = 'Shafts: ' + label;
+        shaftsHint.title = currentAllowedShafts.join(', ');
+      }
+    }
     document.querySelectorAll('#sidebar-menu li[data-roles]').forEach(li => {
       const allowed = (li.dataset.roles || '').split(',').map(s => s.trim());
       li.style.display = allowed.includes(role) ? '' : 'none';
     });
-    // Hide any non-menu elements tagged with data-roles (e.g. admin cleanup panel)
     document.querySelectorAll('[data-roles]:not(#sidebar-menu li)').forEach(el => {
       const allowed = (el.dataset.roles || '').split(',').map(s => s.trim());
       el.style.display = allowed.includes(role) ? '' : 'none';
     });
-    // If current section is hidden, go to dashboard
     const active = document.querySelector('#sidebar-menu li.active');
     if (active && active.style.display === 'none') show('dashboard');
   }
@@ -1547,19 +1755,60 @@
     try {
       const existing = await getDoc(ref);
       if (!existing.exists()) {
-        await setDoc(ref, {
+        // Invite-only: do not auto-create privileged profiles when public signup is disabled.
+        // Migration safety: still create a minimal pending profile so the app does not crash;
+        // admins must assign role + allowedShafts.
+        const payload = {
           email: user.email || '',
-          role: 'operations',
+          role: 'viewer',
           displayName: (user.email || '').split('@')[0],
+          allowedShafts: [],
+          status: DISABLE_PUBLIC_SIGNUP ? 'pending' : 'active',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
-        });
-        currentUserRole = 'operations';
+        };
+        await setDoc(ref, payload);
+        currentUserRole = payload.role;
+        currentAllowedShafts = [];
+        currentUserStatus = payload.status;
       } else {
         const data = existing.data() || {};
         let role = String(data.role || 'operations').toLowerCase();
         if (!VALID_ROLES.includes(role)) role = 'operations';
         currentUserRole = role;
+        currentUserStatus = String(data.status || 'active').toLowerCase();
+        // Migration: if allowedShafts missing, default to all known shafts once (do not lock out existing users)
+        if (!Array.isArray(data.allowedShafts)) {
+          const allShafts = (typeof RBE_SHAFTS !== 'undefined' ? RBE_SHAFTS.slice() : []);
+          currentAllowedShafts = allShafts;
+          try {
+            await setDoc(ref, {
+              allowedShafts: allShafts,
+              status: data.status || 'active',
+              email: data.email || user.email || '',
+              updatedAt: new Date().toISOString(),
+              migratedShaftScope: true
+            }, { merge: true });
+          } catch (e) {}
+        } else {
+          currentAllowedShafts = data.allowedShafts.map(s => String(s).trim()).filter(Boolean);
+        }
+        if (currentUserStatus === 'disabled') {
+          showToast('Account disabled. Contact administrator.', 'error');
+          try { await signOut(auth); } catch (e) {}
+          return;
+        }
+        if (currentUserStatus === 'pending') {
+          // Activate on first successful login
+          try {
+            await setDoc(ref, { status: 'active', updatedAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() }, { merge: true });
+            currentUserStatus = 'active';
+          } catch (e) {}
+        } else {
+          try {
+            await setDoc(ref, { lastLoginAt: new Date().toISOString(), email: data.email || user.email || '' }, { merge: true });
+          } catch (e) {}
+        }
         if (!data.email && user.email) {
           await setDoc(ref, { email: user.email, updatedAt: new Date().toISOString() }, { merge: true });
         }
@@ -1567,17 +1816,53 @@
     } catch (err) {
       console.warn('User profile load failed, defaulting to operations', err);
       currentUserRole = 'operations';
+      currentAllowedShafts = (typeof RBE_SHAFTS !== 'undefined' ? RBE_SHAFTS.slice() : []);
+      currentUserStatus = 'active';
     }
-    currentUser = { uid: user.uid, email: user.email, role: currentUserRole };
+    currentUser = {
+      uid: user.uid,
+      email: user.email,
+      role: currentUserRole,
+      allowedShafts: currentAllowedShafts.slice(),
+      status: currentUserStatus,
+      companyNumber: ''
+    };
+    try {
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const d = snap.data() || {};
+        currentUser.companyNumber = d.companyNumber || d.companyNo || d.employeeNumber || '';
+      }
+    } catch (e) {}
     applyRoleUI();
+    try { logAudit('login', 'User signed in', '', { source: 'ui', actorType: 'user' }); } catch (e) {}
   }
 
   // ── Auth ─────────────────────────────────────────────────────
   const authSection = document.getElementById('auth-section');
   const appDiv = document.getElementById('app');
   let isLoginMode = true;
+
+  // Apply invite-only UX
+  (function applySignupPolicy() {
+    const wrap = document.getElementById('public-signup-wrap');
+    const hint = document.getElementById('invite-only-hint');
+    if (DISABLE_PUBLIC_SIGNUP) {
+      if (wrap) wrap.classList.add('hidden');
+      if (hint) hint.classList.remove('hidden');
+      isLoginMode = true;
+    } else {
+      if (wrap) wrap.classList.remove('hidden');
+      if (hint) hint.classList.add('hidden');
+    }
+  })();
+
   document.getElementById('toggle-auth').onclick = e => {
     e.preventDefault();
+    if (DISABLE_PUBLIC_SIGNUP) {
+      showToast('Public registration is disabled. Contact an administrator for an invite.', 'error');
+      return;
+    }
     isLoginMode = !isLoginMode;
     document.getElementById('auth-title').textContent = isLoginMode ? "Sign In" : "Create Account";
     document.getElementById('auth-submit').textContent = isLoginMode ? "Sign In" : "Register";
@@ -1592,15 +1877,22 @@
       if (isLoginMode) {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
+        if (DISABLE_PUBLIC_SIGNUP) {
+          document.getElementById('auth-error').textContent = 'Public registration is disabled. Use an administrator invite.';
+          return;
+        }
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         await setDoc(doc(db, 'users', cred.user.uid), {
           email,
           role: 'operations',
           displayName: email.split('@')[0],
+          allowedShafts: (typeof RBE_SHAFTS !== 'undefined' ? RBE_SHAFTS.slice() : []),
+          status: 'active',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
         showToast('Account created — role: operations', 'success');
+        try { logAudit('user_self_register', 'Self-registered account', '', { source: 'ui' }); } catch (e) {}
       }
     } catch (err) {
       let msg = err.message;
@@ -1608,11 +1900,15 @@
       else if (msg.includes('user-not-found')) msg = 'Account not found';
       else if (msg.includes('email-already-in-use')) msg = 'Email already in use';
       document.getElementById('auth-error').textContent = msg;
+      try { logAudit('login_failed', msg + ' for ' + email, '', { source: 'ui' }); } catch (e) {}
     }
   };
   document.getElementById('logout-btn').onclick = () => {
+    try { logAudit('logout', 'User signed out', '', { source: 'ui' }); } catch (e) {}
     currentUser = null;
     currentUserRole = 'operations';
+    currentAllowedShafts = [];
+    currentUserStatus = 'active';
     signOut(auth);
   };
   onAuthStateChanged(auth, async user => {
@@ -1620,13 +1916,18 @@
       authSection.classList.add('hidden');
       appDiv.classList.remove('hidden');
       await ensureUserProfile(user);
-      startRealtimeListeners();
-      startSearchHistoryListener();
+      if (auth.currentUser) {
+        startRealtimeListeners();
+        startSearchHistoryListener();
+        try { populateShaftFilter(); } catch (e) {}
+      }
     } else {
       authSection.classList.remove('hidden');
       appDiv.classList.add('hidden');
       currentUser = null;
       currentUserRole = 'operations';
+      currentAllowedShafts = [];
+      currentUserStatus = 'active';
     }
   });
 
@@ -1789,21 +2090,38 @@
 
   function getFilteredEquipment() {
     let list = equipment || [];
+    // Shaft-scoped RBAC: non-admins only see allowed shafts
+    if (ENFORCE_SHAFT_SCOPE && (currentUserRole || '') !== 'admin') {
+      const allowed = currentAllowedShafts || [];
+      if (!allowed.length) list = [];
+      else list = list.filter(e => {
+        const s = String(e.shaft || '').trim();
+        return !s || allowed.includes(s);
+      });
+    }
     if (currentShaftFilter) list = list.filter(e => String(e.shaft || '').trim() === currentShaftFilter);
     if (currentTypeFilter) list = list.filter(e => inferEquipmentType(e) === currentTypeFilter);
     return list;
   }
   function getFilteredUpdates() {
     let list = (updates || []).filter(u => !isUnknownEquipmentId(u.equipmentId || u.locoNumber));
-    if (currentShaftFilter || currentTypeFilter) {
+    // Always scope to equipment the user can see (shaft RBAC + UI filters)
+    if (ENFORCE_SHAFT_SCOPE || currentShaftFilter || currentTypeFilter) {
       const allowed = new Set(getFilteredEquipment().map(e => String(e.id)));
-      list = list.filter(u => allowed.has(String(u.equipmentId || u.locoNumber || '')));
+      list = list.filter(u => {
+        const eid = String(u.equipmentId || u.locoNumber || '');
+        if (allowed.has(eid)) return true;
+        // Also allow if update carries shaft and user can access it
+        const us = String(u.shaft || '').trim();
+        if (us && userCanAccessShaft(us)) return true;
+        return false;
+      });
     }
     return list;
   }
   function getFilteredMaintenance() {
     let list = (maintenance || []).slice();
-    if (currentShaftFilter || currentTypeFilter) {
+    if (ENFORCE_SHAFT_SCOPE || currentShaftFilter || currentTypeFilter) {
       const allowed = new Set(getFilteredEquipment().map(e => String(e.id)));
       list = list.filter(m => allowed.has(String(m.equipment || '')));
     }
@@ -1841,19 +2159,28 @@
   ];
 
   function populateShaftFilter() {
-    const shafts = RBE_SHAFTS.slice();
+    let shafts = RBE_SHAFTS.slice();
     // Also include any shafts already present on equipment (future-proof)
     (equipment || []).forEach(e => {
       const s = String(e.shaft || '').trim();
       if (s && !shafts.includes(s)) shafts.push(s);
     });
     shafts.sort();
+    // Restrict selectable shafts to user's allowedShafts (admins see all)
+    if (ENFORCE_SHAFT_SCOPE && (currentUserRole || '') !== 'admin') {
+      if (currentAllowedShafts && currentAllowedShafts.length) {
+        shafts = shafts.filter(s => currentAllowedShafts.includes(s));
+      } else {
+        shafts = [];
+      }
+    }
 
     const sel = document.getElementById('shaft-filter');
     if (sel) {
       const current = sel.value;
       sel.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
       if (current && shafts.includes(current)) sel.value = current;
+      else if (current && !shafts.includes(current)) sel.value = '';
     }
     const tsel = document.getElementById('type-filter');
     if (tsel) {
@@ -2216,6 +2543,10 @@
       showToast('Audit Trail is restricted to admin / executive roles', 'error');
       return;
     }
+    if (section === 'user-admin' && currentUserRole !== 'admin') {
+      showToast('User Management is restricted to administrators', 'error');
+      return;
+    }
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     const el = document.getElementById(section);
     if (el) el.classList.remove('hidden');
@@ -2244,6 +2575,7 @@
       else if (section === 'text-mining') refreshTextMiningInsights();
       else if (section === 'reliability-center') populateReliabilityCenter();
       else if (section === 'audit-log') refreshAuditLog();
+      else if (section === 'user-admin') refreshUserAdminList();
     } catch (e) { console.warn(e); }
   }
   window.refreshCurrentView = refreshCurrentView;
@@ -3658,10 +3990,7 @@
   window.clearCalendarFind = clearCalendarFind;
 
   function removeEquipment(id) {
-    if (!can('delete_equipment')) {
-      showToast('Only admins can delete equipment', 'error');
-      return;
-    }
+    if (!assertCan('delete_equipment', { equipmentId: id }, 'Only admins can delete equipment')) return;
     if (!confirm(`Delete equipment "${id}" and all related records?`)) return;
     (async () => {
       try {
@@ -3699,10 +4028,7 @@
   window.openEditEquipment = openEditEquipment;
 
   async function markEquipmentFixed(equipId, maintId) {
-    if (!can('mark_fixed')) {
-      showToast('Your role cannot mark equipment fixed', 'error');
-      return;
-    }
+    if (!assertCan('mark_fixed', { equipmentId: equipId }, 'Not authorized to mark fixed for this equipment/shaft')) return;
     const actor = getActor();
     try {
       await addDoc(collection(db, "status_updates"), {
@@ -3744,17 +4070,15 @@
 
   document.getElementById('add-eq-form').addEventListener('submit', async e => {
     e.preventDefault();
-    if (!can('add_equipment')) {
-      showToast('Your role cannot add equipment', 'error');
-      return;
-    }
+    const shaftVal = document.getElementById('shaft').value;
+    if (!assertCan('add_equipment', { shaft: shaftVal }, 'Not authorized to add equipment for this shaft')) return;
     const actor = getActor();
     const rawId = document.getElementById('loco-number').value.trim();
     const id = sanitizeEquipmentId(rawId);
     if (!id) return showToast('Valid Equipment ID required', 'error');
     try {
       const payload = {
-        shaft: document.getElementById('shaft').value,
+        shaft: shaftVal,
         level: document.getElementById('level').value,
         equipmentType: document.getElementById('eq-type').value || '',
         oem: document.getElementById('eq-oem').value.trim() || '',
@@ -3767,19 +4091,18 @@
       if (rawId && rawId !== id) payload.originalId = rawId;
       await setDoc(doc(db, "equipment", id), payload, { merge: true });
       showToast(rawId !== id ? `Equipment saved as "${id}"` : 'Equipment saved', 'success');
+      try { logAudit('equipment_create', 'Added equipment ' + id, id, { shaft: payload.shaft, source: 'ui' }); } catch (e) {}
       e.target.reset();
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   });
 
   document.getElementById('add-status-form').addEventListener('submit', async e => {
     e.preventDefault();
-    if (!can('add_status')) {
-      showToast('Your role cannot log status updates', 'error');
-      return;
-    }
+    const equipId = document.getElementById('u-loco').value.trim();
+    if (!assertCan('add_status', { equipmentId: equipId }, 'Not authorized to log status for this equipment/shaft')) return;
     const actor = getActor();
     const data = {
-      equipmentId: document.getElementById('u-loco').value.trim(),
+      equipmentId: equipId,
       date: document.getElementById('u-date').value,
       time: document.getElementById('u-time').value,
       status: document.getElementById('u-status').value,
@@ -4273,6 +4596,8 @@
       showToast('Your role cannot import reports', 'error');
       return;
     }
+    const importShaft = document.getElementById('import-shaft')?.value || '';
+    if (importShaft && !assertCan('import', { shaft: importShaft }, 'Not authorized for this shaft')) return;
     const toImport = excelData.filter(r => r.selected);
     if (!toImport.length) return showToast('No rows selected', 'error');
     const actor = getActor();
@@ -4368,6 +4693,168 @@
     if (can('text_mining')) show('text-mining');
     else show('dashboard');
   };
+
+
+  // ── User Management (admin) ──────────────────────────────────
+  function getKnownShaftsList() {
+    const shafts = (typeof RBE_SHAFTS !== 'undefined' ? RBE_SHAFTS.slice() : []);
+    (equipment || []).forEach(e => {
+      const s = String(e.shaft || '').trim();
+      if (s && !shafts.includes(s)) shafts.push(s);
+    });
+    return shafts.sort();
+  }
+
+  function fillInviteShaftSelect() {
+    const sel = document.getElementById('invite-shafts');
+    if (!sel) return;
+    const shafts = getKnownShaftsList();
+    sel.innerHTML = shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+  }
+
+  window.selectAllInviteShafts = function(on) {
+    const sel = document.getElementById('invite-shafts');
+    if (!sel) return;
+    [...sel.options].forEach(o => { o.selected = !!on; });
+  };
+
+  async function refreshUserAdminList() {
+    const tbody = document.getElementById('user-admin-tbody');
+    if (!tbody) return;
+    if (currentUserRole !== 'admin') {
+      tbody.innerHTML = '<tr><td colspan="5">Admin only</td></tr>';
+      return;
+    }
+    fillInviteShaftSelect();
+    tbody.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
+    try {
+      const snap = await getDocs(collection(db, 'users'));
+      const rows = [];
+      snap.forEach(d => {
+        const u = d.data() || {};
+        rows.push({ id: d.id, ...u });
+      });
+      rows.sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5">No user profiles yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(u => {
+        const shafts = Array.isArray(u.allowedShafts) ? u.allowedShafts : [];
+        const shaftLabel = shafts.length > 4 ? shafts.slice(0, 4).join(', ') + '…' : (shafts.join(', ') || '—');
+        const status = u.status || 'active';
+        const escId = String(u.id).replace(/'/g, "\\'");
+        return `<tr>
+          <td>${String(u.email || u.id).replace(/</g,'&lt;')}</td>
+          <td><span class="role-badge ${u.role || 'viewer'}">${u.role || '—'}</span></td>
+          <td>${status}</td>
+          <td style="max-width:220px;font-size:0.82rem;" title="${shafts.join(', ').replace(/"/g,'&quot;')}">${shaftLabel.replace(/</g,'&lt;')}</td>
+          <td style="white-space:nowrap;">
+            <button type="button" class="btn btn-primary" style="padding:0.3rem 0.55rem;font-size:0.78rem;" onclick="editUserAdmin('${escId}')">Edit</button>
+            <button type="button" class="btn btn-danger" style="padding:0.3rem 0.55rem;font-size:0.78rem;" onclick="setUserStatus('${escId}','disabled')">Disable</button>
+            <button type="button" class="btn btn-success" style="padding:0.3rem 0.55rem;font-size:0.78rem;" onclick="setUserStatus('${escId}','active')">Enable</button>
+          </td>
+        </tr>`;
+      }).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="5">Error: ${String(err.message || err).replace(/</g,'&lt;')}</td></tr>`;
+    }
+  }
+  window.refreshUserAdminList = refreshUserAdminList;
+
+  window.editUserAdmin = async function(uid) {
+    if (currentUserRole !== 'admin') return showToast('Admin only', 'error');
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (!snap.exists()) return showToast('User not found', 'error');
+      const u = snap.data() || {};
+      const role = prompt('Role (admin|reliability|operations|executive|viewer)', u.role || 'operations');
+      if (role == null) return;
+      const r = String(role).toLowerCase().trim();
+      if (!VALID_ROLES.includes(r)) return showToast('Invalid role', 'error');
+      const currentShafts = Array.isArray(u.allowedShafts) ? u.allowedShafts.join(', ') : '';
+      const shaftsStr = prompt('Allowed shafts (comma-separated; leave empty for none)', currentShafts);
+      if (shaftsStr == null) return;
+      const allowedShafts = shaftsStr.split(',').map(s => s.trim()).filter(Boolean);
+      await setDoc(doc(db, 'users', uid), {
+        role: r,
+        allowedShafts,
+        updatedAt: new Date().toISOString(),
+        updatedBy: (auth.currentUser && auth.currentUser.email) || 'admin'
+      }, { merge: true });
+      logAudit('role_scope_change', `Updated ${u.email || uid}: role=${r}, shafts=${allowedShafts.length}`, '', { source: 'ui' });
+      showToast('User updated', 'success');
+      refreshUserAdminList();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+    }
+  };
+
+  window.setUserStatus = async function(uid, status) {
+    if (currentUserRole !== 'admin') return showToast('Admin only', 'error');
+    try {
+      await setDoc(doc(db, 'users', uid), { status: status, updatedAt: new Date().toISOString() }, { merge: true });
+      logAudit('user_status_change', `Set ${uid} status=${status}`, '', { source: 'ui' });
+      showToast('Status set to ' + status, 'success');
+      refreshUserAdminList();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+    }
+  };
+
+  document.getElementById('invite-user-form')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (currentUserRole !== 'admin') return showToast('Admin only', 'error');
+    const email = document.getElementById('invite-email').value.trim().toLowerCase();
+    const role = document.getElementById('invite-role').value;
+    const company = document.getElementById('invite-company').value.trim();
+    const sel = document.getElementById('invite-shafts');
+    const allowedShafts = sel ? [...sel.selectedOptions].map(o => o.value) : [];
+    const statusEl = document.getElementById('invite-status');
+    if (!email || !VALID_ROLES.includes(role)) {
+      if (statusEl) statusEl.textContent = 'Valid email and role required';
+      return;
+    }
+    // Store pending invite under users_invites/{emailHash} and also try to find existing uid by email is not possible client-side.
+    // Client-side: write to invites collection; admin must create Auth user in console / Admin SDK.
+    try {
+      const inviteId = email.replace(/[^a-z0-9]/g, '_');
+      await setDoc(doc(db, 'user_invites', inviteId), {
+        email, role, allowedShafts, companyNumber: company,
+        status: 'pending',
+        invitedBy: (auth.currentUser && auth.currentUser.email) || '',
+        invitedByUid: (auth.currentUser && auth.currentUser.uid) || '',
+        createdAt: new Date().toISOString()
+      });
+      // If a users doc already exists with this email, update it (scan)
+      const snap = await getDocs(collection(db, 'users'));
+      let matched = 0;
+      for (const d of snap.docs) {
+        const data = d.data() || {};
+        if (String(data.email || '').toLowerCase() === email) {
+          await setDoc(d.ref, {
+            role, allowedShafts, companyNumber: company || data.companyNumber || '',
+            status: 'pending', updatedAt: new Date().toISOString()
+          }, { merge: true });
+          matched++;
+        }
+      }
+      logAudit('user_invite', `Invited ${email} role=${role} shafts=${allowedShafts.length}`, '', { source: 'ui' });
+      if (statusEl) {
+        statusEl.style.color = 'var(--success)';
+        statusEl.innerHTML = matched
+          ? `✅ Updated existing profile for <strong>${email}</strong> (status pending until next login).`
+          : `✅ Invite saved for <strong>${email}</strong>. Create the Firebase Auth user (Admin SDK / Console) or send password-reset link; on first login profile will attach if email matches an invite.`;
+      }
+      showToast('Invite saved', 'success');
+      e.target.reset();
+      fillInviteShaftSelect();
+      refreshUserAdminList();
+    } catch (err) {
+      if (statusEl) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = 'Error: ' + err.message; }
+      showToast('Invite failed: ' + err.message, 'error');
+    }
+  });
 
   // ── Initial ──────────────────────────────────────────────────
   fillDatalist();
