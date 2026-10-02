@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function isAdmin() {
+      return isSignedIn() && userDoc().role == 'admin';
+    }
+    function isActive() {
+      return isSignedIn() && userDoc().status != 'disabled';
+    }
+    function shaftAllowed(shaft) {
+      return isAdmin()
+        || (shaft == null || shaft == '')
+        || (userDoc().allowedShafts is list && shaft in userDoc().allowedShafts);
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /user_invites/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /equipment/{id} {
+      allow read: if isActive() && shaftAllowed(resource.data.shaft);
+      allow create, update: if isActive() && shaftAllowed(request.resource.data.shaft);
+      allow delete: if isAdmin();
+    }
+
+    match /status_updates/{id} {
+      allow read: if isActive();
+      allow create: if isActive() && shaftAllowed(request.resource.data.shaft);
+      allow update, delete: if isAdmin();
+    }
+
+    match /maintenance/{id} {
+      allow read: if isActive();
+      allow write: if isActive();
+    }
+
+    match /audit_log/{id} {
+      allow read: if isActive() && (isAdmin() || userDoc().role in ['executive', 'reliability']);
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    match /searchHistory/{id} {
+      allow read, create: if isActive();
+      allow update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
