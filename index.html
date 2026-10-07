@@ -384,17 +384,63 @@
     .alert-high-risk { border-color: var(--danger); color: #991b1b; background: rgba(185,28,28,0.06); }
     .alert-predictive { border-color: var(--warning); color: #9a3412; background: rgba(194,65,12,0.06); }
 
+    /* Modal stack + scroll lock – background never scrolls while a card is open */
+    body.modal-open {
+      overflow: hidden !important;
+      overscroll-behavior: none;
+      touch-action: none;
+    }
+    body.modal-open .main {
+      overflow: hidden !important;
+      overscroll-behavior: none;
+    }
     .modal {
       display: none; position: fixed; inset: 0;
-      background: rgba(15,23,42,0.7); backdrop-filter: blur(6px);
+      background: rgba(15,23,42,0.72); backdrop-filter: blur(6px);
       align-items: center; justify-content: center; z-index: 2000; padding: 1rem;
+      overscroll-behavior: contain;
+      touch-action: none;
+      /* prevent scroll chaining to body when wheel reaches edge of backdrop */
+      overflow: hidden;
     }
-    .modal.active { display: flex; }
+    .modal.active {
+      display: flex;
+      animation: modalFadeIn 0.18s ease-out;
+    }
+    .modal.stacked-behind {
+      /* keep lower cards in the stack but dimmed and non-interactive */
+      pointer-events: none;
+      opacity: 0.55;
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
     .modal-content {
       background: var(--surface); border-radius: var(--radius-lg);
-      width: 100%; max-width: 540px; max-height: 92vh; overflow-y: auto;
+      width: 100%; max-width: 540px; max-height: min(92vh, 920px);
+      overflow-y: auto; overflow-x: hidden;
+      overscroll-behavior: contain; /* critical: stop scroll propagating to body */
+      -webkit-overflow-scrolling: touch;
       box-shadow: var(--shadow-lg); padding: 1.5rem;
       border: 1px solid var(--border-light);
+      touch-action: pan-y;
+      animation: modalSlideIn 0.2s ease-out;
+    }
+    .modal-content.wide { max-width: 720px; }
+    .modal-content.xwide { max-width: 960px; }
+    @keyframes modalSlideIn {
+      from { transform: translateY(12px) scale(0.98); opacity: 0.85; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    /* Larger list / detail cards */
+    #equip-list-modal .modal-content,
+    #equip-detail-modal .modal-content,
+    #breakdown-detail-modal .modal-content {
+      max-width: 720px;
+    }
+    #equip-list-modal .modal-content {
+      max-height: min(92vh, 920px);
     }
 
     .form-group { margin-bottom: 1.1rem; }
@@ -960,7 +1006,7 @@
           <div class="header-bar">
             <h1>Maintenance Schedule</h1>
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <button class="btn btn-primary" onclick="document.getElementById('add-maint-modal').classList.add('active')">+ Add Task</button>
+              <button class="btn btn-primary" onclick="openModal('add-maint-modal')">+ Add Task</button>
               <button class="btn btn-primary" onclick="exportMaintExcel()"><i class="fas fa-file-excel"></i> Excel</button>
               <button class="btn btn-primary" onclick="exportMaintPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
             </div>
@@ -1351,7 +1397,7 @@
     <div class="modal-content">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem;">
         <h3>Edit Equipment</h3>
-        <button type="button" onclick="document.getElementById('edit-equipment-modal').classList.remove('active')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
+        <button type="button" onclick="closeModal('edit-equipment-modal')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
       </div>
       <form id="edit-equipment-form">
         <input type="hidden" id="edit-eq-original-id">
@@ -1371,7 +1417,7 @@
         <div class="form-group"><label>OEM</label><input id="edit-eq-oem" type="text"></div>
         <div style="display:flex;gap:0.75rem;">
           <button type="submit" class="btn btn-primary">Save</button>
-          <button type="button" class="btn btn-danger" onclick="document.getElementById('edit-equipment-modal').classList.remove('active')">Cancel</button>
+          <button type="button" class="btn btn-danger" onclick="closeModal('edit-equipment-modal')">Cancel</button>
         </div>
       </form>
     </div>
@@ -1381,7 +1427,7 @@
     <div class="modal-content">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem;">
         <h3>Edit Maintenance Task</h3>
-        <button onclick="document.getElementById('edit-modal').classList.remove('active')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
+        <button onclick="closeModal('edit-modal')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
       </div>
       <form id="edit-maint-form">
         <input type="hidden" id="edit-index">
@@ -1398,7 +1444,7 @@
     <div class="modal-content">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem;">
         <h3>Add Maintenance Task</h3>
-        <button onclick="document.getElementById('add-maint-modal').classList.remove('active')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
+        <button onclick="closeModal('add-maint-modal')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
       </div>
       <form id="add-maint-form">
         <div class="form-group"><label>Equipment ID</label><input list="loco-list" required></div>
@@ -1414,11 +1460,11 @@
     <div class="modal-content" style="max-width:720px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
         <h2 style="margin:0;color:var(--primary);"><i class="fas fa-clipboard-list"></i> Breakdown Detail</h2>
-        <button type="button" onclick="document.getElementById('breakdown-detail-modal').classList.remove('active')" style="background:none;border:none;font-size:1.7rem;cursor:pointer;">×</button>
+        <button type="button" onclick="closeModal('breakdown-detail-modal')" style="background:none;border:none;font-size:1.7rem;cursor:pointer;">×</button>
       </div>
       <div id="breakdown-detail-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.85rem;"></div>
       <div style="margin-top:1.35rem;text-align:right;">
-        <button type="button" class="btn btn-primary" onclick="document.getElementById('breakdown-detail-modal').classList.remove('active')">Close</button>
+        <button type="button" class="btn btn-primary" onclick="closeModal('breakdown-detail-modal')">Close</button>
       </div>
     </div>
   </div>
@@ -1427,12 +1473,12 @@
     <div class="modal-content" style="max-width:640px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
         <h3 style="margin:0;color:var(--primary);"><i class="fas fa-clipboard-list"></i> Inspection Task</h3>
-        <button type="button" onclick="document.getElementById('inspection-task-modal').classList.remove('active')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
+        <button type="button" onclick="closeModal('inspection-task-modal')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
       </div>
       <div id="inspection-task-body"></div>
       <div style="display:flex;gap:0.65rem;margin-top:1.25rem;">
         <button type="button" class="btn btn-success" id="inspection-mark-fixed"><i class="fas fa-check"></i> Mark Fixed</button>
-        <button type="button" class="btn btn-primary" onclick="document.getElementById('inspection-task-modal').classList.remove('active')">Close</button>
+        <button type="button" class="btn btn-primary" onclick="closeModal('inspection-task-modal')">Close</button>
       </div>
     </div>
   </div>
@@ -1442,7 +1488,7 @@
     <div class="modal-content" style="max-width:820px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
         <h2 style="margin:0;color:var(--primary);" id="equip-list-title"><i class="fas fa-list"></i> Equipment List</h2>
-        <button type="button" onclick="document.getElementById('equip-list-modal').classList.remove('active')" style="background:none;border:none;font-size:1.7rem;cursor:pointer;">×</button>
+        <button type="button" onclick="closeModal('equip-list-modal')" style="background:none;border:none;font-size:1.7rem;cursor:pointer;">×</button>
       </div>
       <div id="equip-list-summary" style="margin-bottom:0.75rem;font-size:0.9rem;color:var(--text-3);"></div>
       <div style="overflow-x:auto;max-height:60vh;">
@@ -1452,7 +1498,7 @@
         </table>
       </div>
       <div style="margin-top:1.25rem;text-align:right;">
-        <button type="button" class="btn btn-primary" onclick="document.getElementById('equip-list-modal').classList.remove('active')">Close</button>
+        <button type="button" class="btn btn-primary" onclick="closeModal('equip-list-modal')">Close</button>
       </div>
     </div>
   </div>
@@ -1462,12 +1508,12 @@
     <div class="modal-content" style="max-width:720px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
         <h2 style="margin:0;color:var(--primary);" id="equip-detail-title"><i class="fas fa-id-card"></i> Equipment Detail</h2>
-        <button type="button" onclick="document.getElementById('equip-detail-modal').classList.remove('active')" style="background:none;border:none;font-size:1.7rem;cursor:pointer;">×</button>
+        <button type="button" onclick="closeModal('equip-detail-modal')" style="background:none;border:none;font-size:1.7rem;cursor:pointer;">×</button>
       </div>
       <div id="equip-detail-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.85rem;"></div>
       <div id="equip-detail-actions" style="display:flex;flex-wrap:wrap;gap:0.65rem;margin-top:1.35rem;"></div>
       <div style="margin-top:1rem;text-align:right;">
-        <button type="button" class="btn btn-primary" onclick="document.getElementById('equip-detail-modal').classList.remove('active')">Close</button>
+        <button type="button" class="btn btn-primary" onclick="closeModal('equip-detail-modal')">Close</button>
       </div>
     </div>
   </div>
@@ -1477,11 +1523,11 @@
     <div class="modal-content" style="max-width:420px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
         <h3 style="margin:0;color:var(--primary);" id="row-actions-title">Actions</h3>
-        <button type="button" onclick="document.getElementById('row-actions-modal').classList.remove('active')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
+        <button type="button" onclick="closeModal('row-actions-modal')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
       </div>
       <div id="row-actions-body" style="display:flex;flex-direction:column;gap:0.65rem;"></div>
       <div style="margin-top:1.25rem;text-align:right;">
-        <button type="button" class="btn" style="background:var(--surface-2);border:1px solid var(--border);" onclick="document.getElementById('row-actions-modal').classList.remove('active')">Cancel</button>
+        <button type="button" class="btn" style="background:var(--surface-2);border:1px solid var(--border);" onclick="closeModal('row-actions-modal')">Cancel</button>
       </div>
     </div>
   </div>
@@ -1491,6 +1537,179 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
   import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, deleteDoc, updateDoc, where, getDocs, getDoc, limit } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+
+  /* ═══════════════════════════════════════════════════════════
+     Modal stack manager – open/close in sequence + body scroll lock
+     - openModal(id) pushes onto stack
+     - closeModal(id?) closes top (or specific) and restores previous
+     - Escape / backdrop click closes top only
+     - Background (body + .main) never scrolls while any modal is open
+     ═══════════════════════════════════════════════════════════ */
+  const ModalStack = {
+    stack: [],
+    _scrollY: 0,
+    _locked: false,
+
+    _lockBody() {
+      if (this._locked) return;
+      this._scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      document.body.classList.add('modal-open');
+      document.body.style.top = `-${this._scrollY}px`;
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      this._locked = true;
+    },
+
+    _unlockBody() {
+      if (!this._locked) return;
+      document.body.classList.remove('modal-open');
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      window.scrollTo(0, this._scrollY);
+      this._locked = false;
+    },
+
+    _refreshStackUI() {
+      // Only top modal is interactive; others are dimmed behind
+      this.stack.forEach((id, idx) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.add('active');
+        if (idx < this.stack.length - 1) el.classList.add('stacked-behind');
+        else el.classList.remove('stacked-behind');
+        // z-index by depth
+        el.style.zIndex = String(2000 + idx);
+      });
+    },
+
+    open(id) {
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (!el) {
+        console.warn('Modal not found:', id);
+        return;
+      }
+      // If already on top, noop
+      if (this.stack.length && this.stack[this.stack.length - 1] === id) {
+        this._refreshStackUI();
+        return;
+      }
+      // If already in stack lower down, bring to top
+      const existing = this.stack.indexOf(id);
+      if (existing !== -1) this.stack.splice(existing, 1);
+      this.stack.push(id);
+      this._lockBody();
+      this._refreshStackUI();
+      // Focus first focusable inside for a11y
+      try {
+        const focusable = el.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (focusable) setTimeout(() => focusable.focus({ preventScroll: true }), 30);
+      } catch (e) {}
+    },
+
+    close(id) {
+      if (!this.stack.length) return;
+      // Close specific or top
+      let target = id;
+      if (!target) target = this.stack[this.stack.length - 1];
+      const idx = this.stack.lastIndexOf(target);
+      if (idx === -1) {
+        // Not in stack – still force-hide element if present
+        const el = document.getElementById(target);
+        if (el) {
+          el.classList.remove('active', 'stacked-behind');
+          el.style.zIndex = '';
+        }
+        return;
+      }
+      // Pop everything from idx to top (closes target and any that were opened on top of it)
+      const removed = this.stack.splice(idx);
+      removed.forEach(mid => {
+        const el = document.getElementById(mid);
+        if (el) {
+          el.classList.remove('active', 'stacked-behind');
+          el.style.zIndex = '';
+        }
+      });
+      if (this.stack.length) {
+        this._refreshStackUI();
+      } else {
+        this._unlockBody();
+      }
+    },
+
+    closeTop() {
+      if (!this.stack.length) return;
+      this.close(this.stack[this.stack.length - 1]);
+    },
+
+    closeAll() {
+      while (this.stack.length) this.closeTop();
+    },
+
+    isOpen(id) {
+      return this.stack.includes(id);
+    },
+
+    top() {
+      return this.stack.length ? this.stack[this.stack.length - 1] : null;
+    }
+  };
+
+  window.openModal = (id) => ModalStack.open(id);
+  window.closeModal = (id) => ModalStack.close(id);
+  window.closeTopModal = () => ModalStack.closeTop();
+  window.closeAllModals = () => ModalStack.closeAll();
+
+  // Escape closes top modal only (sequence-aware)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && ModalStack.stack.length) {
+      e.preventDefault();
+      ModalStack.closeTop();
+    }
+  });
+
+  // Backdrop click (direct on .modal, not content) closes top
+  document.addEventListener('click', (e) => {
+    const modal = e.target.closest('.modal');
+    if (!modal || !modal.classList.contains('active')) return;
+    // only if the click landed on the backdrop itself
+    if (e.target === modal && ModalStack.top() === modal.id) {
+      ModalStack.closeTop();
+    }
+  }, true);
+
+  // Prevent wheel/touch from scrolling body when over a modal backdrop
+  document.addEventListener('wheel', (e) => {
+    if (!ModalStack.stack.length) return;
+    const content = e.target.closest('.modal-content');
+    if (!content) {
+      // scrolling on backdrop – block
+      e.preventDefault();
+      return;
+    }
+    // at edges of scrollable content, prevent chaining
+    const { scrollTop, scrollHeight, clientHeight } = content;
+    const delta = e.deltaY;
+    const atTop = scrollTop <= 0 && delta < 0;
+    const atBottom = scrollTop + clientHeight >= scrollHeight - 1 && delta > 0;
+    if (atTop || atBottom) e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('touchmove', (e) => {
+    if (!ModalStack.stack.length) return;
+    const content = e.target.closest('.modal-content');
+    if (!content) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
 
   const firebaseConfig = {
     apiKey: "AIzaSyCnDsQVhQxk9Q7axCPcMSpHDcqOonBbNMc",
@@ -2524,6 +2743,8 @@
 
   // ── Navigation ───────────────────────────────────────────────
   function show(section) {
+    // Leaving a section closes any open cards so navigation stays clean
+    if (typeof closeAllModals === 'function') closeAllModals();
     if (section === 'import-spreadsheet' && !can('import')) {
       showToast('Import is restricted for your role', 'error');
       return;
@@ -3018,7 +3239,7 @@
         }).join('');
       }
     }
-    document.getElementById('equip-list-modal')?.classList.add('active');
+    openModal('equip-list-modal');
   }
   window.showKpiEquipmentList = showKpiEquipmentList;
 
@@ -3087,17 +3308,16 @@
     }
     const escId = String(id).replace(/'/g, "\\'");
     if (actions) {
-      let btns = `<button type="button" class="btn btn-primary" onclick="document.getElementById('equip-detail-modal').classList.remove('active');show('search-status');document.getElementById('s-loco').value='${escId}';document.getElementById('search-form').requestSubmit();"><i class="fas fa-search"></i> View History</button>`;
+      let btns = `<button type="button" class="btn btn-primary" onclick="closeAllModals();show('search-status');document.getElementById('s-loco').value='${escId}';document.getElementById('search-form').requestSubmit();"><i class="fas fa-search"></i> View History</button>`;
       if (can('mark_fixed')) {
-        btns += `<button type="button" class="btn btn-success" onclick="markEquipmentFixed('${escId}','');document.getElementById('equip-detail-modal').classList.remove('active');"><i class="fas fa-check"></i> Mark Fixed</button>`;
+        btns += `<button type="button" class="btn btn-success" onclick="markEquipmentFixed('${escId}','');closeModal('equip-detail-modal');"><i class="fas fa-check"></i> Mark Fixed</button>`;
       }
       if (can('edit_equipment')) {
-        btns += `<button type="button" class="btn btn-primary" onclick="document.getElementById('equip-detail-modal').classList.remove('active');openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit Register</button>`;
+        btns += `<button type="button" class="btn btn-primary" onclick="openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit Register</button>`;
       }
       actions.innerHTML = btns;
     }
-    document.getElementById('equip-list-modal')?.classList.remove('active');
-    document.getElementById('equip-detail-modal')?.classList.add('active');
+    openModal('equip-detail-modal');  /* keep equip-list under stack for back sequence */
   }
   window.showEquipmentDetail = showEquipmentDetail;
 
@@ -3130,12 +3350,12 @@
     const escId = String(m.id || '').replace(/'/g, "\\'");
     if (actions) {
       actions.innerHTML = `
-        <button type="button" class="btn btn-success" onclick="markEquipmentFixed('${escEq}','${escId}');document.getElementById('equip-detail-modal').classList.remove('active');"><i class="fas fa-check"></i> Mark Fixed</button>
+        <button type="button" class="btn btn-success" onclick="markEquipmentFixed('${escEq}','${escId}');closeModal('equip-detail-modal');"><i class="fas fa-check"></i> Mark Fixed</button>
         <button type="button" class="btn btn-primary" onclick="showEquipmentDetail('${escEq}');"><i class="fas fa-id-card"></i> Equipment Profile</button>
-        ${escId ? `<button type="button" class="btn btn-primary" onclick="dismissAlert('maint-${escId}');document.getElementById('equip-detail-modal').classList.remove('active');">Dismiss Alert</button>` : ''}
+        ${escId ? `<button type="button" class="btn btn-primary" onclick="dismissAlert('maint-${escId}');closeModal('equip-detail-modal');">Dismiss Alert</button>` : ''}
       `;
     }
-    document.getElementById('equip-detail-modal')?.classList.add('active');
+    openModal('equip-detail-modal');
   }
   window.showUpcomingMaintDetail = showUpcomingMaintDetail;
 
@@ -3144,7 +3364,7 @@
     const body = document.getElementById('row-actions-body');
     if (titleEl) titleEl.textContent = title || 'Actions';
     if (body) body.innerHTML = buttonsHtml;
-    document.getElementById('row-actions-modal')?.classList.add('active');
+    openModal('row-actions-modal');
   }
   window.showRowActions = showRowActions;
 
@@ -3364,12 +3584,12 @@
 
   function openEquipmentRowActions(id) {
     const escId = String(id).replace(/'/g, "\\'");
-    let html = `<button type="button" class="btn btn-primary" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');showEquipmentDetail('${escId}');"><i class="fas fa-id-card"></i> View Profile / Detail</button>`;
+    let html = `<button type="button" class="btn btn-primary" style="width:100%;" onclick="closeModal('row-actions-modal');showEquipmentDetail('${escId}');"><i class="fas fa-id-card"></i> View Profile / Detail</button>`;
     if (can('edit_equipment')) {
-      html += `<button type="button" class="btn btn-primary" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit</button>`;
+      html += `<button type="button" class="btn btn-primary" style="width:100%;" onclick="closeModal('row-actions-modal');openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit</button>`;
     }
     if (can('delete_equipment')) {
-      html += `<button type="button" class="btn btn-danger" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');removeEquipment('${escId}');"><i class="fas fa-trash"></i> Delete</button>`;
+      html += `<button type="button" class="btn btn-danger" style="width:100%;" onclick="closeModal('row-actions-modal');removeEquipment('${escId}');"><i class="fas fa-trash"></i> Delete</button>`;
     }
     showRowActions('Equipment: ' + id, html);
   }
@@ -3407,9 +3627,9 @@
     const escEq = String(equipId).replace(/'/g, "\\'");
     const escId = String(maintId || '').replace(/'/g, "\\'");
     showRowActions('Maintenance: ' + equipId, `
-      <button type="button" class="btn btn-success" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');markEquipmentFixed('${escEq}','${escId}');"><i class="fas fa-check"></i> Mark Fixed</button>
-      <button type="button" class="btn btn-primary" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');showEquipmentDetail('${escEq}');"><i class="fas fa-id-card"></i> Equipment Profile</button>
-      ${escId ? `<button type="button" class="btn btn-primary" style="width:100%;" onclick="document.getElementById('row-actions-modal').classList.remove('active');dismissAlert('maint-${escId}');">Dismiss Alert</button>` : ''}
+      <button type="button" class="btn btn-success" style="width:100%;" onclick="closeModal('row-actions-modal');markEquipmentFixed('${escEq}','${escId}');"><i class="fas fa-check"></i> Mark Fixed</button>
+      <button type="button" class="btn btn-primary" style="width:100%;" onclick="closeModal('row-actions-modal');showEquipmentDetail('${escEq}');"><i class="fas fa-id-card"></i> Equipment Profile</button>
+      ${escId ? `<button type="button" class="btn btn-primary" style="width:100%;" onclick="closeModal('row-actions-modal');dismissAlert('maint-${escId}');">Dismiss Alert</button>` : ''}
     `);
   }
   window.openMaintRowActions = openMaintRowActions;
@@ -3577,8 +3797,8 @@
       ${x.lastReason ? `<div style="font-size:0.88rem;color:var(--text-3);margin-top:0.75rem;font-style:italic;"><strong>Last fault:</strong> ${String(x.lastReason).replace(/</g,'&lt;')}</div>` : ''}
     `;
     const fixBtn = document.getElementById('inspection-mark-fixed');
-    if (fixBtn) fixBtn.onclick = () => { markEquipmentFixed(equipment, x.maintId || ''); document.getElementById('inspection-task-modal').classList.remove('active'); };
-    document.getElementById('inspection-task-modal').classList.add('active');
+    if (fixBtn) fixBtn.onclick = () => { markEquipmentFixed(equipment, x.maintId || ''); closeModal('inspection-task-modal'); };
+    openModal('inspection-task-modal');
   }
   window.openInspectionTaskFromEvent = openInspectionTaskFromEvent;
 
@@ -4020,7 +4240,7 @@
     document.getElementById('edit-eq-section').value = eq.section || '';
     document.getElementById('edit-eq-oem').value = eq.oem || eq.OEM || '';
     document.getElementById('edit-eq-type').value = inferEquipmentType(eq);
-    document.getElementById('edit-equipment-modal').classList.add('active');
+    openModal('edit-equipment-modal');
   }
   window.openEditEquipment = openEditEquipment;
 
@@ -4060,7 +4280,7 @@
         oem: document.getElementById('edit-eq-oem').value.trim() || '',
         updatedAt: new Date().toISOString()
       }, { merge: true });
-      document.getElementById('edit-equipment-modal').classList.remove('active');
+      closeModal('edit-equipment-modal');
       alert('Updated'); populateEquipmentTable(); refreshCurrentView();
     } catch (err) { alert('Error: ' + err.message); }
   });
@@ -4133,7 +4353,7 @@
         interval: document.getElementById('edit-interval').value,
         lastDone: document.getElementById('edit-last').value
       });
-      document.getElementById('edit-modal').classList.remove('active');
+      closeModal('edit-modal');
       refreshCurrentView();
     } catch (err) { alert('Error: ' + err.message); }
   });
@@ -4152,7 +4372,7 @@
     if (!data.equipment || !data.task || !data.lastDone) return alert('Required fields missing');
     try {
       await addDoc(collection(db, "maintenance"), data);
-      alert('Added'); document.getElementById('add-maint-modal').classList.remove('active'); e.target.reset();
+      alert('Added'); closeModal('add-maint-modal'); e.target.reset();
     } catch (err) { alert('Error: ' + err.message); }
   });
 
@@ -4278,7 +4498,7 @@
       <div style="font-size:0.78rem;color:var(--text-3);font-weight:600;text-transform:uppercase;margin-bottom:0.25rem;">${k}</div>
       <div style="font-weight:600;word-break:break-word;">${String(v==null||v===''?'—':v).replace(/</g,'&lt;')}</div>
     </div>`).join('');
-    modal.classList.add('active');
+    if (modal && modal.id) openModal(modal.id); else if (modal) { modal.classList.add('active'); ModalStack._lockBody(); }
   };
 
   // ── Import ───────────────────────────────────────────────────
