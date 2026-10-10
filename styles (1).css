@@ -1,0 +1,100 @@
+/* ====================== BASIC STYLES FOR RBE EQUIPMENT MONITOR ====================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+    color: #333;
+    line-height: 1.6;
+}
+
+.header-bar {
+    background-color: #1e3a8a;
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.header-bar h1 {
+    margin: 0;
+    font-size: 1.8rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+input, select, button {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    font-size: 1rem;
+}
+
+button {
+    background-color: #1e3a8a;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    padding: 12px 20px;
+}
+
+button:hover {
+    background-color: #2c5282;
+}
+
+.btn-primary {
+    background-color: #1e3a8a;
+}
+
+.btn-info {
+    background-color: #0c7cd5;
+}
+
+.list-group-item {
+    background: white;
+    border: 1px solid #ddd;
+    margin-bottom: 8px;
+    padding: 12px;
+    border-radius: 6px;
+}
+
+/* Search History Container */
+#history-container {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-top: 2rem;
+}
+
+#history-list {
+    list-style: none;
+    padding: 0;
+}
+
+/* Make the page responsive */
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+/* Status indicators */
+.text-muted {
+    color: #6c757d;
+}
