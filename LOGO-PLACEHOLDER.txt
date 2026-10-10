@@ -1,0 +1,1 @@
+Place your logo.jpeg file in the same folder as index.html
