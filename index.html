@@ -2153,27 +2153,57 @@
 
   // ── Real-time ────────────────────────────────────────────────
   function startRealtimeListeners() {
-    if (unsubscribeFunctions) unsubscribeFunctions.forEach(u => u());
+    if (unsubscribeFunctions) unsubscribeFunctions.forEach(u => { try { u(); } catch (_) {} });
     unsubscribeFunctions = [];
+    // Performance: debounce UI rebuilds so rapid watcher writes don't freeze navigation
+    let _refreshTimer = null;
+    const scheduleRefresh = (opts) => {
+      opts = opts || {};
+      if (_refreshTimer) clearTimeout(_refreshTimer);
+      _refreshTimer = setTimeout(() => {
+        _refreshTimer = null;
+        try { refreshCurrentView(); } catch (e) { console.warn(e); }
+        try { updatePredictiveNotifications(); } catch (e) { console.warn(e); }
+        // Text mining only when that section is visible (expensive)
+        if (opts.textMining || document.getElementById('text-mining') && !document.getElementById('text-mining').classList.contains('hidden')) {
+          if (typeof refreshTextMiningInsights === 'function') {
+            try { refreshTextMiningInsights(); } catch (e) { console.warn(e); }
+          }
+        }
+      }, 400);
+    };
+    // Build per-equipment index so getEquipmentStatus is O(k) not O(n)
+    window._updatesByEquip = window._updatesByEquip || new Map();
+    window._statusCache = window._statusCache || new Map();
+
     unsubscribeFunctions.push(onSnapshot(collection(db, "equipment"), snap => {
       equipment = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      fillDatalist(); populateShaftFilter(); refreshCurrentView(); updatePredictiveNotifications();
+      fillDatalist(); populateShaftFilter();
+      window._statusCache && window._statusCache.clear();
+      scheduleRefresh();
     }));
+
     const applyUpdates = snap => {
       const mapped = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       mapped.sort((a, b) => `${b.date||''} ${b.time||''}`.localeCompare(`${a.date||''} ${a.time||''}`));
-      // Keep only unique status events (same equip/date/time/status/reason) so UI never shows repeats
       const seen = new Set();
       updates = [];
+      const byEquip = new Map();
       for (const u of mapped) {
         const key = (typeof statusUpdateFingerprint === 'function') ? statusUpdateFingerprint(u) : `${u.equipmentId}|${u.date}|${u.time}|${u.status}|${u.reason}`;
         if (seen.has(key)) continue;
         seen.add(key);
         updates.push(u);
+        const eid = String(u.equipmentId || u.locoNumber || '').trim();
+        if (!eid) continue;
+        if (!byEquip.has(eid)) byEquip.set(eid, []);
+        byEquip.get(eid).push(u);
       }
-      refreshCurrentView(); updatePredictiveNotifications();
-      if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
+      window._updatesByEquip = byEquip;
+      window._statusCache && window._statusCache.clear();
+      scheduleRefresh({ textMining: false });
     };
+    // Prefer ordered query; fall back to full collection if index missing
     try {
       unsubscribeFunctions.push(onSnapshot(query(collection(db, "status_updates"), orderBy("date", "desc")), applyUpdates, () => {
         unsubscribeFunctions.push(onSnapshot(collection(db, "status_updates"), applyUpdates));
@@ -2183,7 +2213,7 @@
     }
     unsubscribeFunctions.push(onSnapshot(collection(db, "maintenance"), snap => {
       maintenance = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      refreshCurrentView(); updatePredictiveNotifications();
+      scheduleRefresh();
     }));
   }
 
@@ -2455,35 +2485,49 @@
   }
 
   function getEquipmentStatus(id) {
-    const eu = getFilteredUpdates()
-      .filter(u => String(u.equipmentId || u.locoNumber || '') === String(id))
-      .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
+    const idStr = String(id);
+    if (window._statusCache && window._statusCache.has(idStr)) {
+      return window._statusCache.get(idStr);
+    }
+    // Prefer pre-built index (O(k) per equipment) over scanning all updates
+    let eu;
+    if (window._updatesByEquip && window._updatesByEquip.has(idStr)) {
+      eu = window._updatesByEquip.get(idStr);
+    } else {
+      eu = (updates || [])
+        .filter(u => String(u.equipmentId || u.locoNumber || '') === idStr)
+        .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
+    }
+    // Apply shaft/type filter only when needed (index is global)
+    if ((typeof ENFORCE_SHAFT_SCOPE !== 'undefined' && ENFORCE_SHAFT_SCOPE) || currentShaftFilter || currentTypeFilter) {
+      const allowed = new Set(getFilteredEquipment().map(e => String(e.id)));
+      if (!allowed.has(idStr)) {
+        const empty = { status: 'Up', downtime: 0, failures: 0, availability: '100.0', lastUpdate: '-', lastReason: '', color: 'GREEN' };
+        if (window._statusCache) window._statusCache.set(idStr, empty);
+        return empty;
+      }
+    }
 
-    const last = eu[0];
+    const last = eu && eu[0];
     let currentlyDown = false;
-
     if (last) {
       const status = String(last.status || '').toLowerCase();
       const reason = last.reason || last.fault || last.description || '';
-
-      // Rule 1 & 2: attended / fixed language overrides a "Down" label
       if (isAttendedOrFixed(reason, status)) {
         currentlyDown = false;
       } else if (status === 'down' || status === 'offline' || status === 'failed' || status === 'broken') {
         currentlyDown = true;
-      } else {
-        currentlyDown = false;
       }
     }
 
-    const downtime = eu.reduce((s, u) => s + (Number(u.downtimeHours || u.downtime || 0) || 0), 0);
-    const failures = eu.filter(u => {
+    const downtime = (eu || []).reduce((s, u) => s + (Number(u.downtimeHours || u.downtime || 0) || 0), 0);
+    const failures = (eu || []).filter(u => {
       const s = String(u.status || '').toLowerCase();
       return u.isFailure === '1' || u.isFailure === 1 || String(u.isFailure || '').toLowerCase() === 'yes' ||
              s === 'down' || s === 'offline';
     }).length;
 
-    const dates = eu.map(u => u.date).filter(Boolean).sort();
+    const dates = (eu || []).map(u => u.date).filter(Boolean).sort();
     let totalDays = 1;
     if (dates.length >= 2) {
       totalDays = Math.max(1, Math.ceil((new Date(dates[dates.length - 1]) - new Date(dates[0])) / 86400000) + 1);
@@ -2491,7 +2535,7 @@
     const downDays = downtime / 24;
     const avail = totalDays > 0 ? Math.max(0, Math.min(100, ((totalDays - downDays) / totalDays) * 100)) : 100;
 
-    return {
+    const result = {
       status: currentlyDown ? 'Down' : 'Up',
       downtime,
       failures,
@@ -2500,8 +2544,10 @@
       lastReason: last ? (last.reason || last.fault || '') : '',
       color: currentlyDown || downtime > 168 ? 'RED' : (downtime > 24 || failures >= 2 ? 'ORANGE' : 'GREEN')
     };
+    if (window._statusCache) window._statusCache.set(idStr, result);
+    return result;
   }
-  window.getEquipmentStatus = getEquipmentStatus;
+window.getEquipmentStatus = getEquipmentStatus;
 
   /**
    * Enterprise reliability metrics per asset:
