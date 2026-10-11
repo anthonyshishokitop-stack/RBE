@@ -1781,7 +1781,7 @@
 
   let equipment = [], updates = [], maintenance = [], delaysData = [];
   let currentShaftFilter = '', currentTypeFilter = '';
-  const EQUIPMENT_TYPES = ['Loco','Winder','Winch','Compressor','Loader','Substation','Ventilation Fan','Pump','Conveyor','Drill','Transformer','Other'];
+  const EQUIPMENT_TYPES = ['Loco','Guard Car','Loader','Hopper','Carriage','Charger','Battery Charger','Winder','Winch','Compressor','Substation','Ventilation Fan','Pump','Conveyor','Drill','Transformer','Other'];
   let unsubscribeFunctions = [], charts = {}, calendar = null;
   let excelData = [], selectedMapping = {}, availableColumns = [];
   let dismissedAlerts = new Set(JSON.parse(localStorage.getItem('rbe_dismissed') || '[]'));
@@ -2220,24 +2220,52 @@
 
   // ── Core helpers ─────────────────────────────────────────────
   function inferEquipmentType(eqOrId, sizeHint) {
+    let explicit = '';
+    let id = '';
     if (eqOrId && typeof eqOrId === 'object') {
-      const explicit = String(eqOrId.equipmentType || eqOrId.type || '').trim();
-      if (explicit) return EQUIPMENT_TYPES.find(t => t.toLowerCase() === explicit.toLowerCase()) || explicit;
+      explicit = String(eqOrId.equipmentType || eqOrId.type || '').trim();
       sizeHint = eqOrId.locoSize || eqOrId.size || sizeHint;
-      eqOrId = eqOrId.id || '';
+      id = String(eqOrId.id || eqOrId.equipmentId || '').trim();
+    } else {
+      id = String(eqOrId || '').trim();
     }
-    const s = String(eqOrId || '').toLowerCase() + ' ' + String(sizeHint || '').toLowerCase();
+    // Always classify from the ID first — stored equipmentType is often wrong ("Loco" default from imports)
+    const s = (id + ' ' + String(sizeHint || '')).toLowerCase().trim();
+    const idOnly = id.toLowerCase().trim();
+
+    // --- Named asset classes (checked before Loco) ---
+    if (/battery\s*charg|batt\s*charg/.test(s)) return 'Battery Charger';
+    if (/\bchargers?\b|charger\s*no/.test(s)) return 'Charger';
+    if (/\bhopper/.test(s)) return 'Hopper';
+    if (/\bcarriage|main\s*carriage|men\s*carriage/.test(s)) return 'Carriage';
+    if (/guard\s*car|\bg-?car\b|\bg-c\b|gabooz|12g\s*\d/i.test(s)) return 'Guard Car';
     if (/winder/.test(s)) return 'Winder';
     if (/winch/.test(s)) return 'Winch';
     if (/compress/.test(s)) return 'Compressor';
     if (/loader|lhd|scoop/.test(s)) return 'Loader';
     if (/substation|sub-station/.test(s)) return 'Substation';
-    if (/vent|fan\b/.test(s)) return 'Ventilation Fan';
-    if (/pump/.test(s)) return 'Pump';
-    if (/conveyor|belt/.test(s)) return 'Conveyor';
-    if (/drill|jumbo/.test(s)) return 'Drill';
+    if (/\bvent|\bfan\b/.test(s)) return 'Ventilation Fan';
+    if (/\bpump\b/.test(s)) return 'Pump';
+    if (/conveyor|\bbelt\b/.test(s)) return 'Conveyor';
+    if (/\bdrill\b|jumbo/.test(s)) return 'Drill';
     if (/transform/.test(s)) return 'Transformer';
-    if (/loco|locomotive|\blh\b/.test(s) || /^\d{3,5}$/.test(String(eqOrId||'').trim())) return 'Loco';
+    if (/trackless|crawl|workshop|feeder|door|magnet|siren|antenna|antena|display|pulse/.test(s)) return 'Other';
+
+    // --- Loco ONLY if ID is clearly a loco number ---
+    // Accept: "150", "LOCO 150", "Loco 150", "loco150", "LOCO150"
+    // Reject: "BATTERY CHARGERS", "HOPPER", "G-CAR 206", "X1 HOPPER", "CRAWL", etc.
+    const locoPattern = /^(loco\s*)?\d{2,5}$/i;
+    if (locoPattern.test(idOnly.replace(/\s+/g, ' ').trim())) return 'Loco';
+    // "locomotive 150" style
+    if (/^locomotive\s*\d{2,5}$/i.test(idOnly)) return 'Loco';
+
+    // Trusted explicit type only if it is not the generic wrong "Loco" default
+    if (explicit) {
+      const match = EQUIPMENT_TYPES.find(t => t.toLowerCase() === explicit.toLowerCase());
+      if (match && match !== 'Loco') return match;
+      if (match === 'Loco' && locoPattern.test(idOnly.replace(/\s+/g, ' ').trim())) return 'Loco';
+    }
+
     return 'Other';
   }
   function isUnknownEquipmentId(id) {
