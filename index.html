@@ -2194,7 +2194,8 @@
         if (seen.has(key)) continue;
         seen.add(key);
         updates.push(u);
-        const eid = String(u.equipmentId || u.locoNumber || '').trim();
+        const eidRaw = String(u.equipmentId || u.locoNumber || '').trim();
+        const eid = (typeof normaliseEquipId === 'function') ? normaliseEquipId(eidRaw) : eidRaw;
         if (!eid) continue;
         if (!byEquip.has(eid)) byEquip.set(eid, []);
         byEquip.get(eid).push(u);
@@ -2338,38 +2339,139 @@
   }
   window.focusAlertTarget = focusAlertTarget;
 
+  
+  /** Canonical shaft names used by RBE_SHAFTS + Excel watcher */
+  function normaliseShaftName(raw) {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    // Shaft_12 / shaft-12 / SHAFT 12 → try map to "12 Shaft"
+    const key = s.toLowerCase().replace(/[-_\s]+/g, '_');
+    const MAP = {
+      'shaft_12': '12 Shaft', '12_shaft': '12 Shaft', '12shaft': '12 Shaft',
+      'shaft_20': '20 Shaft', '20_shaft': '20 Shaft',
+      'shaft_11': '11 Shaft', 'shaft_11c': '11C Shaft', 'shaft_11d': '11D',
+      'shaft_10': '10 Shaft', 'shaft_10d': '10D',
+      'shaft_14': '14 Shaft', 'shaft_14d': '14D',
+      'shaft_16': '16 Shaft', 'shaft_17': '17 Shaft',
+      'shaft_7': '7 Shaft', 'shaft_7a': '7A Shaft',
+      'shaft_8': '8 Shaft', 'shaft_9': '9 Shaft',
+      'shaft_1': '1 Shaft', 'shaft_2': '2 Shaft', 'shaft_4': '4 Shaft',
+      'shaft_6': '6 Shaft', 'shaft_0': '0 Shaft', 'shaft_3': '3 Shaft',
+      'shaft_5': '5 Shaft',
+      'conventional': 'CONVENTIONAL',
+      '12_north_shaft': '12 North Shaft', '12north': '12 North Shaft',
+    };
+    if (MAP[key]) return MAP[key];
+    // Pattern: optional "shaft" + number + optional letter
+    let m = key.match(/^(?:shaft_?)?(\d+[a-z]?)(?:_?shaft)?$/i);
+    if (m) {
+      const num = m[1];
+      const hasLetter = /[a-z]/i.test(num);
+      // 11c → 11C, 10d → 10D style used in RBE_SHAFTS
+      if (hasLetter) {
+        const n = num.replace(/([a-z])/i, (_, c) => c.toUpperCase());
+        // Prefer forms in RBE_SHAFTS: 11C Shaft, 10D, 11D
+        if (/^\d+[cd]$/i.test(n) && !['11C','7A'].includes(n)) return n; // 10D, 11D, 14D
+        if (n === '11C') return '11C Shaft';
+        if (n === '7A') return '7A Shaft';
+        return n + ' Shaft';
+      }
+      return num + ' Shaft';
+    }
+    // Already looks like "12 Shaft" / "CONVENTIONAL"
+    return s;
+  }
+
+  function shaftsMatch(a, b) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    if (String(a).trim() === String(b).trim()) return true;
+    return normaliseShaftName(a) === normaliseShaftName(b);
+  }
+
+  /** Strip LOCO prefix so "LOCO 150" and "150" match */
+  function normaliseEquipId(raw) {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    s = s.replace(/^(LOCO|Loco|loco)\s+/i, '').trim();
+    s = s.replace(/[\/\\#?\[\]]+/g, '-').replace(/\s+/g, ' ').trim();
+    return s;
+  }
+
+  function equipIdsMatch(a, b) {
+    return normaliseEquipId(a) === normaliseEquipId(b) && !!normaliseEquipId(a);
+  }
+
+
   function getFilteredEquipment() {
     let list = equipment || [];
     // Shaft-scoped RBAC: non-admins only see equipment whose shaft is in allowedShafts.
-    // Unassigned (empty shaft) equipment is hidden from non-admins so it does not leak into every shaft view.
+    // Match with normaliseShaftName so "Shaft_12" and "12 Shaft" are treated the same.
     if (ENFORCE_SHAFT_SCOPE && (currentUserRole || '') !== 'admin') {
-      const allowed = currentAllowedShafts || [];
+      const allowed = (currentAllowedShafts || []).map(normaliseShaftName);
       if (!allowed.length) list = [];
       else list = list.filter(e => {
-        const s = String(e.shaft || '').trim();
+        const s = normaliseShaftName(e.shaft);
         return !!s && allowed.includes(s);
       });
     }
-    // UI shaft filter — strict match (same as index S). Empty shaft never matches a selected shaft.
-    if (currentShaftFilter) list = list.filter(e => String(e.shaft || '').trim() === currentShaftFilter);
+    // UI shaft filter — normalised match. Empty shaft never matches a selected shaft.
+    if (currentShaftFilter) {
+      const want = normaliseShaftName(currentShaftFilter);
+      list = list.filter(e => normaliseShaftName(e.shaft) === want);
+    }
     if (currentTypeFilter) list = list.filter(e => inferEquipmentType(e) === currentTypeFilter);
     return list;
   }
   function getFilteredUpdates() {
     let list = (updates || []).filter(u => !isUnknownEquipmentId(u.equipmentId || u.locoNumber));
-    // Scope strictly to equipment the user can see after RBAC + UI filters (same as index S).
-    // Do NOT bypass via update.shaft — that caused data to appear for shafts with no equipment.
+    // Build allowed equipment ID set (normalised) from filtered equipment
+    const filteredEq = getFilteredEquipment();
+    const allowedIds = new Set(filteredEq.map(e => normaliseEquipId(e.id)));
+    // Also index equipment by normalised id for type checks
+    const eqById = new Map(filteredEq.map(e => [normaliseEquipId(e.id), e]));
+
     if (ENFORCE_SHAFT_SCOPE || currentShaftFilter || currentTypeFilter) {
-      const allowed = new Set(getFilteredEquipment().map(e => String(e.id)));
-      list = list.filter(u => allowed.has(String(u.equipmentId || u.locoNumber || '')));
+      const wantShaft = currentShaftFilter ? normaliseShaftName(currentShaftFilter) : null;
+      list = list.filter(u => {
+        const uid = normaliseEquipId(u.equipmentId || u.locoNumber);
+        // Primary: equipment doc is in the filtered set
+        if (allowedIds.has(uid)) return true;
+        // Secondary: update carries a shaft that matches the UI/RBAC filter
+        // (covers rows where equipment doc is missing or has a legacy shaft name)
+        if (wantShaft) {
+          const us = normaliseShaftName(u.shaft);
+          if (us && us === wantShaft) {
+            // Honour type filter if set
+            if (currentTypeFilter) {
+              const eq = eqById.get(uid) || (equipment || []).find(e => normaliseEquipId(e.id) === uid);
+              if (eq && inferEquipmentType(eq) !== currentTypeFilter) return false;
+              if (!eq && currentTypeFilter !== 'Loco') return false; // default assume Loco for bare updates
+            }
+            if (ENFORCE_SHAFT_SCOPE && (currentUserRole || '') !== 'admin') {
+              const allowed = (currentAllowedShafts || []).map(normaliseShaftName);
+              if (!allowed.includes(us)) return false;
+            }
+            return true;
+          }
+          return false;
+        }
+        // RBAC only (no UI shaft filter): allow if update shaft is in allowedShafts
+        if (ENFORCE_SHAFT_SCOPE && (currentUserRole || '') !== 'admin') {
+          const us = normaliseShaftName(u.shaft);
+          const allowed = (currentAllowedShafts || []).map(normaliseShaftName);
+          return !!us && allowed.includes(us);
+        }
+        return false;
+      });
     }
     return list;
   }
   function getFilteredMaintenance() {
     let list = (maintenance || []).slice();
     if (ENFORCE_SHAFT_SCOPE || currentShaftFilter || currentTypeFilter) {
-      const allowed = new Set(getFilteredEquipment().map(e => String(e.id)));
-      list = list.filter(m => allowed.has(String(m.equipment || '')));
+      const allowed = new Set(getFilteredEquipment().map(e => normaliseEquipId(e.id)));
+      list = list.filter(m => allowed.has(normaliseEquipId(m.equipment)));
     }
     return list;
   }
@@ -2408,7 +2510,12 @@
     let shafts = RBE_SHAFTS.slice();
     // Also include any shafts already present on equipment (future-proof)
     (equipment || []).forEach(e => {
-      const s = String(e.shaft || '').trim();
+      const s = normaliseShaftName(e.shaft);
+      if (s && !shafts.includes(s)) shafts.push(s);
+    });
+    // Also surface shafts present only on status_updates (no equipment doc yet)
+    (updates || []).forEach(u => {
+      const s = normaliseShaftName(u.shaft);
       if (s && !shafts.includes(s)) shafts.push(s);
     });
     shafts.sort();
@@ -2490,12 +2597,16 @@
       return window._statusCache.get(idStr);
     }
     // Prefer pre-built index (O(k) per equipment) over scanning all updates
+    const idNorm = (typeof normaliseEquipId === 'function') ? normaliseEquipId(idStr) : idStr;
     let eu;
-    if (window._updatesByEquip && window._updatesByEquip.has(idStr)) {
-      eu = window._updatesByEquip.get(idStr);
+    if (window._updatesByEquip && (window._updatesByEquip.has(idNorm) || window._updatesByEquip.has(idStr))) {
+      eu = window._updatesByEquip.get(idNorm) || window._updatesByEquip.get(idStr);
     } else {
       eu = (updates || [])
-        .filter(u => String(u.equipmentId || u.locoNumber || '') === idStr)
+        .filter(u => {
+          const uid = (typeof normaliseEquipId === 'function') ? normaliseEquipId(u.equipmentId || u.locoNumber) : String(u.equipmentId || u.locoNumber || '');
+          return uid === idNorm || String(u.equipmentId || u.locoNumber || '') === idStr;
+        })
         .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
     }
     // Apply shaft/type filter only when needed (index is global)
@@ -3237,8 +3348,17 @@ window.getEquipmentStatus = getEquipmentStatus;
   function collectFilteredIds() {
     const filteredEq = getFilteredEquipment();
     const filteredUp = getFilteredUpdates();
-    const idSet = new Set(filteredEq.map(e => String(e.id)));
-    filteredUp.forEach(u => { if (u.equipmentId) idSet.add(String(u.equipmentId)); });
+    // Prefer canonical IDs from equipment docs; fall back to normalised update IDs
+    const idSet = new Set();
+    filteredEq.forEach(e => { if (e.id) idSet.add(String(e.id)); });
+    filteredUp.forEach(u => {
+      const raw = u.equipmentId || u.locoNumber;
+      if (!raw) return;
+      const norm = normaliseEquipId(raw);
+      // If an equipment doc exists with this normalised id, use its canonical id
+      const eq = (equipment || []).find(e => normaliseEquipId(e.id) === norm);
+      idSet.add(eq ? String(eq.id) : norm);
+    });
     return [...idSet].filter(Boolean).sort();
   }
 
@@ -3246,7 +3366,7 @@ window.getEquipmentStatus = getEquipmentStatus;
     const ids = collectFilteredIds();
     let filtered = ids.map(id => {
       const st = getEquipmentStatus(id);
-      const eq = (equipment || []).find(e => String(e.id) === String(id));
+      const eq = (equipment || []).find(e => String(e.id) === String(id) || normaliseEquipId(e.id) === normaliseEquipId(id));
       return { id, st, eq };
     });
     let title = 'Total Equipment';
