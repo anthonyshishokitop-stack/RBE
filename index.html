@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>RBE Monitor Enterprise | Asset Reliability Platform</title>
-  <meta name="description" content="Enterprise asset reliability, predictive maintenance, RUL, audit trails and fleet health for mining operations."/>
+  <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -611,6 +611,7 @@
     .health-score.fair { background: var(--warning); }
     .health-score.poor { background: var(--danger); }
     .health-score.critical { background: #7f1d1d; }
+    .health-score.insufficient { background: #64748b; }
 
     .sla-pill {
       display: inline-flex; align-items: center; gap: 5px; padding: 0.25rem 0.65rem;
@@ -810,7 +811,11 @@
             <span><i class="fas fa-user-shield"></i> RBAC active</span>
             <span><i class="fas fa-user-lock"></i> Invite-only accounts · Shaft-scoped RBAC · Dual audit</span>
             <span><i class="fas fa-heartbeat"></i> <a href="#" onclick="show('reliability-center');return false;" style="color:#93c5fd;text-decoration:underline;">Reliability Center</a></span>
-            <span class="sla-pill" style="background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.35);"><i class="fas fa-check-circle"></i> Live monitoring</span>
+            <span class="sla-pill" style="background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.35);"><i class="fas fa-check-circle"></i> Event monitoring</span>
+          </div>
+          <div id="data-quality-bar" class="summary-alert-bar info" style="margin-top:0.5rem;">
+            <div><i class="fas fa-database" style="margin-right:6px;"></i><strong>Data Quality:</strong> <span id="dq-summary-text">Calculating…</span></div>
+            <div class="bar-actions"><span style="font-size:0.78rem;opacity:0.9;">Metrics gated by density · No invented defaults</span></div>
           </div>
 
           <div id="dashboard-alert-summary" class="summary-alert-bar hidden">
@@ -1357,7 +1362,7 @@
               <li><strong>Role-based access</strong> — admin, reliability, operations, executive, viewer with menu and action gating</li>
               <li><strong>Audit trail</strong> — actor, action, timestamp, equipment context on critical writes</li>
               <li><strong>Data residency indicator</strong> — South Africa primary; TLS in transit via Firebase</li>
-              <li><strong>Predictive layer</strong> — RUL estimates, anomaly scores, health scores, MTBF/MTTR</li>
+              <li><strong>Reliability layer</strong> — Event-based risk scores, gated MTBF/MTTR, data-quality metrics (RUL deferred until calibrated models exist)</li>
               <li><strong>Export &amp; governance</strong> — Executive PDF/Excel for board and reliability reviews</li>
             </ul>
           </div>
@@ -1370,7 +1375,7 @@
               </div>
               <div style="padding:1rem;background:var(--surface-2);border-radius:10px;border-left:4px solid var(--warning);">
                 <strong>Mid term</strong>
-                <p style="margin:0.4rem 0 0;font-size:0.88rem;color:var(--text-3);">ML models for RUL, multi-site hierarchy, CMMS/ERP bi-directional sync</p>
+                <p style="margin:0.4rem 0 0;font-size:0.88rem;color:var(--text-3);">Calibrated reliability models, multi-site hierarchy, CMMS/ERP bi-directional sync (Phase 3–4)</p>
               </div>
               <div style="padding:1rem;background:var(--surface-2);border-radius:10px;border-left:4px solid var(--success);">
                 <strong>Strategic</strong>
@@ -2596,27 +2601,35 @@
   }
 
   /**
-   * IMPROVED BUSINESS RULE (fixes the Problem Equipment table):
-   * 1. Explicit status = "Fixed"  →  Up
-   * 2. Latest reason/fault contains clear “fixed / adjusted / repaired / attended / completed”
-   *    language  →  Up   (e.g. "FAILING BRAKES | ADJUSTED BRAKES", "FIXED LOOSE CONNECTION")
-   * 3. Only genuine open Downs remain Down
-   * 4. Predictive inspections never force a unit Down
+   * STRUCTURED STATUS MODEL (Phase 0 remediation)
+   * Free-text never overrides statusCode. Explicit Close / Restore is required.
+   * Legacy regex auto-Up is limited to a soft hint only and does NOT change the stored status.
    */
+  const STATUS_CODES = ['Down', 'Restricted', 'Up', 'Standby', 'OutOfService', 'UnderInvestigation'];
+  const RESOLUTION_CODES = ['Repaired', 'Adjusted', 'Replaced', 'NoFaultFound', 'Deferred', 'Cancelled', 'Other'];
+  const MAX_EVENT_HOURS = 72;
+  const MIN_FAILURES_FOR_MTBF = 3;
+  const MIN_DAYS_FOR_MTBF = 30;
+  const MIN_DAYS_FOR_AVAIL = 7;
+
   function isAttendedOrFixed(reasonText, statusText) {
+    // Soft hint only — never used to force status to Up. Kept for legacy display.
     const s = String(statusText || '').toLowerCase().trim();
     if (s === 'fixed' || s === 'up' || s === 'operational' || s === 'running') return true;
-
     const r = String(reasonText || '').toLowerCase();
-    // Strong indicators that the breakdown was attended / completed
-    const fixedPatterns = [
-      /\badjusted\b/, /\bfixed\b/, /\brepaired\b/, /\battended\b/,
-      /\bcompleted\b/, /\bresolved\b/, /\breplaced\b/, /\brestored\b/,/no faulty/,/short circuit/,/re railed/,
-      /\bworking\b/, /\boperational\b/, /\bok\b/, /\bdone\b/,/\bprogrammed\b/,/\bcommissioned\b/,/\bre-reailed\b/,/\bback\b/,/\bon\b/,/\bbalanced\b/,/\bchanged\b/,/\bcharged\b/,/\bcharge\b/,/\bchange\b/,/\binstalled\b/,/\bjoined\b/,/\bwas\b/,/\btightened\b/,/\bdisconnected\b/,
-      /fixed loose/, /adjusted brakes/, /brakes adjusted/,/false report/,/bshort circuit/,/filed cable/,/\breset\b/,/\bcallibrated\b/,/\bcable\b/,/\bno\b/,/\bNO\b/,/\bfaulty\b/,/\brecharged\b/,/\bfastened\b/,/\bconnected\b/,/\bfiled\b/,/\brailed\b/,/\bfalse\b/,/\bwellded\b/,
-      /connection fixed/, /antenna fixed/, /repaired and/,/NO FAULT FOUND/,/short circuit/,/no fault/,/re railed/,/back on/,/filed cable/,/was loose/,/running now/,/cable fixed/,/no fault found/,/no problem found/
-    ];
+    const fixedPatterns = [/\bfixed\b/, /\brepaired\b/, /\badjusted\b/, /\brestored\b/, /no fault found/, /no problem found/];
     return fixedPatterns.some(p => p.test(r));
+  }
+
+  function normaliseStatusCode(raw) {
+    const s = String(raw || '').toLowerCase().trim();
+    if (['down', 'offline', 'failed', 'broken'].includes(s)) return 'Down';
+    if (['restricted', 'limited', 'derated'].includes(s)) return 'Restricted';
+    if (['up', 'operational', 'running', 'fixed', 'available'].includes(s)) return 'Up';
+    if (['standby', 'idle'].includes(s)) return 'Standby';
+    if (['outofservice', 'out of service', 'decommissioned', 'oos'].includes(s)) return 'OutOfService';
+    if (['underinvestigation', 'under investigation', 'investigating'].includes(s)) return 'UnderInvestigation';
+    return 'Up';
   }
 
   function getEquipmentStatus(id) {
@@ -2624,7 +2637,6 @@
     if (window._statusCache && window._statusCache.has(idStr)) {
       return window._statusCache.get(idStr);
     }
-    // Prefer pre-built index (O(k) per equipment) over scanning all updates
     const idNorm = (typeof normaliseEquipId === 'function') ? normaliseEquipId(idStr) : idStr;
     let eu;
     if (window._updatesByEquip && (window._updatesByEquip.has(idNorm) || window._updatesByEquip.has(idStr))) {
@@ -2637,48 +2649,76 @@
         })
         .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
     }
-    // Apply shaft/type filter only when needed (index is global)
     if ((typeof ENFORCE_SHAFT_SCOPE !== 'undefined' && ENFORCE_SHAFT_SCOPE) || currentShaftFilter || currentTypeFilter) {
       const allowed = new Set(getFilteredEquipment().map(e => String(e.id)));
       if (!allowed.has(idStr)) {
-        const empty = { status: 'Up', downtime: 0, failures: 0, availability: '100.0', lastUpdate: '-', lastReason: '', color: 'GREEN' };
+        const empty = { status: 'Up', downtime: 0, failures: 0, availability: null, availabilityLabel: 'Insufficient data', lastUpdate: '-', lastReason: '', color: 'GREEN', dataDays: 0 };
         if (window._statusCache) window._statusCache.set(idStr, empty);
         return empty;
       }
     }
 
     const last = eu && eu[0];
-    let currentlyDown = false;
+    let statusCode = 'Up';
     if (last) {
-      const status = String(last.status || '').toLowerCase();
-      const reason = last.reason || last.fault || last.description || '';
-      if (isAttendedOrFixed(reason, status)) {
-        currentlyDown = false;
-      } else if (status === 'down' || status === 'offline' || status === 'failed' || status === 'broken') {
-        currentlyDown = true;
+      if (last.statusCode && STATUS_CODES.includes(last.statusCode)) {
+        statusCode = last.statusCode;
+      } else {
+        statusCode = normaliseStatusCode(last.status);
       }
     }
+    const currentlyDown = (statusCode === 'Down' || statusCode === 'Restricted');
 
-    const downtime = (eu || []).reduce((s, u) => s + (Number(u.downtimeHours || u.downtime || 0) || 0), 0);
+    let downtime = 0;
+    (eu || []).forEach(u => {
+      let hrs = 0;
+      if (u.startAt && u.endAt) {
+        hrs = Math.max(0, (new Date(u.endAt) - new Date(u.startAt)) / 3600000);
+      } else if (u.startAt && !u.endAt && (statusCode === 'Down' || statusCode === 'Restricted')) {
+        hrs = Math.max(0, (Date.now() - new Date(u.startAt).getTime()) / 3600000);
+      } else {
+        hrs = Number(u.downtimeHours || u.downtime || 0) || 0;
+      }
+      if (hrs > MAX_EVENT_HOURS) hrs = MAX_EVENT_HOURS;
+      downtime += hrs;
+    });
+
     const failures = (eu || []).filter(u => {
-      const s = String(u.status || '').toLowerCase();
-      return u.isFailure === '1' || u.isFailure === 1 || String(u.isFailure || '').toLowerCase() === 'yes' ||
-             s === 'down' || s === 'offline';
+      const sc = u.statusCode || normaliseStatusCode(u.status);
+      return (u.isFailure === '1' || u.isFailure === 1 || sc === 'Down');
     }).length;
 
-    const dates = (eu || []).map(u => u.date).filter(Boolean).sort();
-    let totalDays = 1;
-    if (dates.length >= 2) {
-      totalDays = Math.max(1, Math.ceil((new Date(dates[dates.length - 1]) - new Date(dates[0])) / 86400000) + 1);
+    const windowDays = 30;
+    const windowHours = windowDays * 24;
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - windowDays * 86400000);
+    let downtimeInWindow = 0;
+    let hasObservation = false;
+    (eu || []).forEach(u => {
+      const d = u.date ? new Date(u.date) : null;
+      if (d && d >= windowStart) {
+        hasObservation = true;
+        let hrs = Number(u.downtimeHours || u.downtime || 0) || 0;
+        if (u.startAt && u.endAt) hrs = Math.max(0, (new Date(u.endAt) - new Date(u.startAt)) / 3600000);
+        if (hrs > MAX_EVENT_HOURS) hrs = MAX_EVENT_HOURS;
+        downtimeInWindow += hrs;
+      }
+    });
+    let avail = null;
+    let availabilityLabel = 'Insufficient data';
+    const dataDays = hasObservation ? windowDays : 0;
+    if (hasObservation && dataDays >= MIN_DAYS_FOR_AVAIL) {
+      avail = Math.max(0, Math.min(100, ((windowHours - downtimeInWindow) / windowHours) * 100));
+      availabilityLabel = avail.toFixed(1) + '%';
     }
-    const downDays = downtime / 24;
-    const avail = totalDays > 0 ? Math.max(0, Math.min(100, ((totalDays - downDays) / totalDays) * 100)) : 100;
 
     const result = {
-      status: currentlyDown ? 'Down' : 'Up',
-      downtime,
+      status: statusCode,
+      downtime: Number(downtime.toFixed(1)),
       failures,
-      availability: avail.toFixed(1),
+      availability: avail,
+      availabilityLabel,
+      dataDays,
       lastUpdate: last ? (last.date + ' ' + (last.time || '')) : '-',
       lastReason: last ? (last.reason || last.fault || '') : '',
       color: currentlyDown || downtime > 168 ? 'RED' : (downtime > 24 || failures >= 2 ? 'ORANGE' : 'GREEN')
@@ -2686,12 +2726,11 @@
     if (window._statusCache) window._statusCache.set(idStr, result);
     return result;
   }
-window.getEquipmentStatus = getEquipmentStatus;
+  window.getEquipmentStatus = getEquipmentStatus;
 
   /**
-   * Enterprise reliability metrics per asset:
-   * Health score (0-100), RUL days, anomaly score, MTBF, MTTR
-   * Rule + statistical model — foundation for ML / digital-twin upgrade path
+   * Corrected reliability metrics — statistically gated.
+   * No invented defaults. No RUL. Health is labelled as event-based risk score.
    */
   function getReliabilityMetrics(id) {
     const st = getEquipmentStatus(id);
@@ -2699,65 +2738,84 @@ window.getEquipmentStatus = getEquipmentStatus;
       .sort((a, b) => String((a.date||'')+' '+(a.time||'')).localeCompare(String((b.date||'')+' '+(b.time||''))));
     const fails = Math.max(0, st.failures || 0);
     const downtime = st.downtime || 0;
-    const avail = parseFloat(st.availability) || 100;
+    const avail = st.availability;
 
-    // MTBF / MTTR
-    let mtbf = 720; // default 30 days if no history
-    let mttr = fails > 0 ? Math.max(0.5, downtime / fails) : 2;
-    if (eu.length >= 2) {
-      const dates = eu.map(u => u.date).filter(Boolean).sort();
-      if (dates.length >= 2) {
-        const hoursSpan = Math.max(24, (new Date(dates[dates.length - 1]) - new Date(dates[0])) / 3600000 + 24);
-        mtbf = fails > 0 ? Math.max(8, (hoursSpan - downtime) / fails) : hoursSpan;
-      }
+    const dates = eu.map(u => u.date).filter(Boolean).sort();
+    let obsDays = 0;
+    if (dates.length >= 2) {
+      obsDays = Math.max(1, Math.ceil((new Date(dates[dates.length - 1]) - new Date(dates[0])) / 86400000) + 1);
+    } else if (dates.length === 1) {
+      obsDays = 1;
     }
 
-    // Anomaly score 0-100 (higher = more anomalous)
+    let mtbf = null;
+    let mttr = null;
+    let mtbfLabel = 'Insufficient data';
+    let mttrLabel = 'Insufficient data';
+    if (fails >= MIN_FAILURES_FOR_MTBF && obsDays >= MIN_DAYS_FOR_MTBF) {
+      const hoursSpan = Math.max(24, obsDays * 24);
+      mtbf = Math.max(8, (hoursSpan - downtime) / fails);
+      mtbfLabel = mtbf.toFixed(0) + ' h';
+      mttr = downtime / fails;
+      mttrLabel = mttr.toFixed(1) + ' h';
+    } else if (fails >= 1 && downtime > 0) {
+      mttr = downtime / fails;
+      mttrLabel = mttr.toFixed(1) + ' h (low confidence)';
+    }
+
     let anomaly = 0;
     if (fails >= 4) anomaly += 35;
     else if (fails >= 2) anomaly += 20;
     else if (fails >= 1) anomaly += 8;
-    if (avail < 70) anomaly += 30;
-    else if (avail < 85) anomaly += 18;
-    else if (avail < 95) anomaly += 8;
+    if (avail != null) {
+      if (avail < 70) anomaly += 30;
+      else if (avail < 85) anomaly += 18;
+      else if (avail < 95) anomaly += 8;
+    }
     if (downtime > 100) anomaly += 20;
     else if (downtime > 48) anomaly += 12;
-    // Recurrence boost from text patterns
     const reasons = eu.map(u => String(u.reason || '').toLowerCase());
     const modeHits = {};
     reasons.forEach(r => {
-      const m = tmClassifyReason(r).mode;
+      const m = (typeof tmClassifyReason === 'function') ? tmClassifyReason(r).mode : 'Unknown';
       modeHits[m] = (modeHits[m] || 0) + 1;
     });
     const maxMode = Math.max(0, ...Object.values(modeHits));
     if (maxMode >= 3) anomaly += 15;
     anomaly = Math.min(100, anomaly);
 
-    // Health score inverse of risk
-    let health = 100;
-    health -= (100 - avail) * 0.45;
-    health -= Math.min(35, fails * 6);
-    health -= Math.min(20, downtime / 10);
-    health -= anomaly * 0.15;
-    health = Math.max(5, Math.min(100, Math.round(health)));
+    let health = null;
+    let band = 'insufficient';
+    let healthLabel = 'Insufficient data';
+    if (eu.length >= 5 || obsDays >= 14) {
+      let h = 100;
+      if (avail != null) h -= (100 - avail) * 0.45;
+      h -= Math.min(35, fails * 6);
+      h -= Math.min(20, downtime / 10);
+      h -= anomaly * 0.15;
+      health = Math.max(5, Math.min(100, Math.round(h)));
+      healthLabel = String(health);
+      if (health < 40) band = 'critical';
+      else if (health < 55) band = 'poor';
+      else if (health < 70) band = 'fair';
+      else if (health < 85) band = 'good';
+      else band = 'excellent';
+    }
 
-    // RUL estimate (days) — simple Weibull-like using MTBF and recent trend
-    let rulDays = Math.round(mtbf / 24);
-    if (anomaly >= 60) rulDays = Math.max(1, Math.round(rulDays * 0.35));
-    else if (anomaly >= 40) rulDays = Math.max(2, Math.round(rulDays * 0.55));
-    else if (anomaly >= 25) rulDays = Math.max(3, Math.round(rulDays * 0.75));
-    if (st.status === 'Down') rulDays = 0;
-
-    let band = 'excellent';
-    if (health < 40) band = 'critical';
-    else if (health < 55) band = 'poor';
-    else if (health < 70) band = 'fair';
-    else if (health < 85) band = 'good';
+    const rulDays = null;
+    const rulLabel = 'Not available (model not calibrated)';
 
     return {
-      health, band, anomaly: Math.round(anomaly), rulDays,
-      mtbf: Number(mtbf.toFixed(1)), mttr: Number(mttr.toFixed(1)),
-      status: st.status, availability: avail, failures: fails, downtime
+      health, band, anomaly: Math.round(anomaly),
+      rulDays, rulLabel,
+      mtbf, mttr, mtbfLabel, mttrLabel,
+      status: st.status,
+      availability: avail,
+      availabilityLabel: st.availabilityLabel || (avail != null ? avail.toFixed(1) + '%' : 'Insufficient data'),
+      failures: fails,
+      downtime,
+      obsDays,
+      confidence: (fails >= MIN_FAILURES_FOR_MTBF && obsDays >= MIN_DAYS_FOR_MTBF) ? 'High' : (eu.length >= 5 ? 'Medium' : 'Low')
     };
   }
   window.getReliabilityMetrics = getReliabilityMetrics;
@@ -2769,23 +2827,27 @@ window.getEquipmentStatus = getEquipmentStatus;
       const m = getReliabilityMetrics(id);
       return { id, eq, ...m };
     });
-    metrics.sort((a, b) => a.health - b.health);
+    metrics.sort((a, b) => (a.health == null ? 999 : a.health) - (b.health == null ? 999 : b.health));
 
-    const avgHealth = metrics.length ? (metrics.reduce((s, m) => s + m.health, 0) / metrics.length).toFixed(1) : '100';
-    const critical = metrics.filter(m => m.health < 40).length;
+    const scored = metrics.filter(m => m.health != null);
+    const avgHealth = scored.length ? (scored.reduce((s, m) => s + m.health, 0) / scored.length).toFixed(1) : '—';
+    const critical = scored.filter(m => m.health < 40).length;
     const highAnomaly = metrics.filter(m => m.anomaly >= 40).length;
-    const avgMtbf = metrics.length ? (metrics.reduce((s, m) => s + m.mtbf, 0) / metrics.length).toFixed(0) : '—';
-    const avgMttr = metrics.length ? (metrics.reduce((s, m) => s + m.mttr, 0) / metrics.length).toFixed(1) : '—';
+    const mtbfVals = metrics.filter(m => m.mtbf != null).map(m => m.mtbf);
+    const mttrVals = metrics.filter(m => m.mttr != null).map(m => m.mttr);
+    const avgMtbf = mtbfVals.length ? (mtbfVals.reduce((s, v) => s + v, 0) / mtbfVals.length).toFixed(0) + 'h' : 'Insufficient data';
+    const avgMttr = mttrVals.length ? (mttrVals.reduce((s, v) => s + v, 0) / mttrVals.length).toFixed(1) + 'h' : 'Insufficient data';
+    const insuff = metrics.filter(m => m.health == null).length;
 
     const kpi = document.getElementById('reliability-kpi-grid');
     if (kpi) {
       kpi.innerHTML = `
-        <div class="kpi-card green enterprise-kpi"><i class="fas fa-heartbeat"></i><h2>${avgHealth}</h2><p>Avg Fleet Health</p></div>
-        <div class="kpi-card red"><i class="fas fa-skull-crossbones"></i><h2>${critical}</h2><p>Critical Health (&lt;40)</p></div>
-        <div class="kpi-card orange"><i class="fas fa-percentage"></i><h2>${highAnomaly}</h2><p>High Anomaly Score</p></div> 
-        <div class="kpi-card blue"><i class="fas fa-clock"></i><h2>${avgMtbf}h</h2><p>Avg MTBF</p></div>
-        <div class="kpi-card purple"><i class="fas fa-wrench"></i><h2>${avgMttr}h</h2><p>Avg MTTR</p></div>
-        <div class="kpi-card blue"><i class="fas fa-cogs"></i><h2>${metrics.length}</h2><p>Assets scored</p></div>
+        <div class="kpi-card green enterprise-kpi"><i class="fas fa-heartbeat"></i><h2>${avgHealth}</h2><p>Avg Event-Risk Score</p></div>
+        <div class="kpi-card red"><i class="fas fa-skull-crossbones"></i><h2>${critical}</h2><p>Critical Risk (&lt;40)</p></div>
+        <div class="kpi-card orange"><i class="fas fa-percentage"></i><h2>${highAnomaly}</h2><p>High Anomaly Score</p></div>
+        <div class="kpi-card blue"><i class="fas fa-clock"></i><h2 style="font-size:1.1rem;">${avgMtbf}</h2><p>Avg MTBF (gated)</p></div>
+        <div class="kpi-card purple"><i class="fas fa-wrench"></i><h2 style="font-size:1.1rem;">${avgMttr}</h2><p>Avg MTTR (gated)</p></div>
+        <div class="kpi-card blue"><i class="fas fa-cogs"></i><h2>${metrics.length}</h2><p>Assets · ${insuff} insuff. data</p></div>
       `;
     }
 
@@ -2801,12 +2863,12 @@ window.getEquipmentStatus = getEquipmentStatus;
             <td><strong>${String(m.id).replace(/</g,'&lt;')}</strong></td>
             <td>${type}</td>
             <td>${(m.eq?.shaft || '—').replace(/</g,'&lt;')}</td>
-            <td><span class="health-score ${m.band}">${m.health}</span></td>
-            <td>${m.rulDays === 0 ? '<span style="color:var(--danger);font-weight:700;">0 (Down)</span>' : m.rulDays}</td>
+            <td><span class="health-score ${m.band || 'insufficient'}">${m.health != null ? m.health : '—'}</span></td>
+            <td style="font-size:0.78rem;color:var(--text-3);">${m.rulLabel || 'Not available'}</td>
             <td style="font-weight:700;color:${m.anomaly>=50?'#dc2626':m.anomaly>=30?'#ea580c':'#16a34a'}">${m.anomaly}</td>
-            <td>${m.mtbf}</td>
-            <td>${m.mttr}</td>
-            <td style="font-weight:700;color:${m.status==='Down'?'#dc2626':'#16a34a'}">${m.status}</td>
+            <td>${m.mtbfLabel || 'Insuff.'}</td>
+            <td>${m.mttrLabel || 'Insuff.'}</td>
+            <td style="font-weight:700;color:${(m.status==='Down'||m.status==='Restricted')?'#dc2626':'#16a34a'}">${m.status}</td>
           </tr>`;
         }).join('');
       }
@@ -2844,7 +2906,7 @@ window.getEquipmentStatus = getEquipmentStatus;
     if (rec) {
       const items = [];
       metrics.filter(m => m.health < 40).slice(0, 5).forEach(m => {
-        items.push(`<div class="alert-banner alert-high-risk" style="margin:0;"><strong>${m.id}</strong> — Critical health (${m.health}). Prioritise inspection; estimated RUL ${m.rulDays} day(s). Anomaly ${m.anomaly}.</div>`);
+        items.push(`<div class="alert-banner alert-high-risk" style="margin:0;"><strong>${m.id}</strong> — Critical event-risk score (${m.health}). Prioritise inspection. Anomaly ${m.anomaly}. Confidence: ${m.confidence}.</div>`);
       });
       metrics.filter(m => m.anomaly >= 45 && m.health >= 40).slice(0, 4).forEach(m => {
         items.push(`<div class="alert-banner alert-predictive" style="margin:0;"><strong>${m.id}</strong> — Elevated anomaly (${m.anomaly}). Review recurring failure modes in Text Mining.</div>`);
@@ -2883,11 +2945,11 @@ window.getEquipmentStatus = getEquipmentStatus;
     const ids = collectFilteredIds ? collectFilteredIds() : [];
     const rows = ids.slice(0, 40).map(id => {
       const m = getReliabilityMetrics(id);
-      return [id, String(m.health), String(m.rulDays), String(m.anomaly), String(m.mtbf), String(m.mttr), m.status];
+      return [id, m.health != null ? String(m.health) : 'Insuff.', m.rulLabel || 'N/A', String(m.anomaly), m.mtbfLabel || 'Insuff.', m.mttrLabel || 'Insuff.', m.status];
     });
     doc.autoTable({
       startY,
-      head: [['Equipment', 'Health', 'RUL (d)', 'Anomaly', 'MTBF (h)', 'MTTR (h)', 'Status']],
+      head: [['Equipment', 'Event-Risk', 'RUL', 'Anomaly', 'MTBF', 'MTTR', 'Status']],
       body: rows,
       styles: { font: 'helvetica', fontSize: 8, cellPadding: 2.5 },
       headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: 'bold' },
@@ -3276,6 +3338,46 @@ window.getEquipmentStatus = getEquipmentStatus;
   };
 
   // ── Dashboard ────────────────────────────────────────────────
+  function computeDataQualityMetrics() {
+    const ups = updates || [];
+    const total = ups.length;
+    if (!total) return { completeness: 0, outlierRate: 0, lagHours: null, unclassified: 0, total: 0 };
+    let withDuration = 0, outliers = 0, unclassified = 0;
+    let latestMs = 0;
+    ups.forEach(u => {
+      const hrs = Number(u.downtimeHours || u.downtime || 0) || 0;
+      if (u.startAt || hrs > 0) withDuration++;
+      if (hrs > MAX_EVENT_HOURS || (hrs === 0 && (u.isFailure === '1' || String(u.status||'').toLowerCase() === 'down'))) outliers++;
+      const reason = String(u.reason || '').trim();
+      if (!reason || reason === 'No reason provided') unclassified++;
+      try {
+        const t = u.changedAt ? new Date(u.changedAt).getTime() : (u.date ? new Date(u.date + 'T' + (u.time||'00:00')).getTime() : 0);
+        if (t > latestMs) latestMs = t;
+      } catch(e) {}
+    });
+    const lagHours = latestMs ? Math.max(0, (Date.now() - latestMs) / 3600000) : null;
+    return {
+      completeness: Math.round((withDuration / total) * 100),
+      outlierRate: Math.round((outliers / total) * 100),
+      lagHours: lagHours != null ? Math.round(lagHours) : null,
+      unclassified: Math.round((unclassified / total) * 100),
+      total
+    };
+  }
+
+  function updateDataQualityBar() {
+    const el = document.getElementById('dq-summary-text');
+    if (!el) return;
+    const dq = computeDataQualityMetrics();
+    if (!dq.total) {
+      el.textContent = 'No status events in scope';
+      return;
+    }
+    el.innerHTML = `Completeness ${dq.completeness}% · Outlier rate ${dq.outlierRate}% · Unclassified ${dq.unclassified}%` +
+      (dq.lagHours != null ? ` · Median lag ~${dq.lagHours}h` : '') +
+      ` · ${dq.total} events`;
+  }
+
   function populateDashboard() {
     const filteredEq = getFilteredEquipment();
     const filteredUp = getFilteredUpdates();
@@ -3283,23 +3385,25 @@ window.getEquipmentStatus = getEquipmentStatus;
     filteredUp.forEach(u => { if (u.equipmentId) idSet.add(String(u.equipmentId)); });
     const ids = [...idSet].filter(Boolean);
 
-    let upCount = 0, downCount = 0, totalAvail = 0, totalFails = 0;
+    let upCount = 0, downCount = 0, totalAvail = 0, availCount = 0, totalFails = 0;
     ids.forEach(id => {
       const st = getEquipmentStatus(id);
-      if (st.status === 'Up') upCount++; else downCount++;
-      totalAvail += parseFloat(st.availability) || 0;
+      if (st.status === 'Up' || st.status === 'Standby') upCount++; else if (st.status === 'Down' || st.status === 'Restricted') downCount++;
+      if (st.availability != null) { totalAvail += st.availability; availCount++; }
       totalFails += st.failures || 0;
     });
-    const avgAvail = ids.length ? (totalAvail / ids.length).toFixed(1) : '100.0';
-    const operationalPct = ids.length ? ((upCount / ids.length) * 100).toFixed(1) : '100.0';
+    const avgAvail = availCount ? (totalAvail / availCount).toFixed(1) + '%' : 'Insufficient data';
+    const operationalPct = ids.length ? ((upCount / ids.length) * 100).toFixed(1) : '—';
+
+    updateDataQualityBar();
 
     const kpiGrid = document.getElementById('kpi-grid');
     if (kpiGrid) {
       kpiGrid.innerHTML = `
         <div class="kpi-card blue clickable" onclick="showKpiEquipmentList('all')" title="Click to view equipment list"><i class="fas fa-cogs"></i><h2>${ids.length}</h2><p>Total Equipment</p></div>
         <div class="kpi-card green clickable" onclick="showKpiEquipmentList('up')" title="Click to view operational equipment"><i class="fas fa-check-circle"></i><h2>${upCount}</h2><p>Operational (Up)</p></div>
-        <div class="kpi-card red clickable" onclick="showKpiEquipmentList('down')" title="Click to view down equipment"><i class="fas fa-exclamation-circle"></i><h2>${downCount}</h2><p>Down</p></div>
-        <div class="kpi-card purple clickable" onclick="showKpiEquipmentList('all')" title="Click to view fleet"><i class="fas fa-percentage"></i><h2>${avgAvail}%</h2><p>Fleet Availability</p></div>
+        <div class="kpi-card red clickable" onclick="showKpiEquipmentList('down')" title="Click to view down equipment"><i class="fas fa-exclamation-circle"></i><h2>${downCount}</h2><p>Down / Restricted</p></div>
+        <div class="kpi-card purple clickable" onclick="showKpiEquipmentList('all')" title="Click to view fleet"><i class="fas fa-percentage"></i><h2 style="font-size:1.15rem;">${avgAvail}</h2><p>Fleet Availability (30d)</p></div>
         <div class="kpi-card orange clickable" onclick="showKpiEquipmentList('failures')" title="Click to view equipment with failures"><i class="fas fa-bolt"></i><h2>${totalFails}</h2><p>Total Failures</p></div>
         <div class="kpi-card blue clickable" onclick="showKpiEquipmentList('up')" title="Click to view operational equipment"><i class="fas fa-tachometer-alt"></i><h2>${operationalPct}%</h2><p>Operational %</p></div>
       `;
@@ -5042,16 +5146,35 @@ window.getEquipmentStatus = getEquipmentStatus;
     const batchSoft = new Set();
 
     statusDiv.innerHTML = `Importing <strong>${toImport.length}</strong> records (skipping already-in-system)…`;
-    let success = 0, skipped = 0, skippedDuplicate = 0;
+    let success = 0, skipped = 0, skippedDuplicate = 0, flaggedOutlier = 0;
     for (let i = 0; i < toImport.length; i++) {
       const row = toImport[i];
       try {
         const rawId = String(row.equipmentId || '').trim();
         const equipId = sanitizeEquipmentId(rawId);
         if (!equipId) { skipped++; continue; }
+        let dtHrs = Number(row.downtimeHours) || 0;
+        // Import validation: reject extreme / zero-hour failures
+        if (dtHrs > MAX_EVENT_HOURS) {
+          flaggedOutlier++;
+          skipped++;
+          continue; // quarantine extreme outliers
+        }
+        if (dtHrs <= 0) {
+          skipped++;
+          continue; // zero-hour "failures" rejected
+        }
+        // Build startAt from date+time for future duration calculation
+        let startAtIso = null;
+        try {
+          const t = String(row.time || '00:00').padStart(5, '0');
+          startAtIso = new Date(row.date + 'T' + t).toISOString();
+        } catch(e) {}
         const statusPayload = {
-          equipmentId: equipId, date: row.date, time: row.time, status: 'Down', shift: row.shift || 'Night',
-          reason: row.reason, downtimeHours: Number(row.downtimeHours) || 0, isFailure: '1',
+          equipmentId: equipId, date: row.date, time: row.time, status: 'Down', statusCode: 'Down',
+          shift: row.shift || 'Night',
+          reason: row.reason, downtimeHours: dtHrs, isFailure: '1',
+          startAt: startAtIso,
           operator: row.operator || '',
           reportedBy: row.operator || '',
           reportedByCompanyNumber: row.reportedByCompanyNumber || '',
@@ -5091,7 +5214,8 @@ window.getEquipmentStatus = getEquipmentStatus;
       }
     }
     statusDiv.innerHTML = `🎉 Imported <strong>${success}</strong> new records. Skipped <strong>${skippedDuplicate}</strong> already in system` +
-      (skipped - skippedDuplicate ? `, <strong>${skipped - skippedDuplicate}</strong> other` : '') + `.`;
+      (flaggedOutlier ? `, <strong>${flaggedOutlier}</strong> extreme outliers quarantined` : '') +
+      (skipped - skippedDuplicate - flaggedOutlier ? `, <strong>${skipped - skippedDuplicate - flaggedOutlier}</strong> other` : '') + `.`;
     statusDiv.style.background = 'rgba(22,163,74,0.12)'; statusDiv.style.color = 'var(--success)';
     showToast(success ? `Imported ${success} new records (${skippedDuplicate} duplicates skipped)` : `No new records — ${skippedDuplicate} already in system`, success ? 'success' : 'info');
     if (typeof logAudit === 'function' && success) logAudit('import_breakdown', `Imported ${success} records (${skippedDuplicate} duplicates skipped)`, '');
