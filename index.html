@@ -2140,26 +2140,29 @@
     window._statusCache = window._statusCache || new Map();
 
     unsubscribeFunctions.push(onSnapshot(collection(db, "equipment"), snap => {
-      // Collapse LOCO 183 / 183 style duplicates into one in-memory record (canonical id)
+      // Collapse LOCO-prefix variants only within the SAME shaft.
+      // 183@11 Shaft and 183@12 Shaft remain separate assets.
       const rawEq = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const byNorm = new Map();
+      const byKey = new Map();
       rawEq.forEach(e => {
         const norm = normaliseEquipId(e.id);
         if (!norm) return;
-        const existing = byNorm.get(norm);
+        const key = equipCompositeKey(norm, e.shaft);
+        const existing = byKey.get(key);
         if (!existing) {
-          byNorm.set(norm, { ...e, id: norm }); // always surface canonical id
+          byKey.set(key, { ...e, id: norm, _key: key });
         } else {
-          // Merge: prefer non-empty shaft/type fields
           const merged = { ...existing };
           Object.keys(e).forEach(k => {
             if (k === 'id') return;
             if ((merged[k] == null || merged[k] === '') && e[k] != null && e[k] !== '') merged[k] = e[k];
           });
-          byNorm.set(norm, merged);
+          merged.id = norm;
+          merged._key = key;
+          byKey.set(key, merged);
         }
       });
-      equipment = [...byNorm.values()];
+      equipment = [...byKey.values()];
       fillDatalist(); populateShaftFilter();
       window._statusCache && window._statusCache.clear();
       scheduleRefresh();
@@ -2179,6 +2182,10 @@
         const eidRaw = String(u.equipmentId || u.locoNumber || '').trim();
         const eid = (typeof normaliseEquipId === 'function') ? normaliseEquipId(eidRaw) : eidRaw;
         if (!eid) continue;
+        const ekey = (typeof equipCompositeKey === 'function') ? equipCompositeKey(eid, u.shaft) : eid;
+        if (!byEquip.has(ekey)) byEquip.set(ekey, []);
+        byEquip.get(ekey).push(u);
+        // also index plain id for fallback lookups
         if (!byEquip.has(eid)) byEquip.set(eid, []);
         byEquip.get(eid).push(u);
       }
@@ -2269,23 +2276,25 @@
 
   /** Stable fingerprint for a status update — used to skip re-imports and de-dupe audit trail */
   function statusUpdateFingerprint(u) {
-    // Canonical ID so LOCO 183 and 183 produce the same fingerprint
+    // Canonical ID + shaft so same number on different shafts never collide
     const equip = ((typeof normaliseEquipId === 'function') ? normaliseEquipId(u.equipmentId || u.locoNumber || '') : String(u.equipmentId || u.locoNumber || '')).toLowerCase();
+    const shaft = (typeof normaliseShaftName === 'function' ? normaliseShaftName(u.shaft || '') : String(u.shaft || '')).toLowerCase();
     const date = String(u.date || '').trim().slice(0, 10);
     const time = String(u.time || '').trim().slice(0, 5);
     const status = String(u.status || u.statusCode || '').trim().toLowerCase();
     const reason = String(u.reason || u.fault || '').trim().toLowerCase().replace(/\s+/g, ' ');
     const down = String(u.downtimeHours ?? u.downtime ?? '').trim();
-    return [equip, date, time, status, reason, down].join('|');
+    return [equip, shaft, date, time, status, reason, down].join('|');
   }
 
   /** Soft key without time (import reports sometimes omit exact minutes) */
   function statusUpdateSoftKey(u) {
     const equip = ((typeof normaliseEquipId === 'function') ? normaliseEquipId(u.equipmentId || u.locoNumber || '') : String(u.equipmentId || u.locoNumber || '')).toLowerCase();
+    const shaft = (typeof normaliseShaftName === 'function' ? normaliseShaftName(u.shaft || '') : String(u.shaft || '')).toLowerCase();
     const date = String(u.date || '').trim().slice(0, 10);
     const status = String(u.status || u.statusCode || '').trim().toLowerCase();
     const reason = String(u.reason || u.fault || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    return [equip, date, status, reason].join('|');
+    return [equip, shaft, date, status, reason].join('|');
   }
 
   function looksLikeCompanyNumber(val) {
@@ -2418,6 +2427,33 @@
 
   function equipIdsMatch(a, b) {
     return normaliseEquipId(a) === normaliseEquipId(b) && !!normaliseEquipId(a);
+  }
+
+  /**
+   * Composite identity: same loco number on different shafts = different assets.
+   * e.g. 183@11 Shaft and 183@12 Shaft never share metrics.
+   */
+  function equipCompositeKey(id, shaft) {
+    const n = normaliseEquipId(id);
+    if (!n) return '';
+    const s = normaliseShaftName(shaft || '');
+    return s ? (n + '@' + s) : n;
+  }
+
+  function shaftOfEquipment(eqOrId) {
+    if (eqOrId && typeof eqOrId === 'object') return normaliseShaftName(eqOrId.shaft || '');
+    const id = String(eqOrId || '');
+    const eq = (equipment || []).find(e => normaliseEquipId(e.id) === normaliseEquipId(id)
+      && (!currentShaftFilter || shaftsMatch(e.shaft, currentShaftFilter)));
+    if (eq) return normaliseShaftName(eq.shaft || '');
+    // Prefer shaft from latest update for this id under current filter
+    const ups = (updates || []).filter(u => normaliseEquipId(u.equipmentId || u.locoNumber) === normaliseEquipId(id));
+    if (currentShaftFilter) {
+      const hit = ups.find(u => shaftsMatch(u.shaft, currentShaftFilter));
+      if (hit) return normaliseShaftName(hit.shaft || '');
+    }
+    if (ups.length && ups[0].shaft) return normaliseShaftName(ups[0].shaft);
+    return '';
   }
 
 
@@ -2632,29 +2668,40 @@
   }
 
   function getEquipmentStatus(id) {
-    const idStr = String(id);
-    if (window._statusCache && window._statusCache.has(idStr)) {
-      return window._statusCache.get(idStr);
+    // id may be composite "183@11 Shaft" or plain "183"
+    const parsed = (typeof parseEquipKey === 'function') ? parseEquipKey(id) : { id: normaliseEquipId(id), shaft: '' };
+    const idNorm = parsed.id || normaliseEquipId(id);
+    const shaftWant = parsed.shaft || (currentShaftFilter ? normaliseShaftName(currentShaftFilter) : '');
+    const cacheKey = equipCompositeKey(idNorm, shaftWant) || idNorm;
+    if (window._statusCache && window._statusCache.has(cacheKey)) {
+      return window._statusCache.get(cacheKey);
     }
-    const idNorm = (typeof normaliseEquipId === 'function') ? normaliseEquipId(idStr) : idStr;
-    let eu;
-    if (window._updatesByEquip && (window._updatesByEquip.has(idNorm) || window._updatesByEquip.has(idStr))) {
-      eu = window._updatesByEquip.get(idNorm) || window._updatesByEquip.get(idStr);
+
+    // Resolve equipment master for this shaft
+    let eqMaster = null;
+    if (shaftWant) {
+      eqMaster = (equipment || []).find(e => normaliseEquipId(e.id) === idNorm && shaftsMatch(e.shaft, shaftWant));
     } else {
-      eu = (updates || [])
-        .filter(u => {
-          const uid = (typeof normaliseEquipId === 'function') ? normaliseEquipId(u.equipmentId || u.locoNumber) : String(u.equipmentId || u.locoNumber || '');
-          return uid === idNorm || String(u.equipmentId || u.locoNumber || '') === idStr;
-        })
-        .sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
+      eqMaster = (equipment || []).find(e => normaliseEquipId(e.id) === idNorm);
+      if (eqMaster) shaftWant || (parsed.shaft = normaliseShaftName(eqMaster.shaft || ''));
     }
-    if ((typeof ENFORCE_SHAFT_SCOPE !== 'undefined' && ENFORCE_SHAFT_SCOPE) || currentShaftFilter || currentTypeFilter) {
-      const allowed = new Set(getFilteredEquipment().map(e => String(e.id)));
-      if (!allowed.has(idStr)) {
-        const empty = { status: 'Up', downtime: 0, failures: 0, availability: null, availabilityLabel: 'Insufficient data', lastUpdate: '-', lastReason: '', color: 'GREEN', dataDays: 0 };
-        if (window._statusCache) window._statusCache.set(idStr, empty);
-        return empty;
-      }
+    const effectiveShaft = shaftWant || (eqMaster ? normaliseShaftName(eqMaster.shaft || '') : '');
+
+    // Collect updates for this ID, then keep only same-shaft (critical: no cross-shaft mixing)
+    let eu = (updates || []).filter(u => {
+      const uid = normaliseEquipId(u.equipmentId || u.locoNumber);
+      if (uid !== idNorm) return false;
+      if (!effectiveShaft) return true; // no shaft context — last resort
+      const us = normaliseShaftName(u.shaft || '');
+      if (us) return shaftsMatch(us, effectiveShaft);
+      // Update has no shaft: only include if equipment master shaft matches and no conflicting updates
+      return true;
+    }).sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
+
+    // If we included shaft-less updates but also have shaft-tagged ones for this shaft, prefer tagged
+    if (effectiveShaft) {
+      const tagged = eu.filter(u => normaliseShaftName(u.shaft || '') && shaftsMatch(u.shaft, effectiveShaft));
+      if (tagged.length) eu = tagged;
     }
 
     const last = eu && eu[0];
@@ -2718,11 +2765,13 @@
       availability: avail,
       availabilityLabel,
       dataDays,
+      shaft: effectiveShaft || '—',
+      equipId: idNorm,
       lastUpdate: last ? (last.date + ' ' + (last.time || '')) : '-',
       lastReason: last ? (last.reason || last.fault || '') : '',
       color: currentlyDown || downtime > 168 ? 'RED' : (downtime > 24 || failures >= 2 ? 'ORANGE' : 'GREEN')
     };
-    if (window._statusCache) window._statusCache.set(idStr, result);
+    if (window._statusCache) window._statusCache.set(cacheKey, result);
     return result;
   }
   window.getEquipmentStatus = getEquipmentStatus;
@@ -2733,7 +2782,15 @@
    */
   function getReliabilityMetrics(id) {
     const st = getEquipmentStatus(id);
-    const eu = getFilteredUpdates().filter(u => normaliseEquipId(u.equipmentId || u.locoNumber || '') === normaliseEquipId(id))
+    const _rk = (typeof parseEquipKey === 'function') ? parseEquipKey(id) : { id: normaliseEquipId(id), shaft: '' };
+    const eu = getFilteredUpdates().filter(u => {
+      if (normaliseEquipId(u.equipmentId || u.locoNumber || '') !== _rk.id) return false;
+      if (_rk.shaft) {
+        const us = normaliseShaftName(u.shaft || '');
+        if (us) return shaftsMatch(us, _rk.shaft);
+      }
+      return true;
+    })
       .sort((a, b) => String((a.date||'')+' '+(a.time||'')).localeCompare(String((b.date||'')+' '+(b.time||''))));
     const fails = Math.max(0, st.failures || 0);
     const downtime = st.downtime || 0;
@@ -3480,35 +3537,46 @@
   function collectFilteredIds() {
     const filteredEq = getFilteredEquipment();
     const filteredUp = getFilteredUpdates();
-    // Collapse ALL variants (LOCO 183 / 183) into one canonical ID per asset
-    const byNorm = new Map(); // norm -> preferred display id
-    function preferId(candidate) {
-      const norm = normaliseEquipId(candidate);
-      if (!norm) return;
-      const cur = byNorm.get(norm);
-      if (!cur) { byNorm.set(norm, norm); return; } // always prefer pure normalised form
-      // Prefer the normalised form over any prefixed variant
-      if (cur !== norm && normaliseEquipId(cur) === norm) byNorm.set(norm, norm);
+    // Unique assets = (canonical ID + shaft). Same number on different shafts stay separate.
+    // Returns list of composite keys "id@shaft" when shaft known, else "id".
+    const byKey = new Map(); // compositeKey -> { id, shaft, key }
+    function add(idRaw, shaftRaw) {
+      const id = normaliseEquipId(idRaw);
+      if (!id) return;
+      const shaft = normaliseShaftName(shaftRaw || '');
+      // When a shaft filter is active, force that shaft
+      const effectiveShaft = currentShaftFilter ? normaliseShaftName(currentShaftFilter) : shaft;
+      const key = equipCompositeKey(id, effectiveShaft);
+      if (!key) return;
+      if (!byKey.has(key)) byKey.set(key, { id, shaft: effectiveShaft, key });
     }
-    filteredEq.forEach(e => { if (e.id) preferId(e.id); });
-    filteredUp.forEach(u => {
-      const raw = u.equipmentId || u.locoNumber;
-      if (raw) preferId(raw);
-    });
-    return [...byNorm.values()].filter(Boolean).sort((a, b) => {
-      // numeric-aware sort
-      const na = Number(a), nb = Number(b);
-      if (!isNaN(na) && !isNaN(nb)) return na - nb;
-      return String(a).localeCompare(String(b));
-    });
+    filteredEq.forEach(e => add(e.id, e.shaft));
+    filteredUp.forEach(u => add(u.equipmentId || u.locoNumber, u.shaft));
+    return [...byKey.values()].sort((a, b) => {
+      const na = Number(a.id), nb = Number(b.id);
+      if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+      if (a.id !== b.id) return String(a.id).localeCompare(String(b.id));
+      return String(a.shaft).localeCompare(String(b.shaft));
+    }).map(x => x.key); // composite keys for downstream
+  }
+
+  function parseEquipKey(key) {
+    const s = String(key || '');
+    const at = s.indexOf('@');
+    if (at < 0) return { id: normaliseEquipId(s), shaft: '' };
+    return { id: normaliseEquipId(s.slice(0, at)), shaft: normaliseShaftName(s.slice(at + 1)) };
   }
 
   function showKpiEquipmentList(mode) {
-    const ids = collectFilteredIds();
-    let filtered = ids.map(id => {
-      const st = getEquipmentStatus(id);
-      const eq = (equipment || []).find(e => String(e.id) === String(id) || normaliseEquipId(e.id) === normaliseEquipId(id));
-      return { id, st, eq };
+    const ids = collectFilteredIds(); // composite keys id@shaft
+    let filtered = ids.map(key => {
+      const st = getEquipmentStatus(key);
+      const parsed = parseEquipKey(key);
+      const eq = (equipment || []).find(e =>
+        normaliseEquipId(e.id) === parsed.id &&
+        (!parsed.shaft || shaftsMatch(e.shaft, parsed.shaft))
+      );
+      return { id: parsed.id, key, st, eq, shaft: st.shaft || parsed.shaft || (eq && eq.shaft) || '—' };
     });
     let title = 'Total Equipment';
     if (mode === 'up') {
@@ -3536,10 +3604,11 @@
           const availDisp = x.st.availabilityLabel || (x.st.availability != null ? Number(x.st.availability).toFixed(1) + '%' : 'Insufficient data');
           const sc = x.st.status;
           const statusColor = (sc === 'Down' || sc === 'Restricted') ? '#dc2626' : (sc === 'Up' || sc === 'Standby' ? '#16a34a' : '#64748b');
-          return `<tr class="row-clickable" onclick="showEquipmentDetail('${escId}')">
+          const clickKey = String(x.key || x.id).replace(/'/g, "\\'");
+          return `<tr class="row-clickable" onclick="showEquipmentDetail('${clickKey}')">
             <td><strong>${String(x.id).replace(/</g,'&lt;')}</strong></td>
             <td>${type}</td>
-            <td>${(x.eq?.shaft || '—').replace(/</g,'&lt;')}</td>
+            <td>${String(x.shaft || x.eq?.shaft || '—').replace(/</g,'&lt;')}</td>
             <td style="font-weight:700;color:${statusColor};">${sc}</td>
             <td>${availDisp}</td>
             <td>${x.st.failures || 0}</td>
@@ -3553,10 +3622,22 @@
   window.showKpiEquipmentList = showKpiEquipmentList;
 
   function showEquipmentDetail(id) {
-    const eq = (equipment || []).find(e => String(e.id) === String(id));
+    const parsed = (typeof parseEquipKey === 'function') ? parseEquipKey(id) : { id: normaliseEquipId(id), shaft: '' };
+    const displayId = parsed.id || String(id);
+    const eq = (equipment || []).find(e =>
+      normaliseEquipId(e.id) === displayId &&
+      (!parsed.shaft || shaftsMatch(e.shaft, parsed.shaft))
+    );
     const st = getEquipmentStatus(id);
-    const euRaw = getFilteredUpdates().filter(u => String(u.equipmentId || u.locoNumber || '') === String(id))
-      .sort((a, b) => String((b.date||'')+' '+(b.time||'')).localeCompare(String((a.date||'')+' '+(a.time||''))));
+    const euRaw = getFilteredUpdates().filter(u => {
+      if (normaliseEquipId(u.equipmentId || u.locoNumber || '') !== displayId) return false;
+      const wantShaft = parsed.shaft || st.shaft || '';
+      if (wantShaft) {
+        const us = normaliseShaftName(u.shaft || '');
+        if (us) return shaftsMatch(us, wantShaft);
+      }
+      return true;
+    }).sort((a, b) => String((b.date||'')+' '+(b.time||'')).localeCompare(String((a.date||'')+' '+(a.time||''))));
     // De-dupe identical status events so audit trail does not repeat the same task
     const euSeen = new Set();
     const eu = [];
@@ -3570,11 +3651,11 @@
     const titleEl = document.getElementById('equip-detail-title');
     const body = document.getElementById('equip-detail-body');
     const actions = document.getElementById('equip-detail-actions');
-    if (titleEl) titleEl.innerHTML = `<i class="fas fa-id-card"></i> ${String(id).replace(/</g,'&lt;')}`;
+    if (titleEl) titleEl.innerHTML = `<i class="fas fa-id-card"></i> ${String(displayId).replace(/</g,'&lt;')}` + (st.shaft && st.shaft !== '—' ? ` <span style="font-weight:500;font-size:0.9rem;opacity:0.85;">· ${String(st.shaft).replace(/</g,'&lt;')}</span>` : '');
     const fields = [
-      ['Equipment ID', id],
-      ['Type', eq ? inferEquipmentType(eq) : inferEquipmentType(id)],
-      ['Operation / Shaft', eq?.shaft || '—'],
+      ['Equipment ID', displayId],
+      ['Type', eq ? inferEquipmentType(eq) : inferEquipmentType(displayId)],
+      ['Operation / Shaft', st.shaft || eq?.shaft || '—'],
       ['Work Place', eq?.level || '—'],
       ['Size', eq?.locoSize || '—'],
       ['SECTION', eq?.section || '—'],
