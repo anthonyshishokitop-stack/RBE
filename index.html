@@ -2163,6 +2163,13 @@
         }
       });
       equipment = [...byKey.values()];
+      // Final hard de-dupe by normalised id + shaft (guards against map key quirks)
+      const _seenEq = new Map();
+      equipment.forEach(e => {
+        const k = normaliseEquipId(e.id) + '|' + normaliseShaftName(e.shaft || '');
+        if (!_seenEq.has(k)) _seenEq.set(k, e);
+      });
+      equipment = [..._seenEq.values()];
       fillDatalist(); populateShaftFilter();
       window._statusCache && window._statusCache.clear();
       scheduleRefresh();
@@ -2422,7 +2429,8 @@
     if (!s) return '';
     s = s.replace(/^(LOCO|Loco|loco)[\s\-_]*/i, '').trim();
     s = s.replace(/[\/\\#?\[\]]+/g, '-').replace(/\s+/g, ' ').trim();
-    return s;
+    // Canonical form is always UPPERCASE so 12G21 / 12g21 never diverge
+    return s.toUpperCase();
   }
 
   function equipIdsMatch(a, b) {
@@ -3538,26 +3546,50 @@
     const filteredEq = getFilteredEquipment();
     const filteredUp = getFilteredUpdates();
     // Unique assets = (canonical ID + shaft). Same number on different shafts stay separate.
-    // Returns list of composite keys "id@shaft" when shaft known, else "id".
-    const byKey = new Map(); // compositeKey -> { id, shaft, key }
+    // Bare IDs (no shaft) are merged into shaft-specific rows when a shaft is known.
+    const byIdShaft = new Map(); // "id|shaft" -> { id, shaft, key }
+
+    function resolveShaft(id, shaftRaw) {
+      let shaft = normaliseShaftName(shaftRaw || '');
+      if (currentShaftFilter) return normaliseShaftName(currentShaftFilter);
+      if (shaft) return shaft;
+      // Infer from equipment master
+      const eq = (filteredEq || []).find(e => normaliseEquipId(e.id) === id && e.shaft);
+      if (eq) return normaliseShaftName(eq.shaft);
+      // Infer from any update for this id that has a shaft
+      const up = (filteredUp || []).find(u => normaliseEquipId(u.equipmentId || u.locoNumber) === id && u.shaft);
+      if (up) return normaliseShaftName(up.shaft);
+      return '';
+    }
+
     function add(idRaw, shaftRaw) {
       const id = normaliseEquipId(idRaw);
       if (!id) return;
-      const shaft = normaliseShaftName(shaftRaw || '');
-      // When a shaft filter is active, force that shaft
-      const effectiveShaft = currentShaftFilter ? normaliseShaftName(currentShaftFilter) : shaft;
-      const key = equipCompositeKey(id, effectiveShaft);
-      if (!key) return;
-      if (!byKey.has(key)) byKey.set(key, { id, shaft: effectiveShaft, key });
+      const shaft = resolveShaft(id, shaftRaw);
+      const mapKey = id + '|' + shaft; // always unique per id+shaft (shaft may be '')
+      if (byIdShaft.has(mapKey)) return;
+      const key = equipCompositeKey(id, shaft);
+      byIdShaft.set(mapKey, { id, shaft, key });
     }
+
     filteredEq.forEach(e => add(e.id, e.shaft));
     filteredUp.forEach(u => add(u.equipmentId || u.locoNumber, u.shaft));
-    return [...byKey.values()].sort((a, b) => {
+
+    // Drop bare-id rows if the same id already has one or more shaft-specific rows
+    const idsWithShaft = new Set();
+    byIdShaft.forEach(v => { if (v.shaft) idsWithShaft.add(v.id); });
+    const collapsed = [];
+    byIdShaft.forEach(v => {
+      if (!v.shaft && idsWithShaft.has(v.id)) return; // skip bare duplicate
+      collapsed.push(v);
+    });
+
+    return collapsed.sort((a, b) => {
       const na = Number(a.id), nb = Number(b.id);
       if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
       if (a.id !== b.id) return String(a.id).localeCompare(String(b.id));
       return String(a.shaft).localeCompare(String(b.shaft));
-    }).map(x => x.key); // composite keys for downstream
+    }).map(x => x.key);
   }
 
   function parseEquipKey(key) {
