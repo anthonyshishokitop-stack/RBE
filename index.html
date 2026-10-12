@@ -2182,7 +2182,26 @@
     window._statusCache = window._statusCache || new Map();
 
     unsubscribeFunctions.push(onSnapshot(collection(db, "equipment"), snap => {
-      equipment = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Collapse LOCO 183 / 183 style duplicates into one in-memory record (canonical id)
+      const rawEq = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const byNorm = new Map();
+      rawEq.forEach(e => {
+        const norm = normaliseEquipId(e.id);
+        if (!norm) return;
+        const existing = byNorm.get(norm);
+        if (!existing) {
+          byNorm.set(norm, { ...e, id: norm }); // always surface canonical id
+        } else {
+          // Merge: prefer non-empty shaft/type fields
+          const merged = { ...existing };
+          Object.keys(e).forEach(k => {
+            if (k === 'id') return;
+            if ((merged[k] == null || merged[k] === '') && e[k] != null && e[k] !== '') merged[k] = e[k];
+          });
+          byNorm.set(norm, merged);
+        }
+      });
+      equipment = [...byNorm.values()];
       fillDatalist(); populateShaftFilter();
       window._statusCache && window._statusCache.clear();
       scheduleRefresh();
@@ -2280,6 +2299,9 @@
   function sanitizeEquipmentId(raw) {
     let id = String(raw || '').trim();
     if (!id || isUnknownEquipmentId(id)) return null;
+    // Always store canonical form (no LOCO prefix) so "LOCO 183" and "183" never diverge
+    id = (typeof normaliseEquipId === 'function') ? normaliseEquipId(id) : id;
+    if (!id || isUnknownEquipmentId(id)) return null;
     id = id.replace(/[\/\\#?[\]]+/g, '-').replace(/\s+/g, ' ').trim();
     id = id.replace(/-+/g, '-').replace(/^-|-$/g, '');
     if (id === '.' || id === '..' || !id) return null;
@@ -2289,10 +2311,11 @@
 
   /** Stable fingerprint for a status update — used to skip re-imports and de-dupe audit trail */
   function statusUpdateFingerprint(u) {
-    const equip = String(u.equipmentId || u.locoNumber || '').trim().toLowerCase();
+    // Canonical ID so LOCO 183 and 183 produce the same fingerprint
+    const equip = ((typeof normaliseEquipId === 'function') ? normaliseEquipId(u.equipmentId || u.locoNumber || '') : String(u.equipmentId || u.locoNumber || '')).toLowerCase();
     const date = String(u.date || '').trim().slice(0, 10);
     const time = String(u.time || '').trim().slice(0, 5);
-    const status = String(u.status || '').trim().toLowerCase();
+    const status = String(u.status || u.statusCode || '').trim().toLowerCase();
     const reason = String(u.reason || u.fault || '').trim().toLowerCase().replace(/\s+/g, ' ');
     const down = String(u.downtimeHours ?? u.downtime ?? '').trim();
     return [equip, date, time, status, reason, down].join('|');
@@ -2300,9 +2323,9 @@
 
   /** Soft key without time (import reports sometimes omit exact minutes) */
   function statusUpdateSoftKey(u) {
-    const equip = String(u.equipmentId || u.locoNumber || '').trim().toLowerCase();
+    const equip = ((typeof normaliseEquipId === 'function') ? normaliseEquipId(u.equipmentId || u.locoNumber || '') : String(u.equipmentId || u.locoNumber || '')).toLowerCase();
     const date = String(u.date || '').trim().slice(0, 10);
-    const status = String(u.status || '').trim().toLowerCase();
+    const status = String(u.status || u.statusCode || '').trim().toLowerCase();
     const reason = String(u.reason || u.fault || '').trim().toLowerCase().replace(/\s+/g, ' ');
     return [equip, date, status, reason].join('|');
   }
@@ -2422,11 +2445,15 @@
     return normaliseShaftName(a) === normaliseShaftName(b);
   }
 
-  /** Strip LOCO prefix so "LOCO 150" and "150" match */
+  /**
+   * Canonical equipment ID. Strips LOCO/Loco/loco prefix (with or without space/hyphen)
+   * so "LOCO 183", "LOCO183", "loco 183", "183" all become "183".
+   * Single source of truth for matching, de-duplication, and display.
+   */
   function normaliseEquipId(raw) {
     let s = String(raw || '').trim();
     if (!s) return '';
-    s = s.replace(/^(LOCO|Loco|loco)\s+/i, '').trim();
+    s = s.replace(/^(LOCO|Loco|loco)[\s\-_]*/i, '').trim();
     s = s.replace(/[\/\\#?\[\]]+/g, '-').replace(/\s+/g, ' ').trim();
     return s;
   }
@@ -2596,7 +2623,21 @@
   function fillDatalist() {
     const dl = document.getElementById('loco-list');
     if (!dl) return;
-    const ids = [...new Set((equipment || []).map(e => e.id).concat((updates || []).map(u => u.equipmentId || u.locoNumber)).filter(Boolean))].sort();
+    // Canonical IDs only — never offer both "183" and "LOCO 183"
+    const byNorm = new Map();
+    (equipment || []).forEach(e => {
+      const n = normaliseEquipId(e.id);
+      if (n) byNorm.set(n, n);
+    });
+    (updates || []).forEach(u => {
+      const n = normaliseEquipId(u.equipmentId || u.locoNumber);
+      if (n) byNorm.set(n, n);
+    });
+    const ids = [...byNorm.values()].sort((a, b) => {
+      const na = Number(a), nb = Number(b);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return String(a).localeCompare(String(b));
+    });
     dl.innerHTML = ids.map(id => `<option value="${id}">`).join('');
   }
 
@@ -2734,7 +2775,7 @@
    */
   function getReliabilityMetrics(id) {
     const st = getEquipmentStatus(id);
-    const eu = getFilteredUpdates().filter(u => String(u.equipmentId || u.locoNumber || '') === String(id))
+    const eu = getFilteredUpdates().filter(u => normaliseEquipId(u.equipmentId || u.locoNumber || '') === normaliseEquipId(id))
       .sort((a, b) => String((a.date||'')+' '+(a.time||'')).localeCompare(String((b.date||'')+' '+(b.time||''))));
     const fails = Math.max(0, st.failures || 0);
     const downtime = st.downtime || 0;
@@ -3381,9 +3422,10 @@
   function populateDashboard() {
     const filteredEq = getFilteredEquipment();
     const filteredUp = getFilteredUpdates();
-    const idSet = new Set(filteredEq.map(e => String(e.id)));
-    filteredUp.forEach(u => { if (u.equipmentId) idSet.add(String(u.equipmentId)); });
-    const ids = [...idSet].filter(Boolean);
+    // Use collectFilteredIds so LOCO 183 and 183 collapse to one
+    const ids = (typeof collectFilteredIds === 'function')
+      ? collectFilteredIds()
+      : [...new Set(filteredEq.map(e => normaliseEquipId(e.id)).filter(Boolean))];
 
     let upCount = 0, downCount = 0, totalAvail = 0, availCount = 0, totalFails = 0;
     ids.forEach(id => {
@@ -3480,18 +3522,27 @@
   function collectFilteredIds() {
     const filteredEq = getFilteredEquipment();
     const filteredUp = getFilteredUpdates();
-    // Prefer canonical IDs from equipment docs; fall back to normalised update IDs
-    const idSet = new Set();
-    filteredEq.forEach(e => { if (e.id) idSet.add(String(e.id)); });
+    // Collapse ALL variants (LOCO 183 / 183) into one canonical ID per asset
+    const byNorm = new Map(); // norm -> preferred display id
+    function preferId(candidate) {
+      const norm = normaliseEquipId(candidate);
+      if (!norm) return;
+      const cur = byNorm.get(norm);
+      if (!cur) { byNorm.set(norm, norm); return; } // always prefer pure normalised form
+      // Prefer the normalised form over any prefixed variant
+      if (cur !== norm && normaliseEquipId(cur) === norm) byNorm.set(norm, norm);
+    }
+    filteredEq.forEach(e => { if (e.id) preferId(e.id); });
     filteredUp.forEach(u => {
       const raw = u.equipmentId || u.locoNumber;
-      if (!raw) return;
-      const norm = normaliseEquipId(raw);
-      // If an equipment doc exists with this normalised id, use its canonical id
-      const eq = (equipment || []).find(e => normaliseEquipId(e.id) === norm);
-      idSet.add(eq ? String(eq.id) : norm);
+      if (raw) preferId(raw);
     });
-    return [...idSet].filter(Boolean).sort();
+    return [...byNorm.values()].filter(Boolean).sort((a, b) => {
+      // numeric-aware sort
+      const na = Number(a), nb = Number(b);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return String(a).localeCompare(String(b));
+    });
   }
 
   function showKpiEquipmentList(mode) {
@@ -3506,8 +3557,8 @@
       filtered = filtered.filter(x => x.st.status === 'Up');
       title = 'Operational (Up) Equipment';
     } else if (mode === 'down') {
-      filtered = filtered.filter(x => x.st.status === 'Down');
-      title = 'Down Equipment';
+      filtered = filtered.filter(x => x.st.status === 'Down' || x.st.status === 'Restricted');
+      title = 'Down / Restricted Equipment';
     } else if (mode === 'failures') {
       filtered = filtered.filter(x => (x.st.failures || 0) > 0).sort((a, b) => (b.st.failures || 0) - (a.st.failures || 0));
       title = 'Equipment with Failures';
@@ -3525,12 +3576,15 @@
           const type = x.eq ? inferEquipmentType(x.eq) : inferEquipmentType(x.id);
           const statusColor = x.st.status === 'Down' ? '#dc2626' : '#16a34a';
           const escId = String(x.id).replace(/'/g, "\\'");
+          const availDisp = x.st.availabilityLabel || (x.st.availability != null ? Number(x.st.availability).toFixed(1) + '%' : 'Insufficient data');
+          const sc = x.st.status;
+          const statusColor = (sc === 'Down' || sc === 'Restricted') ? '#dc2626' : (sc === 'Up' || sc === 'Standby' ? '#16a34a' : '#64748b');
           return `<tr class="row-clickable" onclick="showEquipmentDetail('${escId}')">
             <td><strong>${String(x.id).replace(/</g,'&lt;')}</strong></td>
             <td>${type}</td>
             <td>${(x.eq?.shaft || '—').replace(/</g,'&lt;')}</td>
-            <td style="font-weight:700;color:${statusColor};">${x.st.status}</td>
-            <td>${x.st.availability}%</td>
+            <td style="font-weight:700;color:${statusColor};">${sc}</td>
+            <td>${availDisp}</td>
             <td>${x.st.failures || 0}</td>
             <td>${(x.st.downtime || 0).toFixed(1)}</td>
           </tr>`;
@@ -3569,7 +3623,7 @@
       ['SECTION', eq?.section || '—'],
       ['OEM', eq?.oem || eq?.OEM || '—'],
       ['Current Status', st.status],
-      ['Availability', st.availability + '%'],
+      ['Availability', st.availabilityLabel || (st.availability != null ? Number(st.availability).toFixed(1) + '%' : 'Insufficient data')],
       ['Total Failures', String(st.failures || 0)],
       ['Total Downtime (h)', (st.downtime || 0).toFixed(1)],
       ['Color Risk', st.color || '—'],
@@ -4737,7 +4791,7 @@
         ['Shaft', eq?.shaft || '—'], ['Work Place', eq?.level || '—'],
         ['Size', eq?.locoSize || '—'], ['SECTION', eq?.section || '—'],
         ['OEM', eq?.oem || eq?.OEM || '—'], ['Current status', st.status],
-        ['Availability', st.availability + '%'], ['Last update', st.lastUpdate]
+        ['Availability', st.availabilityLabel || (st.availability != null ? Number(st.availability).toFixed(1) + '%' : 'Insufficient data')], ['Last update', st.lastUpdate]
       ].map(([k, v]) => `<div><div style="font-size:0.8rem;color:var(--text-3);font-weight:600;">${k}</div><div style="font-weight:600;">${String(v).replace(/</g,'&lt;')}</div></div>`).join('');
       profileCard.style.display = 'block';
     } else if (profileCard) profileCard.style.display = 'none';
@@ -4918,7 +4972,7 @@
     selectedMapping = mapping;
     excelData = sheet.rows.map((row, idx) => {
       const get = f => selectedMapping[f] != null ? row[selectedMapping[f]] : null;
-      let equip = String(get('equipmentId') || '').trim().replace(/^LOCO\s+/i, '').replace(/[\/\\#?[\]]+/g, '-').trim();
+      let equip = sanitizeEquipmentId(get('equipmentId')) || String(get('equipmentId') || '').trim();
       let reason = String(get('reason') || '').trim();
       const actual = String(get('actualFault') || get('action') || '').trim();
       if (!reason && actual) reason = actual;
