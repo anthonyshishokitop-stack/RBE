@@ -677,8 +677,7 @@
       <div class="form-group"><label>Password</label><input id="password" type="password" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-primary" id="auth-submit">Sign In</button>
     </form>
-    <p style="margin-top:1.5rem;text-align:center;" id="public-signup-wrap"><span id="toggle-auth" class="toggle-link">Create an account</span></p>
-    <p style="margin-top:0.75rem;font-size:0.8rem;color:#64748b;text-align:center;" id="invite-only-hint" class="hidden">Contact your administrator for access.</p>
+    <p style="margin-top:1.25rem;font-size:0.85rem;color:#64748b;text-align:center;" id="invite-only-hint">Invite-only access. Contact your administrator for an account.</p>
     <p id="auth-error" style="color:var(--danger);text-align:center;min-height:1.3em;margin-top:1rem;"></p>
   </div>
 </div>
@@ -1540,7 +1539,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
   import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, deleteDoc, updateDoc, where, getDocs, getDoc, limit } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 
@@ -2068,57 +2067,16 @@
   const appDiv = document.getElementById('app');
   let isLoginMode = true;
 
-  // Apply invite-only UX
-  (function applySignupPolicy() {
-    const wrap = document.getElementById('public-signup-wrap');
-    const hint = document.getElementById('invite-only-hint');
-    if (DISABLE_PUBLIC_SIGNUP) {
-      if (wrap) wrap.classList.add('hidden');
-      if (hint) hint.classList.remove('hidden');
-      isLoginMode = true;
-    } else {
-      if (wrap) wrap.classList.remove('hidden');
-      if (hint) hint.classList.add('hidden');
-    }
-  })();
+  // Invite-only: no public registration UI
+  isLoginMode = true;
 
-  document.getElementById('toggle-auth').onclick = e => {
-    e.preventDefault();
-    if (DISABLE_PUBLIC_SIGNUP) {
-      showToast('Public registration is disabled. Contact an administrator for an invite.', 'error');
-      return;
-    }
-    isLoginMode = !isLoginMode;
-    document.getElementById('auth-title').textContent = isLoginMode ? "Sign In" : "Create Account";
-    document.getElementById('auth-submit').textContent = isLoginMode ? "Sign In" : "Register";
-    document.getElementById('toggle-auth').textContent = isLoginMode ? "Create an account" : "Already have an account? Sign in";
-  };
   document.getElementById('auth-form').onsubmit = async e => {
     e.preventDefault();
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     document.getElementById('auth-error').textContent = "";
     try {
-      if (isLoginMode) {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        if (DISABLE_PUBLIC_SIGNUP) {
-          document.getElementById('auth-error').textContent = 'Public registration is disabled. Use an administrator invite.';
-          return;
-        }
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', cred.user.uid), {
-          email,
-          role: 'operations',
-          displayName: email.split('@')[0],
-          allowedShafts: (typeof RBE_SHAFTS !== 'undefined' ? RBE_SHAFTS.slice() : []),
-          status: 'active',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-        showToast('Account created — role: operations', 'success');
-        try { logAudit('user_self_register', 'Self-registered account', '', { source: 'ui' }); } catch (e) {}
-      }
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
       let msg = err.message;
       if (msg.includes('wrong-password') || msg.includes('invalid-credential')) msg = 'Wrong email or password';
