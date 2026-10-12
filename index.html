@@ -3532,7 +3532,6 @@
       } else {
         tbody.innerHTML = filtered.map(x => {
           const type = x.eq ? inferEquipmentType(x.eq) : inferEquipmentType(x.id);
-          const statusColor = x.st.status === 'Down' ? '#dc2626' : '#16a34a';
           const escId = String(x.id).replace(/'/g, "\\'");
           const availDisp = x.st.availabilityLabel || (x.st.availability != null ? Number(x.st.availability).toFixed(1) + '%' : 'Insufficient data');
           const sc = x.st.status;
