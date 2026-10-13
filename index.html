@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor Enterprise | Asset Reliability Platform</title>
+  <title>RBE Monitor Enterprise 2.2 | Asset Reliability Platform</title>
   <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,8 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"></script>
+  <!-- Firebase loaded only via ES module imports in the app script (no classic SDK) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -766,6 +765,9 @@
         <li data-section="user-admin" data-roles="admin" data-tooltip="User Management" data-keywords="users invite role shafts admin">
           <i class="fas fa-users-cog"></i><span class="menu-label">User Management</span>
         </li>
+        <li data-section="enterprise-support" data-roles="admin,executive,reliability" data-tooltip="Support & SLA" data-keywords="support sla governance platform">
+          <i class="fas fa-headset"></i><span class="menu-label">Support &amp; SLA</span>
+        </li>
 
         <li id="logout-btn" data-tooltip="Logout">
           <i class="fas fa-sign-out-alt"></i><span class="menu-label">Logout</span>
@@ -773,7 +775,7 @@
       </ul>
 
       <div class="version-footer">
-        <div class="enterprise-badge" style="margin-bottom:0.45rem;"><i class="fas fa-cube"></i> ENTERPRISE</div>
+        <div class="enterprise-badge" style="margin-bottom:0.45rem;"><i class="fas fa-cube"></i> ENTERPRISE 2.2</div>
         <span class="sla-pill" style="margin-top:0.4rem;background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.3);"><i class="fas fa-check-circle"></i> 99.5% target SLA</span>
       </div>
     </aside>
@@ -815,6 +817,9 @@
           <div id="data-quality-bar" class="summary-alert-bar info" style="margin-top:0.5rem;">
             <div><i class="fas fa-database" style="margin-right:6px;"></i><strong>Data Quality:</strong> <span id="dq-summary-text">Calculating…</span></div>
             <div class="bar-actions"><span style="font-size:0.78rem;opacity:0.9;">Metrics gated by density · No invented defaults</span></div>
+          </div>
+          <div id="no-shafts-banner" class="summary-alert-bar danger hidden" style="margin-top:0.5rem;">
+            <div><i class="fas fa-map-marker-alt" style="margin-right:6px;"></i><strong>No shafts assigned</strong> — Your account has no operational shaft scope. Contact an administrator to be granted access.</div>
           </div>
 
           <div id="dashboard-alert-summary" class="summary-alert-bar hidden">
@@ -1220,7 +1225,7 @@
           <div class="header-bar">
             <h1><i class="fas fa-industry"></i> Reliability Center</h1>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <span class="sla-pill"><i class="fas fa-chart-line"></i> Fleet Health Analytics</span>
+              <span class="sla-pill"><i class="fas fa-chart-line"></i> Event-risk analytics (heuristic)</span>
               <button class="btn btn-primary" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;" onclick="exportReliabilityPDF()"><i class="fas fa-file-pdf"></i> Executive PDF</button>
             </div>
           </div>
@@ -1330,11 +1335,11 @@
           <div class="card" style="border-left:4px solid var(--primary);">
             <h2><i class="fas fa-book"></i> Admin runbook (short)</h2>
             <ol style="margin:0.5rem 0 0 1.2rem;line-height:1.7;color:var(--text-2);font-size:0.92rem;">
-              <li><strong>Invite</strong></li>
-              <li><strong>Assign scope</strong></li>
-              <li><strong>Disable</strong></li>
-              <li><strong>Technical users</strong></li>
-              <li><strong>Production checklist</strong></li>
+              <li><strong>Invite</strong> — save role + ≥1 shaft in this UI</li>
+              <li><strong>Create Auth user</strong> — Firebase Console → Authentication → Add user (same email)</li>
+              <li><strong>Assign scope</strong> — shafts already set on invite; edit anytime</li>
+              <li><strong>Disable</strong> — set status disabled here; also disable Auth user in Console to revoke sessions</li>
+              <li><strong>Production checklist</strong> — see MASTER_FIX.md / ADMIN_RUNBOOK</li>
             </ol>
           </div>
         </section>
@@ -1385,7 +1390,7 @@
           <div class="card">
             <h2><i class="fas fa-life-ring"></i> Support channels</h2>
             <p style="color:var(--text-2);">For production deployment: designate a platform owner, define RACI for reliability vs operations, and route critical alerts to on-call. This build is ready for site-level use and staged enterprise pilot; full 24/7 global support requires vendor or internal SRE capability beyond the application shell.</p>
-            <p style="margin-top:0.75rem;font-size:0.9rem;"><strong>Version:</strong> RBE Monitor Enterprise 2.1 · <strong>Build focus:</strong> reliability analytics, RBAC, audit, compliance indicators</p>
+            <p style="margin-top:0.75rem;font-size:0.9rem;"><strong>Version:</strong> RBE Monitor Enterprise 2.2 · <strong>Build focus:</strong> stability fixes — shaft-scoped writes, invite/RBAC clarity, import safety, dual-SDK removed</p>
           </div>
         </section>
 
@@ -1540,7 +1545,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-  import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, deleteDoc, updateDoc, where, getDocs, getDoc, limit } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+  import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, deleteDoc, updateDoc, where, getDocs, getDoc, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 
   /* ═══════════════════════════════════════════════════════════
@@ -1892,6 +1897,7 @@
     if (!ENFORCE_SHAFT_SCOPE || (currentUserRole || '') === 'admin') return list || [];
     const key = shaftKey || 'shaft';
     const allowed = currentAllowedShafts || [];
+    if (allowed.includes('*')) return list || []; // explicit all-shafts grant
     if (!allowed.length) return []; // no operational access
     return (list || []).filter(item => {
       const s = String(item[key] || item.shaft || '').trim();
@@ -1929,7 +1935,7 @@
     // Always attempt Firestore audit_log for privileged / change actions (rules enforce immutability)
     try {
       if (auth.currentUser) {
-        addDoc(collection(db, 'audit_log'), { ...entry, createdAt: serverTimestamp() }).catch(() => {});
+        addDoc(collection(db, 'audit_log'), { ...entry, createdAt: serverTimestamp() }).catch((err) => { console.warn('[RBE] audit_log write failed', err); });
       }
     } catch (e) {}
   }
@@ -1952,6 +1958,9 @@
       } else if (!currentAllowedShafts || !currentAllowedShafts.length) {
         shaftsHint.textContent = ENFORCE_SHAFT_SCOPE ? 'Shafts: none assigned' : 'Shafts: all (scope off)';
         shaftsHint.title = 'No allowedShafts on profile';
+      } else if (currentAllowedShafts.includes('*')) {
+        shaftsHint.textContent = 'Shafts: ALL (*)';
+        shaftsHint.title = 'Explicit all-shafts grant';
       } else {
         const label = currentAllowedShafts.length <= 3
           ? currentAllowedShafts.join(', ')
@@ -1970,7 +1979,20 @@
     });
     const active = document.querySelector('#sidebar-menu li.active');
     if (active && active.style.display === 'none') show('dashboard');
+    try { updateNoShaftsBanner(); } catch (e) {}
   }
+
+  function updateNoShaftsBanner() {
+    const el = document.getElementById('no-shafts-banner');
+    if (!el) return;
+    const role = currentUserRole || 'viewer';
+    const none = ENFORCE_SHAFT_SCOPE && role !== 'admin'
+      && (!currentAllowedShafts || !currentAllowedShafts.length)
+      && !(currentAllowedShafts && currentAllowedShafts.includes('*'));
+    el.classList.toggle('hidden', !none);
+  }
+  window.updateNoShaftsBanner = updateNoShaftsBanner;
+
   window.applyRoleUI = applyRoleUI;
 
   async function ensureUserProfile(user) {
@@ -2202,10 +2224,12 @@
     };
     // Prefer ordered query; fall back to full collection if index missing
     try {
-      unsubscribeFunctions.push(onSnapshot(query(collection(db, "status_updates"), orderBy("date", "desc")), applyUpdates, () => {
+      unsubscribeFunctions.push(onSnapshot(query(collection(db, "status_updates"), orderBy("date", "desc")), applyUpdates, (err) => {
+        console.warn('[RBE] Ordered status_updates listener failed — falling back to unordered collection. Create Firestore index if needed.', err);
         unsubscribeFunctions.push(onSnapshot(collection(db, "status_updates"), applyUpdates));
       }));
     } catch (e) {
+      console.warn('[RBE] status_updates ordered query setup failed', e);
       unsubscribeFunctions.push(onSnapshot(collection(db, "status_updates"), applyUpdates));
     }
     unsubscribeFunctions.push(onSnapshot(collection(db, "maintenance"), snap => {
@@ -2282,6 +2306,37 @@
   }
 
   /** Stable fingerprint for a status update — used to skip re-imports and de-dupe audit trail */
+  /** Resolve shaft for writes so Firestore rules + shaft-scope RBAC never get blank shaft when avoidable */
+  function resolveShaftForEquipment(equipmentId, explicitShaft) {
+    if (explicitShaft && String(explicitShaft).trim()) {
+      return (typeof normaliseShaftName === 'function')
+        ? normaliseShaftName(explicitShaft) : String(explicitShaft).trim();
+    }
+    const idNorm = (typeof normaliseEquipId === 'function')
+      ? normaliseEquipId(equipmentId) : String(equipmentId || '').trim();
+    if (idNorm) {
+      const eq = (equipment || []).find(e => {
+        const eid = (typeof normaliseEquipId === 'function') ? normaliseEquipId(e.id) : String(e.id || '');
+        return eid === idNorm;
+      });
+      if (eq && eq.shaft) {
+        return (typeof normaliseShaftName === 'function')
+          ? normaliseShaftName(eq.shaft) : String(eq.shaft).trim();
+      }
+    }
+    if (typeof currentShaftFilter !== 'undefined' && currentShaftFilter) {
+      return (typeof normaliseShaftName === 'function')
+        ? normaliseShaftName(currentShaftFilter) : String(currentShaftFilter).trim();
+    }
+    if (Array.isArray(currentAllowedShafts) && currentAllowedShafts.length === 1
+        && currentAllowedShafts[0] !== '*') {
+      return (typeof normaliseShaftName === 'function')
+        ? normaliseShaftName(currentAllowedShafts[0]) : String(currentAllowedShafts[0]).trim();
+    }
+    return '';
+  }
+  window.resolveShaftForEquipment = resolveShaftForEquipment;
+
   function statusUpdateFingerprint(u) {
     // Canonical ID + shaft so same number on different shafts never collide
     const equip = ((typeof normaliseEquipId === 'function') ? normaliseEquipId(u.equipmentId || u.locoNumber || '') : String(u.equipmentId || u.locoNumber || '')).toLowerCase();
@@ -4670,10 +4725,12 @@
     if (!assertCan('mark_fixed', { equipmentId: equipId }, 'Not authorized to mark fixed for this equipment/shaft')) return;
     const actor = getActor();
     try {
+      const markShaft = resolveShaftForEquipment(equipId, '');
       await addDoc(collection(db, "status_updates"), {
         equipmentId: equipId, date: new Date().toISOString().slice(0, 10),
         time: new Date().toTimeString().slice(0, 5), status: 'Fixed', shift: 'Morning',
         reason: 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
+        shaft: markShaft,
         source: 'Mark Fixed', createdAt: serverTimestamp(),
         updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
         updatedByCompanyNumber: actor.companyNumber || '',
@@ -4740,6 +4797,7 @@
     const equipId = document.getElementById('u-loco').value.trim();
     if (!assertCan('add_status', { equipmentId: equipId }, 'Not authorized to log status for this equipment/shaft')) return;
     const actor = getActor();
+    const resolvedShaft = resolveShaftForEquipment(equipId, '');
     const data = {
       equipmentId: equipId,
       date: document.getElementById('u-date').value,
@@ -4749,6 +4807,7 @@
       reason: document.getElementById('u-reason').value.trim(),
       downtimeHours: Number(document.getElementById('u-downtime').value) || 0,
       isFailure: document.getElementById('u-failure').value,
+      shaft: resolvedShaft,
       createdAt: serverTimestamp(),
       updatedBy: actor.name,
       updatedByEmail: actor.email,
@@ -4756,6 +4815,9 @@
       updatedByCompanyNumber: actor.companyNumber || '',
       changedAt: new Date().toISOString()
     };
+    if (!resolvedShaft && currentUserRole !== 'admin') {
+      return showToast('Cannot determine shaft for this equipment. Select a shaft filter or contact admin.', 'error');
+    }
     if (!data.equipmentId || !data.date || !data.reason) return showToast('Required fields missing', 'error');
     try {
       await addDoc(collection(db, "status_updates"), data);
@@ -4783,11 +4845,13 @@
   document.getElementById('add-maint-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target;
+    const maintEquip = String(f[0].value || '').trim();
     const data = {
-      equipment: String(f[0].value || '').trim(),
+      equipment: maintEquip,
       task: String(f[1].value || '').trim(),
       interval: f[2].value,
       lastDone: f[3].value,
+      shaft: resolveShaftForEquipment(maintEquip, ''),
       source: 'manual',
       createdAt: new Date().toISOString()
     };
@@ -5190,19 +5254,23 @@
       }
 
       let deleted = 0, failed = 0;
-      // Batch delete in small chunks to avoid overwhelming client
-      for (let i = 0; i < toDelete.length; i++) {
+      const BATCH_SIZE = 400;
+      for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+        const chunk = toDelete.slice(i, i + BATCH_SIZE);
         try {
-          await deleteDoc(toDelete[i].ref);
-          deleted++;
+          const batch = writeBatch(db);
+          chunk.forEach(item => batch.delete(item.ref));
+          await batch.commit();
+          deleted += chunk.length;
         } catch (e) {
-          failed++;
-          console.warn('Failed to delete', toDelete[i].id, e);
-        }
-        if ((i + 1) % 25 === 0 || i === toDelete.length - 1) {
-          if (statusEl) {
-            statusEl.innerHTML = `Deleting… <strong>${deleted}</strong> removed, <strong>${failed}</strong> failed (${i + 1}/${toDelete.length})`;
+          // Fallback sequential for this chunk
+          for (const item of chunk) {
+            try { await deleteDoc(item.ref); deleted++; }
+            catch (err) { failed++; console.warn('Failed to delete', item.id, err); }
           }
+        }
+        if (statusEl) {
+          statusEl.innerHTML = `Deleting… <strong>${deleted}</strong> removed, <strong>${failed}</strong> failed (${Math.min(i + BATCH_SIZE, toDelete.length)}/${toDelete.length})`;
         }
       }
 
@@ -5278,15 +5346,15 @@
         const equipId = sanitizeEquipmentId(rawId);
         if (!equipId) { skipped++; continue; }
         let dtHrs = Number(row.downtimeHours) || 0;
-        // Import validation: reject extreme / zero-hour failures
+        // Import validation: quarantine extreme outliers; allow zero-hour as non-failure info when needed
         if (dtHrs > MAX_EVENT_HOURS) {
           flaggedOutlier++;
           skipped++;
-          continue; // quarantine extreme outliers
+          continue;
         }
-        if (dtHrs <= 0) {
-          skipped++;
-          continue; // zero-hour "failures" rejected
+        const isZeroHour = dtHrs <= 0;
+        if (isZeroHour) {
+          dtHrs = 0; // keep row as status event without inventing hours
         }
         // Build startAt from date+time for future duration calculation
         let startAtIso = null;
@@ -5294,17 +5362,22 @@
           const t = String(row.time || '00:00').padStart(5, '0');
           startAtIso = new Date(row.date + 'T' + t).toISOString();
         } catch(e) {}
+        const rowShaft = resolveShaftForEquipment(equipId, row.shaft || importShaft || '');
+        if (!rowShaft && currentUserRole !== 'admin') {
+          skipped++;
+          continue;
+        }
         const statusPayload = {
           equipmentId: equipId, date: row.date, time: row.time, status: 'Down', statusCode: 'Down',
           shift: row.shift || 'Night',
-          reason: row.reason, downtimeHours: dtHrs, isFailure: '1',
+          reason: row.reason, downtimeHours: dtHrs, isFailure: isZeroHour ? '0' : '1',
           startAt: startAtIso,
           operator: row.operator || '',
           reportedBy: row.operator || '',
           reportedByCompanyNumber: row.reportedByCompanyNumber || '',
           signedBy: row.signedBy || '',
           signedByCompanyNumber: row.signedByCompanyNumber || '',
-          shaft: row.shaft || '', workplace: row.workplace || '',
+          shaft: rowShaft, workplace: row.workplace || '',
           source: 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp(),
           updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
           updatedByCompanyNumber: actor.companyNumber || '',
@@ -5321,8 +5394,12 @@
         }
 
         await addDoc(collection(db, 'status_updates'), statusPayload);
+        const existingEq = (equipment || []).find(e => (typeof normaliseEquipId === 'function' ? normaliseEquipId(e.id) : e.id) === equipId);
+        const existingShaft = existingEq && existingEq.shaft ? String(existingEq.shaft).trim() : '';
+        const writeShaft = rowShaft || existingShaft || '';
+        // Do not clear a known shaft with an empty value on merge
         await setDoc(doc(db, 'equipment', equipId), {
-          shaft: row.shaft || '', level: row.workplace || '',
+          shaft: writeShaft, level: row.workplace || (existingEq && existingEq.level) || '',
           equipmentType: (typeof inferEquipmentType === 'function') ? inferEquipmentType(equipId) : 'Loco',
           source: 'Imported Breakdown Report', updatedAt: new Date().toISOString(),
           updatedBy: actor.name, updatedByEmail: actor.email
@@ -5474,6 +5551,13 @@
       if (statusEl) statusEl.textContent = 'Valid email and role required';
       return;
     }
+    if (role !== 'admin' && (!allowedShafts || !allowedShafts.length)) {
+      if (statusEl) {
+        statusEl.style.color = 'var(--danger)';
+        statusEl.textContent = 'Select at least one allowed shaft (or use role admin). Empty shafts lock the user out of data.';
+      }
+      return showToast('Select at least one shaft for this role', 'error');
+    }
     // Store pending invite under users_invites/{emailHash} and also try to find existing uid by email is not possible client-side.
     // Client-side: write to invites collection; admin must create Auth user in console / Admin SDK.
     try {
@@ -5503,7 +5587,7 @@
         statusEl.style.color = 'var(--success)';
         statusEl.innerHTML = matched
           ? `✅ Updated existing profile for <strong>${email}</strong> (status pending until next login).`
-          : `✅ Invite saved for <strong>${email}</strong>. Create the Firebase Auth user (Admin SDK / Console) or send password-reset link; on first login profile will attach if email matches an invite.`;
+          : `✅ Invite saved for <strong>${email}</strong>. Next: Firebase Console → Authentication → Add user (same email + temporary password). User signs in once; profile/role/shafts apply from this invite.`;
       }
       showToast('Invite saved', 'success');
       e.target.reset();
