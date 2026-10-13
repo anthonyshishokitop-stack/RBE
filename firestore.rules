@@ -15,8 +15,14 @@ service cloud.firestore {
     }
     function shaftAllowed(shaft) {
       return isAdmin()
-        || (shaft == null || shaft == '')
-        || (userDoc().allowedShafts is list && shaft in userDoc().allowedShafts);
+        || (userDoc().allowedShafts is list && '*' in userDoc().allowedShafts)
+        || (userDoc().allowedShafts is list
+            && shaft is string
+            && shaft != ''
+            && shaft in userDoc().allowedShafts);
+    }
+    function roleIn(roles) {
+      return isSignedIn() && userDoc().role in roles;
     }
 
     match /users/{uid} {
@@ -36,18 +42,23 @@ service cloud.firestore {
     }
 
     match /status_updates/{id} {
-      allow read: if isActive();
+      allow read: if isActive() && (
+        isAdmin() || !('shaft' in resource.data) || shaftAllowed(resource.data.shaft)
+      );
       allow create: if isActive() && shaftAllowed(request.resource.data.shaft);
       allow update, delete: if isAdmin();
     }
 
     match /maintenance/{id} {
-      allow read: if isActive();
-      allow write: if isActive();
+      allow read: if isActive() && (
+        isAdmin() || !('shaft' in resource.data) || shaftAllowed(resource.data.shaft)
+      );
+      allow create: if isActive() && shaftAllowed(request.resource.data.shaft);
+      allow update, delete: if isActive() && shaftAllowed(resource.data.shaft);
     }
 
     match /audit_log/{id} {
-      allow read: if isActive() && (isAdmin() || userDoc().role in ['executive', 'reliability']);
+      allow read: if isActive() && (isAdmin() || roleIn(['executive', 'reliability']));
       allow create: if isSignedIn();
       allow update, delete: if false;
     }
