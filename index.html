@@ -3951,7 +3951,8 @@
     const filteredUp = getFilteredUpdates();
     const byEquip = {};
     filteredUp.forEach(u => {
-      const id = String(u.equipmentId || u.locoNumber || '').trim();
+      const raw = String(u.equipmentId || u.locoNumber || '').trim();
+      const id = (typeof normaliseEquipId === 'function') ? normaliseEquipId(raw) : raw;
       if (!id || isUnknownEquipmentId(id)) return;
       if (!byEquip[id]) byEquip[id] = [];
       byEquip[id].push(u);
@@ -4186,16 +4187,23 @@
   function populateOperationsReport() {
     const filteredEq = getFilteredEquipment();
     const filteredUp = getFilteredUpdates();
-    const idSet = new Set(filteredEq.map(e => String(e.id)));
-    filteredUp.forEach(u => { if (u.equipmentId) idSet.add(String(u.equipmentId)); });
-    const allIds = [...idSet].filter(Boolean).sort();
+    const idSet = new Set(filteredEq.map(e => normaliseEquipId(e.id)).filter(Boolean));
+    filteredUp.forEach(u => {
+      const n = normaliseEquipId(u.equipmentId || u.locoNumber);
+      if (n) idSet.add(n);
+    });
+    const allIds = [...idSet].filter(Boolean).sort((a, b) => {
+      const na = Number(a), nb = Number(b);
+      if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+      return String(a).localeCompare(String(b));
+    });
     const statusSummary = { Up: 0, Down: 0 };
     const problemRows = [], highRiskRows = [];
 
     allIds.forEach(id => {
       const st = getEquipmentStatus(id);
       statusSummary[st.status] = (statusSummary[st.status] || 0) + 1;
-      const eu = filteredUp.filter(u => String(u.equipmentId || '') === id);
+      const eu = filteredUp.filter(u => normaliseEquipId(u.equipmentId || u.locoNumber) === id);
       const totalDownHrs = eu.reduce((s, u) => s + (Number(u.downtimeHours || 0) || 0), 0);
       const fails = st.failures;
       const lastDown = eu.find(u => String(u.status || '').toLowerCase() === 'down');
@@ -4411,7 +4419,11 @@
     return { mode: 'Other / Unclassified', color: '#64748b' };
   }
   function tmGetReason(u) { return String(u.reason || u.fault || u.description || '').trim(); }
-  function tmGetEquipId(u) { return String(u.equipmentId || u.locoNumber || 'Unknown'); }
+  function tmGetEquipId(u) {
+    const raw = u.equipmentId || u.locoNumber || '';
+    const n = (typeof normaliseEquipId === 'function') ? normaliseEquipId(raw) : String(raw || '').trim();
+    return n || 'Unknown';
+  }
   function tmGetDowntime(u) { return Number(u.downtimeHours || u.downtime || 0) || 0; }
 
   function tmAnalyseLiveData() {
@@ -5206,7 +5218,10 @@
     resultsContainer.innerHTML = '<p>Searching…</p>';
 
     let filtered = (updates || []).slice();
-    if (equipmentId) filtered = filtered.filter(u => String(u.equipmentId || u.locoNumber || '').trim() === equipmentId);
+    if (equipmentId) {
+      const want = normaliseEquipId(equipmentId);
+      filtered = filtered.filter(u => normaliseEquipId(u.equipmentId || u.locoNumber) === want);
+    }
     if (dateFilter && !(showAll && equipmentId)) filtered = filtered.filter(u => String(u.date || '') === dateFilter);
     if (reasonFilter) filtered = filtered.filter(u => String(u.reason || u.fault || '').toLowerCase().includes(reasonFilter));
     filtered = filtered.filter(u => !isUnknownEquipmentId(u.equipmentId || u.locoNumber));
@@ -5414,35 +5429,166 @@
   }
 
   function pdfParseWorkOrder(text, fileName) {
-    const equip = pdfPick(text, [
-      /Equipment:\s*([^\n\r]+)/i,
+    const t = String(text || '');
+    // ── Equipment ID (loco number preferred; else functional / equipment code) ──
+    let equipRaw = pdfPick(t, [
+      /Equipment[:\s]*([^\n\r]{3,80})/i,
       /UG\s*LOCO\s*[-–]?\s*UGLOC\s*(\d+)/i,
       /Loco\s+(\d{2,6})/i,
-      /Unit\s*Number[:\s]*(\d+)/i
+      /Unit\s*Number[:\s]*(\d+)/i,
+      /UGLOC\s*(\d+)/i
     ]);
-    let equipId = equip;
-    const num = equip.match(/(\d{2,6})/);
-    if (num) equipId = num[1];
-    const date = pdfNormalizeDate(pdfPick(text, [
-      /Breakdown\s*n\/?Incident\s*Date:\s*([0-9./-]+)/i,
-      /Date\s*created:\s*([0-9./-]+)/i,
-      /Date\s*scheduled:\s*([0-9./-]+)/i
+    let equipId = '';
+    // Prefer pure loco number when present in description or equipment line
+    const locoNum = t.match(/\b(?:LOCO|UGLOC|Loco)\s*[#:\-–]?\s*(\d{2,6})\b/i)
+      || (equipRaw && equipRaw.match(/\b(\d{2,6})\b/));
+    if (locoNum) equipId = locoNum[1];
+    if (!equipId && equipRaw) {
+      const code = equipRaw.match(/(\d{5,12})/); // plant equipment code e.g. 10309474
+      equipId = code ? code[1] : (sanitizeEquipmentId(equipRaw) || '');
+    }
+    equipId = sanitizeEquipmentId(equipId) || equipId || 'UNKNOWN';
+
+    // ── Dates ──
+    const date = pdfNormalizeDate(pdfPick(t, [
+      /Breakdown\s*n\/?Incident\s*Date[:\s]*([0-9./-]+)/i,
+      /Basic\s*Start\s*Date[:\s]*([0-9./-]+)/i,
+      /Earliest\s*Start\s*Date[:\s]*([0-9./-]+)/i,
+      /Date\s*created[:\s]*([0-9./-]+)/i,
+      /Date\s*scheduled[:\s]*([0-9./-]+)/i,
+      /Printed\s*On[:\s]*([0-9./-]+)/i,
+      /Start\s*Date[:\s]*([0-9./-]+)/i
     ]));
-    const reason = pdfPick(text, [
-      /Maintenance\s+Order\s+Description:\s*([^\n\r]+)/i,
-      /Description:\s*([^\n\r]{5,120})/i
-    ]) || 'Work order / breakdown';
-    const orderNo = pdfPick(text, [/Maint\.?\s*Order\s*no:\s*(\d+)/i, /Notification\s*no:\s*(\d+)/i]);
-    const shaft = pdfExtractShaft(text) || pdfPick(text, [/Plant:\s*R?(\d+)/i]);
-    const workplace = pdfPick(text, [/Functional\s+location:\s*([^\n\r]+)/i, /(\d+)\s*LEV/i]);
-    const reportedBy = pdfPick(text, [/Maint\.?\s*Ord\.?\s*created\s*by:\s*([A-Z0-9]+)/i, /Printed\s*By:\s*([A-Z0-9]+)/i]);
+
+    // ── Order identity ──
+    const orderNo = pdfPick(t, [
+      /Order\s*Number[:\s]*(\d+)/i,
+      /Maint\.?\s*Order\s*no[:\s]*(\d+)/i,
+      /Order\s*no[:\s]*(\d+)/i,
+      /Notification\s*no[:\s]*(\d+)/i
+    ]);
+    const orderType = pdfPick(t, [
+      /Order\s*Type[:\s]*([^\n\r]{3,60})/i,
+      /Maint\.?\s*Order\s*type[:\s]*([^\n\r]{3,60})/i
+    ]);
+    const orderDesc = pdfPick(t, [
+      /Order\s*Description[:\s]*([^\n\r]{5,120})/i,
+      /Maintenance\s+Order\s+Description[:\s]*([^\n\r]{5,120})/i,
+      /Long\s*Text[:\s]*([^\n\r]{5,120})/i,
+      /Order\s*Header\s*Long\s*Text[:\s]*([^\n\r]{5,120})/i
+    ]);
+
+    // ── Location / work centre ──
+    const functionalLoc = pdfPick(t, [
+      /Functional\s*Location[:\s]*([^\n\r]{5,100})/i,
+      /Functional\s*location[:\s]*([^\n\r]{5,100})/i
+    ]);
+    const workCentre = pdfPick(t, [
+      /Main\s*Work\s*Centre[:\s]*([^\n\r]{3,80})/i,
+      /Work\s*Centre[:\s]*([^\n\r]{3,80})/i,
+      /Main\s*work\s*center[:\s]*([^\n\r]{3,80})/i
+    ]);
+    const workplace = functionalLoc || workCentre || pdfPick(t, [/(\d+)\s*LEV/i]) || '';
+    let shaft = pdfExtractShaft(t + ' ' + functionalLoc + ' ' + workCentre);
+    if (!shaft) {
+      const sh = (functionalLoc + ' ' + workCentre).match(/(\d{1,2})\s*#?\s*(?:UG\s*)?SHAFT/i)
+        || (functionalLoc + ' ' + workCentre).match(/\b(\d{1,2})\s*SHAFT\b/i);
+      if (sh) shaft = sh[1] + ' Shaft';
+    }
+
+    // ── Page 2: Comment / work carried out ──
+    const comment = pdfPick(t, [
+      /Comment[:\s]*([^\n\r]{5,200})/i,
+      /Work\s*carried\s*out\s*\/?\s*comments?[:\s]*([^\n\r]{5,200})/i,
+      /Work\s*carried\s*out[:\s]*([^\n\r]{5,200})/i
+    ]);
+
+    // ── Root cause analysis ──
+    const objectPart = pdfPick(t, [/Object\s*Part[:\s]*([^\n\r]{2,80})/i, /Object\s*part[:\s]*([^\n\r]{2,80})/i]);
+    const damage = pdfPick(t, [/\bDamage[:\s]*([^\n\r]{2,80})/i]);
+    const cause = pdfPick(t, [
+      /Root\s*Cause(?:\s*Analysis)?[:\s]*([^\n\r]{3,120})/i,
+      /\bCause[:\s]*([^\n\r]{3,80})/i,
+      /Cause\s*of\s*damage[:\s]*([^\n\r]{3,80})/i
+    ]);
+    const rootCauseParts = [objectPart && ('Part: ' + objectPart), damage && ('Damage: ' + damage), cause && ('Cause: ' + cause)].filter(Boolean);
+    const rootCause = rootCauseParts.join('; ');
+
+    // ── Artisan / responsible person ──
+    const artisanName = pdfPick(t, [
+      /Artisan[\s\S]{0,40}Name[:\s]*([A-Za-z .'-]{2,40})/i,
+      /Name[-\s]*Artisan[:\s]*([A-Za-z .'-]{2,40})/i,
+      /PERSON\s*RESPONSIBLE[:\s]*([A-Za-z0-9 .'-]{2,40})/i
+    ]);
+    const artisanDesig = pdfPick(t, [
+      /Artisan[\s\S]{0,80}Designation[:\s]*([A-Za-z .'-]{2,40})/i
+    ]);
+    const responsibleName = pdfPick(t, [
+      /Responsible\s*Person[\s\S]{0,40}Name[:\s]*([A-Za-z .'-]{2,40})/i,
+      /Name[-\s]*Foreman[:\s]*([A-Za-z .'-]{2,40})/i
+    ]);
+    const responsibleDesig = pdfPick(t, [
+      /Responsible\s*Person[\s\S]{0,80}Designation[:\s]*([A-Za-z .'-]{2,40})/i
+    ]);
+    const printedBy = pdfPick(t, [
+      /Printed\s*By[:\s]*([A-Z0-9]+)/i,
+      /Maint\.?\s*Ord\.?\s*created\s*by[:\s]*([A-Z0-9]+)/i,
+      /Notif\.?\s*created\s*by[:\s]*([A-Z0-9]+)/i
+    ]);
+
+    // ── Duration if present ──
+    let downtimeHours = 0;
+    const dur = t.match(/Duration[:\s]*(\d+(?:[.,]\d+)?)\s*(?:hrs?|hours?)?/i)
+      || t.match(/(\d+(?:[.,]\d+)?)\s*hrs?\b/i);
+    if (dur) downtimeHours = parseFloat(String(dur[1]).replace(',', '.')) || 0;
+
+    // ── Build rich reason aligned to status_updates.reason ──
+    const reasonBits = [];
+    if (orderDesc) reasonBits.push(orderDesc.replace(/\s+/g, ' ').trim());
+    if (comment) reasonBits.push('Comment: ' + comment.replace(/\s+/g, ' ').trim());
+    if (rootCause) reasonBits.push('RCA: ' + rootCause);
+    if (orderType) reasonBits.push('Type: ' + orderType.replace(/\s+/g, ' ').trim());
+    if (orderNo) reasonBits.push('MO ' + orderNo);
+    if (workCentre) reasonBits.push('WC: ' + workCentre.replace(/\s+/g, ' ').trim().slice(0, 60));
+    let reason = reasonBits.join(' | ') || 'Work order / maintenance order';
+    if (reason.length > 500) reason = reason.slice(0, 497) + '…';
+
+    // Breakdown vs planned: only mark as failure/Down when clearly a breakdown
+    const isBreakdown = /breakdown/i.test(orderType || '') || /breakdown/i.test(orderDesc || '')
+      || /incident/i.test(t.slice(0, 400));
+    const status = isBreakdown ? 'Down' : 'Up';
+
+    const operator = artisanName || printedBy || '';
+    const signedBy = responsibleName || '';
+
     return [{
-      equipmentId: equipId || sanitizeEquipmentId(equip) || 'UNKNOWN',
-      date, time: '00:00', reason: orderNo ? `${reason} (MO ${orderNo})` : reason,
-      downtimeHours: 0, shift: '', operator: reportedBy, reportedByCompanyNumber: reportedBy,
-      signedBy: '', signedByCompanyNumber: '', shaft: shaft || '', workplace: workplace || '',
-      status: 'Down', sourceSheet: fileName, source: 'Imported Work Order PDF', selected: true,
-      docType: 'work_order'
+      equipmentId: equipId,
+      date,
+      time: '00:00',
+      reason,
+      downtimeHours: isBreakdown ? downtimeHours : 0,
+      shift: '',
+      operator,
+      reportedByCompanyNumber: printedBy || '',
+      signedBy,
+      signedByCompanyNumber: '',
+      shaft: shaft || '',
+      workplace: (workplace || '').replace(/\s+/g, ' ').trim().slice(0, 120),
+      status,
+      isInfoOnly: !isBreakdown,
+      sourceSheet: fileName,
+      source: 'Imported Work Order PDF',
+      selected: true,
+      docType: 'work_order',
+      // Extra structured fields kept on row for preview / future collections
+      orderNumber: orderNo || '',
+      orderDescription: (orderDesc || '').replace(/\s+/g, ' ').trim(),
+      functionalLocation: (functionalLoc || '').replace(/\s+/g, ' ').trim(),
+      workCentre: (workCentre || '').replace(/\s+/g, ' ').trim(),
+      comment: (comment || '').replace(/\s+/g, ' ').trim(),
+      rootCause: rootCause,
+      artisan: [artisanName, artisanDesig].filter(Boolean).join(' — '),
+      responsiblePerson: [responsibleName, responsibleDesig].filter(Boolean).join(' — ')
     }];
   }
 
@@ -5674,18 +5820,26 @@
     if (preview) preview.style.display = 'block';
     if (countEl) countEl.textContent = `(${excelData.length} row(s) · ${kind})`;
     if (table) {
+      const hasWo = excelData.some(r => r.docType === 'work_order' || r.comment || r.rootCause || r.artisan);
       table.innerHTML = `<thead><tr>
-        <th></th><th>Equipment</th><th>Date</th><th>Status</th><th>Reason</th><th>Shaft</th><th>Workplace</th><th>Source</th>
-      </tr></thead><tbody>` + excelData.map((r, i) => `<tr>
+        <th></th><th>Equipment</th><th>Date</th><th>Status</th><th>Reason</th>
+        ${hasWo ? '<th>Comment / RCA</th><th>Artisan</th>' : ''}
+        <th>Shaft</th><th>Workplace</th><th>Source</th>
+      </tr></thead><tbody>` + excelData.map((r, i) => {
+        const extra = [r.comment, r.rootCause].filter(Boolean).join(' · ');
+        return `<tr>
         <td><input type="checkbox" ${r.selected ? 'checked' : ''} onchange="excelData[${i}].selected=this.checked"></td>
         <td>${String(r.equipmentId||'').replace(/</g,'&lt;')}</td>
         <td>${String(r.date||'').replace(/</g,'&lt;')}</td>
         <td>${String(r.status||'Down').replace(/</g,'&lt;')}</td>
-        <td style="max-width:280px;">${String(r.reason||'').replace(/</g,'&lt;')}</td>
+        <td style="max-width:260px;font-size:0.85rem;">${String(r.reason||'').replace(/</g,'&lt;')}</td>
+        ${hasWo ? `<td style="max-width:180px;font-size:0.82rem;">${String(extra||'—').replace(/</g,'&lt;')}</td>
+        <td style="font-size:0.82rem;">${String(r.artisan||r.operator||'—').replace(/</g,'&lt;')}</td>` : ''}
         <td>${String(r.shaft||'').replace(/</g,'&lt;')}</td>
-        <td>${String(r.workplace||'').replace(/</g,'&lt;')}</td>
-        <td style="font-size:0.8rem;">${String(r.source||'').replace(/</g,'&lt;')}</td>
-      </tr>`).join('') + '</tbody>';
+        <td style="max-width:140px;font-size:0.82rem;">${String(r.workplace||'').replace(/</g,'&lt;')}</td>
+        <td style="font-size:0.78rem;">${String(r.source||'').replace(/</g,'&lt;')}</td>
+      </tr>`;
+      }).join('') + '</tbody>';
     }
     document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
     document.querySelector('.import-step[data-step="2"]')?.classList.add('active');
@@ -6076,6 +6230,16 @@
           changedAt: new Date().toISOString()
         };
         if (rawId && rawId !== equipId) statusPayload.originalEquipmentId = rawId;
+        // Work-order / PDF structured extras (optional)
+        if (row.orderNumber) statusPayload.orderNumber = row.orderNumber;
+        if (row.orderDescription) statusPayload.orderDescription = row.orderDescription;
+        if (row.functionalLocation) statusPayload.functionalLocation = row.functionalLocation;
+        if (row.workCentre) statusPayload.workCentre = row.workCentre;
+        if (row.comment) statusPayload.comment = row.comment;
+        if (row.rootCause) statusPayload.rootCause = row.rootCause;
+        if (row.artisan) statusPayload.artisan = row.artisan;
+        if (row.responsiblePerson) statusPayload.responsiblePerson = row.responsiblePerson;
+        if (row.docType) statusPayload.docType = row.docType;
 
         const fp = statusUpdateFingerprint(statusPayload);
         const soft = statusUpdateSoftKey(statusPayload);
