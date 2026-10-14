@@ -5428,6 +5428,45 @@
     return '';
   }
 
+  /** Collapse OCR noise; keep single spaces */
+  function pdfCleanText(text) {
+    return String(text || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  /**
+   * Extract a labelled field value, stopping before the next known form header.
+   * Works on both line-based and single-stream OCR text.
+   */
+  function pdfField(text, labels, stopLabels, maxLen) {
+    maxLen = maxLen || 120;
+    const stops = (stopLabels || [
+      'Section', 'Workplace', 'Unit Number', 'Unit No', 'Task', 'Date Inspected', 'Required Date',
+      'Days Overdue', 'Reported By', 'Date Fixed', 'Closed By', 'Step', 'Action', 'Hazard', 'Sign',
+      'HOD', 'Printed Date', 'Page', 'Order Number', 'Order Description', 'Equipment',
+      'Functional Location', 'Work Centre', 'Comment', 'Artisan', 'Root Cause', 'Cause of Delay',
+      'Maintenance Order', 'Non-Routine', 'IMP-PU-', 'SYNCROMINE', 'IMPLATS'
+    ]).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const stopRe = stops.length ? '(?=\\s*(?:' + stops.join('|') + ')\\b|$)' : '$';
+    const t = String(text || '');
+    for (const label of (Array.isArray(labels) ? labels : [labels])) {
+      const lab = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(lab + '\\s*[:|]?\\s*' + '([\\s\\S]{1,' + maxLen + '}?)' + stopRe, 'i');
+      const m = t.match(re);
+      if (m && m[1]) {
+        let v = m[1].replace(/\s+/g, ' ').trim();
+        // Strip leading punctuation / bullets
+        v = v.replace(/^[\-–—|:;.\s]+/, '').trim();
+        if (v && v.length >= 1) return v;
+      }
+    }
+    return '';
+  }
+
   function pdfParseWorkOrder(text, fileName) {
     const t = String(text || '');
     // ── Equipment ID (loco number preferred; else functional / equipment code) ──
@@ -5593,25 +5632,131 @@
   }
 
   function pdfParseActionManager(text, fileName) {
-    const equip = pdfPick(text, [/Unit\s*Number[:\s|]*([^\n\r|]*)/i, /Equipment[:\s]*(\d+)/i]) || '';
-    let equipId = (equip.match(/(\d{2,6})/) || [])[1] || sanitizeEquipmentId(equip) || '';
-    const workplace = pdfPick(text, [/Workplace[:\s|]*([^\n\r|]*)/i, /(\d+\s*\d*\s*SC)/i]) || '';
-    const date = pdfNormalizeDate(pdfPick(text, [/Date\s*Inspected[:\s|]*([0-9./-]+)/i, /(\d{4}-\d{2}-\d{2})/]));
-    const task = pdfPick(text, [/Task[:\s|]*([^\n\r|]*)/i, /(IMP-PU-[^\n\r]+)/i]) || '';
-    const action = pdfPick(text, [/Action[:\s|]*([^\n\r|]*)/i, /Ensure\s+[^\n\r]+/i]) || '';
-    const step = pdfPick(text, [/Step[:\s|]*([^\n\r|]*)/i, /(Loco\s+Controller[^\n\r]*)/i]) || '';
-    const reportedBy = pdfPick(text, [/Reported\s*By[:\s|]*([^\n\r|]*)/i]) || '';
-    const shaft = pdfExtractShaft(text + ' ' + workplace);
-    const reason = [step, action, task].filter(Boolean).join(' — ') || 'Action Manager item';
-    const daysOd = pdfPick(text, [/Days\s*Overdue[:\s|]*(\d+)/i]);
+    const t = pdfCleanText(text);
+
+    // Structured Action Manager columns (Impala / Syncromine form)
+    const section = pdfField(t, ['Section'], null, 20);
+    let workplace = pdfField(t, ['Workplace'], null, 40);
+    // OCR often yields "11 20 SC" for level/workplace codes
+    if (!workplace) {
+      const wp = t.match(/\b(\d{1,3}\s+\d{1,3}\s*SC)\b/i) || t.match(/\b(\d{2,4}\s*SC)\b/i);
+      if (wp) workplace = wp[1].replace(/\s+/g, ' ').trim();
+    }
+
+    // Unit Number = equipment ID (may be blank on form)
+    let unitRaw = pdfField(t, ['Unit Number', 'Unit No', 'Unit #'], null, 30);
+    // Do NOT fall back to Section — 114 is section, not loco ID
+    let equipId = '';
+    if (unitRaw) {
+      const n = unitRaw.match(/\b(\d{2,6})\b/);
+      equipId = n ? n[1] : (sanitizeEquipmentId(unitRaw) || '');
+    }
+    // Secondary: explicit equipment / loco only if labelled
+    if (!equipId) {
+      const eq = pdfField(t, ['Equipment Number', 'Equipment ID', 'Equipment No', 'Loco Number', 'Loco No'], null, 30);
+      if (eq) {
+        const n = eq.match(/\b(\d{2,6})\b/);
+        equipId = n ? n[1] : (sanitizeEquipmentId(eq) || '');
+      }
+    }
+    equipId = sanitizeEquipmentId(equipId) || equipId || '';
+
+    const task = pdfField(t, ['Task'], null, 80)
+      || (t.match(/\b(IMP-PU-[A-Za-z0-9\- ]{5,50}V?\d*)\b/i) || [])[1]
+      || '';
+
+    const dateInspected = pdfNormalizeDate(
+      pdfField(t, ['Date Inspected', 'Date inspected'], null, 20)
+      || pdfPick(t, [/(\d{4}-\d{2}-\d{2})/])
+    );
+    const requiredDate = pdfNormalizeDate(pdfField(t, ['Required Date', 'Required date'], null, 20));
+    const daysOverdue = pdfField(t, ['Days Overdue', 'Days overdue'], null, 8).replace(/[^\d]/g, '')
+      || (t.match(/Days\s*Overdue\s+(\d{1,4})\b/i) || [])[1]
+      || '';
+
+    // Reported By: "( Z4722726 - TA CHAUKE) Z4722726" or "Z4722726 - TA CHAUKE"
+    let reportedByRaw = pdfField(t, ['Reported By', 'Reported by'], null, 60);
+    if (!reportedByRaw) {
+      const rb = t.match(/\(\s*([Z]?\d{5,10}\s*[-–]\s*[A-Za-z ]{2,40})\)/i)
+        || t.match(/\b([Z]?\d{5,10}\s*[-–]\s*[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\b/);
+      if (rb) reportedByRaw = rb[1];
+    }
+    let reportedName = '';
+    let reportedCn = '';
+    if (reportedByRaw) {
+      const cn = reportedByRaw.match(/[Z]?\d{5,10}/i);
+      if (cn) reportedCn = cn[0].toUpperCase();
+      const nm = reportedByRaw.match(/[-–]\s*([A-Za-z][A-Za-z .']{1,40})/);
+      if (nm) reportedName = nm[1].trim();
+      else if (!cn) reportedName = reportedByRaw.trim();
+    }
+
+    // Step + Action (core defect description)
+    let step = pdfField(t, ['Step'], ['Action', 'Hazard', 'Sign'], 80);
+    if (!step) {
+      const sm = t.match(/\b(Loco\s+Controller|Controller|Antenna|Brakes?|Emergency\s+Stop|Battery|Handset|Siren|Display|Speedo?\s*meter)[.\s]*/i);
+      if (sm) step = sm[1].replace(/\.$/, '').trim();
+    }
+    let action = pdfField(t, ['Action'], ['Hazard', 'Sign', 'HOD'], 120);
+    if (!action) {
+      const am = t.match(/[-–]?\s*(Ensure\s+[^\n\r.]{5,100})/i);
+      if (am) action = am[1].trim();
+    }
+    // Clean trailing form noise from action/step
+    const noiseRe = /\b(HOD|Printed\s*Date|Page\s*:|MAN-Impala|EJ-[A-Z0-9\-]+|Signature\s*Date)\b[\s\S]*$/i;
+    step = step.replace(noiseRe, '').replace(/\s+/g, ' ').trim();
+    action = action.replace(noiseRe, '').replace(/\s+/g, ' ').trim();
+
+    const hazard = pdfField(t, ['Hazard'], ['Sign', 'HOD'], 10);
+
+    // Shaft from workplace / section context
+    let shaft = pdfExtractShaft(t + ' ' + workplace);
+    // "11 20 SC" often means 11 Shaft level 20 — use leading number as shaft hint
+    if (!shaft && workplace) {
+      const sh = workplace.match(/^(\d{1,2})\b/);
+      if (sh) shaft = sh[1] + ' Shaft';
+    }
+
+    // Concise reason for status_updates — not the whole OCR dump
+    const reasonParts = [];
+    if (step) reasonParts.push(step);
+    if (action) reasonParts.push(action);
+    if (task) reasonParts.push(task.replace(/\s+/g, ' ').trim());
+    if (hazard) reasonParts.push('Hazard ' + hazard);
+    if (daysOverdue) reasonParts.push(daysOverdue + 'd overdue');
+    if (section) reasonParts.push('Section ' + section);
+    let reason = reasonParts.join(' — ') || 'Action Manager item';
+    if (reason.length > 280) reason = reason.slice(0, 277) + '…';
+
+    // If no unit number, still import but flag UNKNOWN so user can fix equipment ID
+    if (!equipId) equipId = 'UNKNOWN';
+
     return [{
-      equipmentId: equipId || 'UNKNOWN',
-      date, time: '00:00',
-      reason: daysOd ? `${reason} (${daysOd}d overdue)` : reason,
-      downtimeHours: 0, shift: '', operator: reportedBy, reportedByCompanyNumber: '',
-      signedBy: '', signedByCompanyNumber: '', shaft: shaft || '', workplace: workplace || '',
-      status: 'Down', sourceSheet: fileName, source: 'Imported Action Manager PDF', selected: true,
-      docType: 'action_manager'
+      equipmentId: equipId,
+      date: dateInspected,
+      time: '00:00',
+      reason,
+      downtimeHours: 0,
+      shift: '',
+      operator: reportedName || reportedByRaw || '',
+      reportedByCompanyNumber: reportedCn,
+      signedBy: '',
+      signedByCompanyNumber: '',
+      shaft: shaft || '',
+      workplace: (workplace || '').replace(/\s+/g, ' ').trim(),
+      status: 'Down',
+      sourceSheet: fileName,
+      source: 'Imported Action Manager PDF',
+      selected: true,
+      docType: 'action_manager',
+      section: (section || '').trim(),
+      task: (task || '').replace(/\s+/g, ' ').trim(),
+      step: step,
+      action: action,
+      hazard: hazard,
+      requiredDate: requiredDate || '',
+      daysOverdue: daysOverdue || '',
+      reportedBy: reportedByRaw || ''
     }];
   }
 
@@ -5821,9 +5966,11 @@
     if (countEl) countEl.textContent = `(${excelData.length} row(s) · ${kind})`;
     if (table) {
       const hasWo = excelData.some(r => r.docType === 'work_order' || r.comment || r.rootCause || r.artisan);
+      const hasAm = excelData.some(r => r.docType === 'action_manager' || r.step || r.action);
       table.innerHTML = `<thead><tr>
         <th></th><th>Equipment</th><th>Date</th><th>Status</th><th>Reason</th>
         ${hasWo ? '<th>Comment / RCA</th><th>Artisan</th>' : ''}
+        ${hasAm ? '<th>Step</th><th>Action</th><th>Reported By</th>' : ''}
         <th>Shaft</th><th>Workplace</th><th>Source</th>
       </tr></thead><tbody>` + excelData.map((r, i) => {
         const extra = [r.comment, r.rootCause].filter(Boolean).join(' · ');
@@ -5835,6 +5982,9 @@
         <td style="max-width:260px;font-size:0.85rem;">${String(r.reason||'').replace(/</g,'&lt;')}</td>
         ${hasWo ? `<td style="max-width:180px;font-size:0.82rem;">${String(extra||'—').replace(/</g,'&lt;')}</td>
         <td style="font-size:0.82rem;">${String(r.artisan||r.operator||'—').replace(/</g,'&lt;')}</td>` : ''}
+        ${hasAm ? `<td style="font-size:0.82rem;">${String(r.step||'—').replace(/</g,'&lt;')}</td>
+        <td style="max-width:160px;font-size:0.82rem;">${String(r.action||'—').replace(/</g,'&lt;')}</td>
+        <td style="font-size:0.82rem;">${String(r.reportedBy||r.operator||'—').replace(/</g,'&lt;')}</td>` : ''}
         <td>${String(r.shaft||'').replace(/</g,'&lt;')}</td>
         <td style="max-width:140px;font-size:0.82rem;">${String(r.workplace||'').replace(/</g,'&lt;')}</td>
         <td style="font-size:0.78rem;">${String(r.source||'').replace(/</g,'&lt;')}</td>
@@ -6240,6 +6390,14 @@
         if (row.artisan) statusPayload.artisan = row.artisan;
         if (row.responsiblePerson) statusPayload.responsiblePerson = row.responsiblePerson;
         if (row.docType) statusPayload.docType = row.docType;
+        if (row.section) statusPayload.section = row.section;
+        if (row.task) statusPayload.task = row.task;
+        if (row.step) statusPayload.step = row.step;
+        if (row.action) statusPayload.actionItem = row.action;
+        if (row.hazard) statusPayload.hazard = row.hazard;
+        if (row.requiredDate) statusPayload.requiredDate = row.requiredDate;
+        if (row.daysOverdue) statusPayload.daysOverdue = row.daysOverdue;
+        if (row.reportedBy) statusPayload.reportedBy = row.reportedBy;
 
         const fp = statusUpdateFingerprint(statusPayload);
         const soft = statusUpdateSoftKey(statusPayload);
