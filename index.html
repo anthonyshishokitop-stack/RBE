@@ -1516,7 +1516,7 @@
         <p style="font-size:0.8rem;color:var(--text-3);margin-top:0.35rem;">Leave blank to keep the current due date. Setting a date updates or creates the maintenance schedule.</p>
       </div>
       <div style="display:flex;gap:0.65rem;margin-top:1.1rem;flex-wrap:wrap;">
-        <button type="button" class="btn btn-success" id="action-confirm-submit"><i class="fas fa-check"></i> Confirm</button>
+        <button type="button" class="btn btn-success" id="action-confirm-submit" onclick="if(window.handleActionConfirmSubmit)handleActionConfirmSubmit();"><i class="fas fa-check"></i> Confirm</button>
         <button type="button" class="btn btn-danger" onclick="closeModal('action-confirm-modal')">Cancel</button>
       </div>
     </div>
@@ -3841,7 +3841,7 @@
     if (actions) {
       let btns = `<button type="button" class="btn btn-primary" onclick="closeAllModals();show('search-status');document.getElementById('s-loco').value='${escId}';document.getElementById('search-form').requestSubmit();"><i class="fas fa-search"></i> View History</button>`;
       if (can('mark_fixed')) {
-        btns += `<button type="button" class="btn btn-success" onclick="markEquipmentFixed('${escId}','');closeModal('equip-detail-modal');"><i class="fas fa-check"></i> Mark Fixed</button>`;
+        btns += `<button type="button" class="btn btn-success" onclick="closeModal('equip-detail-modal');markEquipmentFixed('${escId}','');"><i class="fas fa-check"></i> Mark Fixed</button>`;
       }
       if (can('edit_equipment')) {
         btns += `<button type="button" class="btn btn-primary" onclick="openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit Register</button>`;
@@ -3881,9 +3881,9 @@
     const escId = String(m.id || '').replace(/'/g, "\\'");
     if (actions) {
       actions.innerHTML = `
-        <button type="button" class="btn btn-success" onclick="markEquipmentFixed('${escEq}','${escId}');closeModal('equip-detail-modal');"><i class="fas fa-check"></i> Mark Fixed</button>
+        <button type="button" class="btn btn-success" onclick="closeModal('equip-detail-modal');markEquipmentFixed('${escEq}','${escId}');"><i class="fas fa-check"></i> Mark Fixed</button>
         <button type="button" class="btn btn-primary" onclick="showEquipmentDetail('${escEq}');"><i class="fas fa-id-card"></i> Equipment Profile</button>
-        ${escId ? `<button type="button" class="btn btn-primary" onclick="dismissAlert('maint-${escId}');closeModal('equip-detail-modal');">Dismiss Alert</button>` : ''}
+        ${escId ? `<button type="button" class="btn btn-primary" onclick="closeModal('equip-detail-modal');dismissAlert('maint-${escId}');">Dismiss Alert</button>` : ''}
       `;
     }
     openModal('equip-detail-modal');
@@ -4824,25 +4824,45 @@
     const rescheduleWrap = document.getElementById('action-reschedule-wrap');
     const rescheduleDate = document.getElementById('action-reschedule-date');
     const submitBtn = document.getElementById('action-confirm-submit');
-    document.getElementById('action-confirm-type').value = type || '';
-    document.getElementById('action-confirm-equip').value = equipId || '';
-    document.getElementById('action-confirm-maint').value = maintId || '';
-    document.getElementById('action-confirm-alert-key').value = alertKey || '';
+    const typeEl = document.getElementById('action-confirm-type');
+    const equipEl = document.getElementById('action-confirm-equip');
+    const maintEl = document.getElementById('action-confirm-maint');
+    const alertEl = document.getElementById('action-confirm-alert-key');
+    if (!document.getElementById('action-confirm-modal')) {
+      showToast('Confirm dialog missing — reload the page', 'error');
+      console.error('action-confirm-modal not in DOM');
+      return;
+    }
+    if (typeEl) typeEl.value = type || '';
+    if (equipEl) equipEl.value = equipId || '';
+    if (maintEl) maintEl.value = maintId || '';
+    if (alertEl) alertEl.value = alertKey || '';
     if (notesEl) notesEl.value = '';
     if (rescheduleDate) rescheduleDate.value = '';
-    const showReschedule = true; // always offer reschedule for predictive / maint context
-    if (rescheduleWrap) rescheduleWrap.style.display = showReschedule ? 'block' : 'none';
-    const label = (typeof displayEquipId === 'function' && equipId) ? displayEquipId(equipId) : (equipId || alertKey || '');
+    if (rescheduleWrap) rescheduleWrap.style.display = 'block';
+    const label = (typeof displayEquipId === 'function' && equipId)
+      ? displayEquipId(equipId)
+      : (equipId || (alertKey ? String(alertKey).replace(/^(maint|fail|high)-/, '') : '') || '');
     if (type === 'mark_fixed') {
       if (titleEl) titleEl.innerHTML = '<i class="fas fa-check"></i> Mark Fixed';
-      if (descEl) descEl.textContent = 'Confirm marking ' + label + ' as Fixed. Notes are required. Optionally reschedule the next predicted inspection.';
-      if (submitBtn) { submitBtn.className = 'btn btn-success'; submitBtn.innerHTML = '<i class="fas fa-check"></i> Confirm Mark Fixed'; }
+      if (descEl) descEl.textContent = 'Confirm marking ' + (label || 'equipment') + ' as Fixed. Notes are required. Optionally reschedule the next predicted inspection.';
+      if (submitBtn) {
+        submitBtn.className = 'btn btn-success';
+        submitBtn.innerHTML = '<i class="fas fa-check"></i> Confirm Mark Fixed';
+      }
     } else {
       if (titleEl) titleEl.innerHTML = '<i class="fas fa-eye-slash"></i> Dismiss Alert';
       if (descEl) descEl.textContent = 'Dismiss this alert' + (label ? ' for ' + label : '') + '. Notes are required. Optionally set a new inspection date.';
-      if (submitBtn) { submitBtn.className = 'btn btn-primary'; submitBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Confirm Dismiss'; }
+      if (submitBtn) {
+        submitBtn.className = 'btn btn-primary';
+        submitBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Confirm Dismiss';
+      }
     }
-    openModal('action-confirm-modal');
+    // Defer open so any closeModal() in the same click handler finishes first
+    setTimeout(() => {
+      openModal('action-confirm-modal');
+      try { if (notesEl) notesEl.focus({ preventScroll: true }); } catch (e) {}
+    }, 0);
   }
   window.openActionConfirm = openActionConfirm;
 
@@ -5002,16 +5022,17 @@
   });
 
   // Action confirm submit
-  document.getElementById('action-confirm-submit')?.addEventListener('click', async () => {
-    const type = document.getElementById('action-confirm-type')?.value || '';
-    const equip = document.getElementById('action-confirm-equip')?.value || '';
-    const maint = document.getElementById('action-confirm-maint')?.value || '';
-    const alertKey = document.getElementById('action-confirm-alert-key')?.value || '';
-    const notes = (document.getElementById('action-confirm-notes')?.value || '').trim();
-    const reschedule = (document.getElementById('action-reschedule-date')?.value || '').trim();
+  async function handleActionConfirmSubmit() {
+    const type = (document.getElementById('action-confirm-type') || {}).value || '';
+    const equip = (document.getElementById('action-confirm-equip') || {}).value || '';
+    const maint = (document.getElementById('action-confirm-maint') || {}).value || '';
+    const alertKey = (document.getElementById('action-confirm-alert-key') || {}).value || '';
+    const notes = ((document.getElementById('action-confirm-notes') || {}).value || '').trim();
+    const reschedule = ((document.getElementById('action-reschedule-date') || {}).value || '').trim();
     if (!notes) {
       showToast('Notes / reason are required', 'error');
-      document.getElementById('action-confirm-notes')?.focus();
+      const n = document.getElementById('action-confirm-notes');
+      if (n) n.focus();
       return;
     }
     if (type === 'mark_fixed') {
@@ -5019,7 +5040,19 @@
     } else {
       await executeDismissAlert(alertKey, equip, notes, reschedule || null);
     }
-  });
+  }
+  window.handleActionConfirmSubmit = handleActionConfirmSubmit;
+  (function bindActionConfirmSubmit() {
+    const btn = document.getElementById('action-confirm-submit');
+    if (btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        handleActionConfirmSubmit();
+      });
+    } else {
+      console.warn('action-confirm-submit button not found at bind time');
+    }
+  })();
 
   document.getElementById('add-eq-form').addEventListener('submit', async e => {
     e.preventDefault();
