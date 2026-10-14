@@ -2303,7 +2303,10 @@
     if (/\bcarriage|main\s*carriage|men\s*carriage/.test(s)) return 'Carriage';
     if (/guard\s*car|\bg-?car\b|\bg-c\b|gabooz|12g\s*\d/i.test(s)) return 'Guard Car';
     if (/winder/.test(s)) return 'Winder';
-    if (/winch/.test(s)) return 'Winch';
+    // Impala unit codes: 56wn0340 / 56WN0340 → Winch (size 56, number 0340)
+    if (/\b\d{1,3}\s*wn\s*\d+/i.test(s) || /\bwn\d{3,}/i.test(idOnly) || /winch/.test(s)) return 'Winch';
+    if (/\b\d{1,3}\s*lh\s*\d+/i.test(s) || /\blhd?\d/i.test(idOnly)) return 'Loader';
+    if (/\b\d{1,3}\s*hp\s*\d+/i.test(s) || /\bhopper\s*\d/i.test(s)) return 'Hopper';
     if (/compress/.test(s)) return 'Compressor';
     if (/loader|lhd|scoop/.test(s)) return 'Loader';
     if (/substation|sub-station/.test(s)) return 'Substation';
@@ -2338,9 +2341,12 @@
   function sanitizeEquipmentId(raw) {
     let id = String(raw || '').trim();
     if (!id || isUnknownEquipmentId(id)) return null;
+    // Reject Action Manager / form column headers mistaken for IDs
+    if (/^(TASK|SECTION|WORKPLACE|UNIT|NUMBER|ACTION|STEP|HAZARD|SIGN|DATE|REPORTED|FIXED|CLOSED|EQUIPMENT|STATUS|REASON|SHAFT|SOURCE)$/i.test(id)) return null;
     // Always store canonical form (no LOCO prefix) so "LOCO 183" and "183" never diverge
     id = (typeof normaliseEquipId === 'function') ? normaliseEquipId(id) : id;
     if (!id || isUnknownEquipmentId(id)) return null;
+    if (/^(TASK|SECTION|UNIT|NUMBER|ACTION|STEP)$/i.test(id)) return null;
     id = id.replace(/[\/\\#?[\]]+/g, '-').replace(/\s+/g, ' ').trim();
     id = id.replace(/-+/g, '-').replace(/^-|-$/g, '');
     if (id === '.' || id === '..' || !id) return null;
@@ -5631,133 +5637,271 @@
     }];
   }
 
-  function pdfParseActionManager(text, fileName) {
-    const t = pdfCleanText(text);
-
-    // Structured Action Manager columns (Impala / Syncromine form)
-    const section = pdfField(t, ['Section'], null, 20);
-    let workplace = pdfField(t, ['Workplace'], null, 40);
-    // OCR often yields "11 20 SC" for level/workplace codes
-    if (!workplace) {
-      const wp = t.match(/\b(\d{1,3}\s+\d{1,3}\s*SC)\b/i) || t.match(/\b(\d{2,4}\s*SC)\b/i);
-      if (wp) workplace = wp[1].replace(/\s+/g, ' ').trim();
-    }
-
-    // Unit Number = equipment ID (may be blank on form)
-    let unitRaw = pdfField(t, ['Unit Number', 'Unit No', 'Unit #'], null, 30);
-    // Do NOT fall back to Section — 114 is section, not loco ID
-    let equipId = '';
-    if (unitRaw) {
-      const n = unitRaw.match(/\b(\d{2,6})\b/);
-      equipId = n ? n[1] : (sanitizeEquipmentId(unitRaw) || '');
-    }
-    // Secondary: explicit equipment / loco only if labelled
-    if (!equipId) {
-      const eq = pdfField(t, ['Equipment Number', 'Equipment ID', 'Equipment No', 'Loco Number', 'Loco No'], null, 30);
-      if (eq) {
-        const n = eq.match(/\b(\d{2,6})\b/);
-        equipId = n ? n[1] : (sanitizeEquipmentId(eq) || '');
+  /**
+   * Impala workplace code:
+   *   "11 13C 039 RSE 002" → shaft 11, level 13C, crosscut C039
+   *   "11 20 SC"           → shaft 11, level 20
+   */
+  function pdfParseWorkplaceCode(raw) {
+    const w = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!w) return { workplace: '', shaft: '', level: '', crosscut: '' };
+    // Reject pure header words
+    if (/^(workplace|unit|section|task|number)$/i.test(w)) return { workplace: '', shaft: '', level: '', crosscut: '' };
+    let shaft = '', level = '', crosscut = '';
+    const sh = w.match(/^(\d{1,2})\b/);
+    if (sh) shaft = sh[1] + ' Shaft';
+    const parts = w.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const p1 = parts[1];
+      const glued = p1.match(/^(\d{1,3})C0*(\d{2,4})$/i);
+      if (glued) {
+        level = glued[1] + 'C LEVEL';
+        crosscut = 'C' + glued[2].padStart(3, '0');
+      } else {
+        const lm = p1.match(/^(\d{1,3})([A-Za-z])?$/i);
+        if (lm) level = lm[1] + (lm[2] ? lm[2].toUpperCase() : '') + ' LEVEL';
+      }
+      if (!crosscut && parts.length >= 3) {
+        const n = parts[2].match(/^C?0*(\d{2,4})$/i);
+        if (n && !/^(RSE|SC|XC)$/i.test(parts[2])) crosscut = 'C' + n[1].padStart(3, '0');
       }
     }
-    equipId = sanitizeEquipmentId(equipId) || equipId || '';
-
-    const task = pdfField(t, ['Task'], null, 80)
-      || (t.match(/\b(IMP-PU-[A-Za-z0-9\- ]{5,50}V?\d*)\b/i) || [])[1]
-      || '';
-
-    const dateInspected = pdfNormalizeDate(
-      pdfField(t, ['Date Inspected', 'Date inspected'], null, 20)
-      || pdfPick(t, [/(\d{4}-\d{2}-\d{2})/])
-    );
-    const requiredDate = pdfNormalizeDate(pdfField(t, ['Required Date', 'Required date'], null, 20));
-    const daysOverdue = pdfField(t, ['Days Overdue', 'Days overdue'], null, 8).replace(/[^\d]/g, '')
-      || (t.match(/Days\s*Overdue\s+(\d{1,4})\b/i) || [])[1]
-      || '';
-
-    // Reported By: "( Z4722726 - TA CHAUKE) Z4722726" or "Z4722726 - TA CHAUKE"
-    let reportedByRaw = pdfField(t, ['Reported By', 'Reported by'], null, 60);
-    if (!reportedByRaw) {
-      const rb = t.match(/\(\s*([Z]?\d{5,10}\s*[-–]\s*[A-Za-z ]{2,40})\)/i)
-        || t.match(/\b([Z]?\d{5,10}\s*[-–]\s*[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\b/);
-      if (rb) reportedByRaw = rb[1];
+    if (/\bSC\b/i.test(w) && !level) {
+      const sc = w.match(/\b(\d{1,3})\s*SC\b/i);
+      if (sc) level = sc[1] + ' LEVEL';
     }
-    let reportedName = '';
-    let reportedCn = '';
-    if (reportedByRaw) {
-      const cn = reportedByRaw.match(/[Z]?\d{5,10}/i);
-      if (cn) reportedCn = cn[0].toUpperCase();
-      const nm = reportedByRaw.match(/[-–]\s*([A-Za-z][A-Za-z .']{1,40})/);
-      if (nm) reportedName = nm[1].trim();
-      else if (!cn) reportedName = reportedByRaw.trim();
+    return { workplace: w, shaft, level: (level || '').trim(), crosscut };
+  }
+
+  /** Full unit codes: 56wn0340, 12g206, 2805 — never header words */
+  function pdfParseUnitNumber(raw) {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    if (/^(unit|number|task|section|workplace|equipment|action|step|hazard|sign)$/i.test(s)) return '';
+    // Prefer typed codes size+type+number
+    const code = s.match(/\b(\d{1,3}(?:wn|WN|Wn|loco|LOCO|Loco|lh|LH|hp|HP|g|G)[-\s]?\d{2,6})\b/)
+      || s.match(/\b(\d{1,3}[A-Za-z]{1,6}\d{2,6})\b/)
+      || s.match(/\b([A-Za-z]{2,6}\d{3,8})\b/)
+      || s.match(/\b(\d{3,8})\b/);
+    if (code) s = code[1];
+    s = s.replace(/[\s\-]+/g, '');
+    if (/^(TASK|SECTION|UNIT|NUMBER|ACTION|STEP)$/i.test(s)) return '';
+    const out = (typeof sanitizeEquipmentId === 'function') ? sanitizeEquipmentId(s) : s.toUpperCase();
+    return out || '';
+  }
+
+  function pdfParseReportedBy(raw) {
+    const s = String(raw || '').replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!s || /^(date\s*fixed|closed\s*by|reported\s*by|fill)/i.test(s)) {
+      return { name: '', companyNumber: '', raw: '' };
+    }
+    let companyNumber = '';
+    let name = '';
+    const cn = s.match(/\b(Z\d{5,10})\b/i);
+    if (cn) companyNumber = cn[1].toUpperCase();
+    name = s.replace(/\bZ\d{5,10}\b/gi, ' ').replace(/[-–|,]/g, ' ').replace(/\s+/g, ' ').trim();
+    // Drop if name looks like a form label
+    if (/^(date|fixed|fill|closed|reported|by)$/i.test(name)) name = '';
+    if (name.length < 2) name = '';
+    return { name, companyNumber, raw: [name, companyNumber].filter(Boolean).join(' ') };
+  }
+
+  /**
+   * Pattern-first Action Manager parser (Impala / Syncromine).
+   * OCR often jumbles labels; we lock onto known value patterns first.
+   */
+  function pdfParseActionManager(text, fileName) {
+    const t = pdfCleanText(text);
+    const HEADER_NOISE = /^(section|workplace|unit\s*number|task|date\s*inspected|required\s*date|days\s*overdue|reported\s*by|date\s*fixed|closed\s*by|step|action|hazard|sign|hod|page)$/i;
+
+    // ── 1) Unit / Equipment ID (56wn0340 etc.) ──
+    let equipId = '';
+    const unitPatterns = [
+      /\b(\d{1,3}wn\d{3,6})\b/i,
+      /\b(\d{1,3}(?:loco|lh|hp|g)\d{2,6})\b/i,
+      /\b(\d{1,3}[A-Za-z]{2,6}\d{3,6})\b/,
+      /Unit\s*Number\s*[:|]?\s*([A-Za-z0-9]{4,16})/i
+    ];
+    for (const re of unitPatterns) {
+      const m = t.match(re);
+      if (m && m[1] && !HEADER_NOISE.test(m[1])) {
+        equipId = pdfParseUnitNumber(m[1]);
+        if (equipId) break;
+      }
     }
 
-    // Step + Action (core defect description)
-    let step = pdfField(t, ['Step'], ['Action', 'Hazard', 'Sign'], 80);
-    if (!step) {
-      const sm = t.match(/\b(Loco\s+Controller|Controller|Antenna|Brakes?|Emergency\s+Stop|Battery|Handset|Siren|Display|Speedo?\s*meter)[.\s]*/i);
-      if (sm) step = sm[1].replace(/\.$/, '').trim();
+    // ── 2) Workplace: "11 13C 039 RSE 002" or "11 20 SC" ──
+    let workplaceRaw = '';
+    const wpPatterns = [
+      /\b(\d{1,2}\s+\d{1,3}[A-Za-z]\s+\d{2,4}(?:\s+[A-Z]{2,6}\s+\d{2,4})?)\b/,
+      /\b(\d{1,2}\s+\d{1,3}\s*SC)\b/i,
+      /Workplace\s*[:|]?\s*(\d{1,2}\s+[A-Za-z0-9 ]{2,40}?)(?=\s*(?:Unit|Task|Date|Section)|$)/i
+    ];
+    for (const re of wpPatterns) {
+      const m = t.match(re);
+      if (m && m[1] && !HEADER_NOISE.test(m[1].trim())) {
+        workplaceRaw = m[1].replace(/\s+/g, ' ').trim();
+        // Truncate if OCR ran into next header
+        workplaceRaw = workplaceRaw.split(/\b(?:Unit|Task|Date|Section|Reported)\b/i)[0].trim();
+        if (workplaceRaw.length >= 4) break;
+        workplaceRaw = '';
+      }
     }
-    let action = pdfField(t, ['Action'], ['Hazard', 'Sign', 'HOD'], 120);
-    if (!action) {
-      const am = t.match(/[-–]?\s*(Ensure\s+[^\n\r.]{5,100})/i);
-      if (am) action = am[1].trim();
+    const wpInfo = pdfParseWorkplaceCode(workplaceRaw);
+
+    // ── 3) Section (numeric only; never equipment) ──
+    let section = '';
+    const secM = t.match(/Section\s*[:|]?\s*(\d{1,5})\b/i) || t.match(/\bSection\s+(\d{1,5})\b/i);
+    if (secM) section = secM[1];
+    // Guard: if equipId equals section, clear equip (mis-read)
+    if (equipId && section && equipId === section) equipId = '';
+    if (equipId && /^(TASK|SECTION|UNIT)$/i.test(equipId)) equipId = '';
+
+    // ── 4) Dates (prefer labelled; ignore Printed Date footer) ──
+    const tNoPrint = t.replace(/Printed\s*Date\s*[:\s]*20\d{2}-\d{2}-\d{2}/gi, ' ');
+    const allDates = [...tNoPrint.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map(x => x[1]);
+    let dateInspected = '';
+    let requiredDate = '';
+    const di = t.match(/Date\s*Inspected\s*[:|]?\s*(20\d{2}-\d{2}-\d{2})/i);
+    const rd = t.match(/Required\s*Date\s*[:|]?\s*(20\d{2}-\d{2}-\d{2})/i);
+    if (di) dateInspected = di[1];
+    if (rd) requiredDate = rd[1];
+    if (!dateInspected && allDates.length) dateInspected = allDates[0];
+    if (!requiredDate && allDates.length > 1) requiredDate = allDates.find(d => d !== dateInspected) || '';
+    dateInspected = pdfNormalizeDate(dateInspected || '');
+
+    // Days overdue
+    let daysOverdue = '';
+    const od = t.match(/Days\s*Overdue\s*[:|]?\s*(\d{1,4})\b/i);
+    if (od) daysOverdue = od[1];
+
+    // ── 5) Reported By: name + Z company number ──
+    let reportedByRaw = '';
+    const rbPatterns = [
+      /\(\s*([A-Za-z][A-Za-z ]{2,40})\s*\)\s*(Z\d{5,10})/i,
+      /Reported\s*By\s*[:|]?\s*\(?\s*([A-Za-z][A-Za-z ]{2,40}?)\s*\)?\s*(Z\d{5,10})/i,
+      /\b([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){1,3})\s+(Z\d{5,10})\b/,
+      /\b(Z\d{5,10})\b/
+    ];
+    for (const re of rbPatterns) {
+      const m = t.match(re);
+      if (m) {
+        reportedByRaw = m[0];
+        break;
+      }
     }
-    // Clean trailing form noise from action/step
-    const noiseRe = /\b(HOD|Printed\s*Date|Page\s*:|MAN-Impala|EJ-[A-Z0-9\-]+|Signature\s*Date)\b[\s\S]*$/i;
-    step = step.replace(noiseRe, '').replace(/\s+/g, ' ').trim();
-    action = action.replace(noiseRe, '').replace(/\s+/g, ' ').trim();
+    const reported = pdfParseReportedBy(reportedByRaw);
 
-    const hazard = pdfField(t, ['Hazard'], ['Sign', 'HOD'], 10);
+    // ── 6) Task ──
+    let task = '';
+    const taskM = t.match(/\b(IMP-[A-Z0-9][A-Z0-9\- ]{3,50}V?\d*)\b/i);
+    if (taskM) task = taskM[1].replace(/\s+/g, ' ').trim();
 
-    // Shaft from workplace / section context
-    let shaft = pdfExtractShaft(t + ' ' + workplace);
-    // "11 20 SC" often means 11 Shaft level 20 — use leading number as shaft hint
-    if (!shaft && workplace) {
-      const sh = workplace.match(/^(\d{1,2})\b/);
-      if (sh) shaft = sh[1] + ' Shaft';
+    // ── 7) Actions: "Ensure …" lines; strip leading unit id ──
+    const actions = [];
+    const ensureRe = /\b(Ensure\s+(?:that\s+)?[A-Za-z][^.]{8,220})/gi;
+    let em;
+    while ((em = ensureRe.exec(t)) !== null) {
+      let a = em[1].replace(/\s+/g, ' ').trim();
+      a = a.replace(/\b(Hazard|Sign|Section|HOD|Printed|Page)\b.*$/i, '').trim();
+      if (a.length > 12 && !actions.some(x => x.slice(0, 30) === a.slice(0, 30))) actions.push(a);
+    }
+    // Also capture "56wn0340 - Ensure …"
+    const actLineRe = /\b\d{1,3}[A-Za-z]{1,6}\d{2,6}\s*[-–:]\s*(Ensure\s+[^.]+)/gi;
+    while ((em = actLineRe.exec(t)) !== null) {
+      let a = em[1].replace(/\s+/g, ' ').trim();
+      a = a.replace(/\b(Hazard|Sign|Section|HOD)\b.*$/i, '').trim();
+      if (a.length > 12 && !actions.some(x => x.slice(0, 30) === a.slice(0, 30))) actions.push(a);
     }
 
-    // Concise reason for status_updates — not the whole OCR dump
-    const reasonParts = [];
-    if (step) reasonParts.push(step);
-    if (action) reasonParts.push(action);
-    if (task) reasonParts.push(task.replace(/\s+/g, ' ').trim());
-    if (hazard) reasonParts.push('Hazard ' + hazard);
-    if (daysOverdue) reasonParts.push(daysOverdue + 'd overdue');
-    if (section) reasonParts.push('Section ' + section);
-    let reason = reasonParts.join(' — ') || 'Action Manager item';
-    if (reason.length > 280) reason = reason.slice(0, 277) + '…';
+    // ── 8) Steps: question lines or labelled Step values ──
+    const steps = [];
+    const stepQ = t.match(/Are\s+the\s+[^?]{5,120}\?/gi) || [];
+    stepQ.forEach(s => {
+      const v = s.replace(/\s+/g, ' ').trim();
+      if (v.length > 8) steps.push(v);
+    });
+    // Doc reference steps
+    const stepDoc = t.match(/\b([A-Z][A-Za-z ]{5,80}\(Doc\s*\d+\))/g) || [];
+    stepDoc.forEach(s => {
+      const v = s.replace(/\s+/g, ' ').trim();
+      if (!steps.some(x => x.includes(v.slice(0, 20)))) steps.push(v);
+    });
 
-    // If no unit number, still import but flag UNKNOWN so user can fix equipment ID
-    if (!equipId) equipId = 'UNKNOWN';
+    // ── Build rows (one per action, or one fallback) ──
+    const rows = [];
+    const n = Math.max(actions.length, steps.length, 1);
+    for (let i = 0; i < n; i++) {
+      const action = actions[i] || actions[0] || '';
+      const step = steps[i] || steps[0] || '';
+      if (!action && !step && !equipId && i > 0) continue;
 
-    return [{
-      equipmentId: equipId,
-      date: dateInspected,
-      time: '00:00',
-      reason,
-      downtimeHours: 0,
-      shift: '',
-      operator: reportedName || reportedByRaw || '',
-      reportedByCompanyNumber: reportedCn,
-      signedBy: '',
-      signedByCompanyNumber: '',
-      shaft: shaft || '',
-      workplace: (workplace || '').replace(/\s+/g, ' ').trim(),
-      status: 'Down',
-      sourceSheet: fileName,
-      source: 'Imported Action Manager PDF',
-      selected: true,
-      docType: 'action_manager',
-      section: (section || '').trim(),
-      task: (task || '').replace(/\s+/g, ' ').trim(),
-      step: step,
-      action: action,
-      hazard: hazard,
-      requiredDate: requiredDate || '',
-      daysOverdue: daysOverdue || '',
-      reportedBy: reportedByRaw || ''
-    }];
+      let rowEquip = equipId;
+      if (!rowEquip) {
+        const u2 = t.match(/\b(\d{1,3}wn\d{3,6})\b/i)
+          || t.match(/\b(\d{1,3}[A-Za-z]{2,6}\d{3,6})\b/);
+        if (u2) rowEquip = pdfParseUnitNumber(u2[1]);
+      }
+      if (!rowEquip || /^(TASK|SECTION|UNIT|NUMBER|ACTION|STEP)$/i.test(rowEquip)) {
+        rowEquip = equipId || 'UNKNOWN';
+      }
+      if (!rowEquip) rowEquip = 'UNKNOWN';
+
+      // Reason = clean action only (user's preferred field)
+      let reason = action || step || 'Action Manager item';
+      if (action && step && !action.toLowerCase().includes(step.toLowerCase().slice(0, 15))) {
+        reason = step + ' — ' + action;
+      }
+      if (daysOverdue) reason += ' — ' + daysOverdue + 'd overdue';
+      reason = reason.replace(/\s+/g, ' ').trim();
+      if (reason.length > 320) reason = reason.slice(0, 317) + '…';
+
+      const workplaceOut = wpInfo.workplace
+        || [wpInfo.shaft, wpInfo.level, wpInfo.crosscut].filter(Boolean).join(' ')
+        || '';
+
+      rows.push({
+        equipmentId: rowEquip,
+        date: dateInspected || new Date().toISOString().slice(0, 10),
+        time: '00:00',
+        reason,
+        downtimeHours: 0,
+        shift: '',
+        operator: reported.name || '',
+        reportedByCompanyNumber: reported.companyNumber || '',
+        signedBy: '',
+        signedByCompanyNumber: '',
+        shaft: wpInfo.shaft || '',
+        workplace: workplaceOut,
+        level: wpInfo.level || '',
+        crosscut: wpInfo.crosscut || '',
+        status: 'Down',
+        sourceSheet: fileName,
+        source: 'Imported Action Manager PDF',
+        selected: true,
+        docType: 'action_manager',
+        section: section || '',
+        task: task || '',
+        step: step || '',
+        action: action || '',
+        hazard: '',
+        requiredDate: requiredDate || '',
+        daysOverdue: daysOverdue || '',
+        reportedBy: reported.raw || '',
+        equipmentType: (typeof inferEquipmentType === 'function') ? inferEquipmentType(rowEquip) : ''
+      });
+    }
+
+    // De-dupe identical equipment+reason
+    const seen = new Set();
+    const deduped = [];
+    rows.forEach(r => {
+      const k = (r.equipmentId + '|' + r.reason).slice(0, 120);
+      if (seen.has(k)) return;
+      seen.add(k);
+      deduped.push(r);
+    });
+    return deduped.length ? deduped : rows;
   }
 
   function pdfParsePreUseChecklist(text, fileName, kind) {
@@ -6398,6 +6542,9 @@
         if (row.requiredDate) statusPayload.requiredDate = row.requiredDate;
         if (row.daysOverdue) statusPayload.daysOverdue = row.daysOverdue;
         if (row.reportedBy) statusPayload.reportedBy = row.reportedBy;
+        if (row.level) statusPayload.level = row.level;
+        if (row.crosscut) statusPayload.crosscut = row.crosscut;
+        if (row.equipmentType) statusPayload.equipmentType = row.equipmentType;
 
         const fp = statusUpdateFingerprint(statusPayload);
         const soft = statusUpdateSoftKey(statusPayload);
@@ -6412,10 +6559,17 @@
         const existingShaft = existingEq && existingEq.shaft ? String(existingEq.shaft).trim() : '';
         const writeShaft = rowShaft || existingShaft || '';
         // Do not clear a known shaft with an empty value on merge
+        const eqType = row.equipmentType
+          || ((typeof inferEquipmentType === 'function') ? inferEquipmentType(equipId) : '')
+          || (existingEq && existingEq.equipmentType) || 'Other';
+        const eqLevel = row.level || row.workplace || (existingEq && existingEq.level) || '';
         await setDoc(doc(db, 'equipment', equipId), {
-          shaft: writeShaft, level: row.workplace || (existingEq && existingEq.level) || '',
-          equipmentType: (typeof inferEquipmentType === 'function') ? inferEquipmentType(equipId) : 'Loco',
-          source: 'Imported Breakdown Report', updatedAt: new Date().toISOString(),
+          shaft: writeShaft,
+          level: eqLevel,
+          crosscut: row.crosscut || (existingEq && existingEq.crosscut) || '',
+          equipmentType: eqType,
+          source: row.source || 'Imported Breakdown Report',
+          updatedAt: new Date().toISOString(),
           updatedBy: actor.name, updatedByEmail: actor.email
         }, { merge: true });
         batchExact.add(fp);
