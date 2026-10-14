@@ -19,6 +19,8 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <style>
     :root {
@@ -734,8 +736,8 @@
         <li data-section="search-status" data-tooltip="Search History" data-keywords="search history fault reason equipment">
           <i class="fas fa-search"></i><span class="menu-label">Search History</span>
         </li>
-        <li data-section="import-spreadsheet" data-roles="admin,operations,reliability" data-tooltip="Import Down Report" data-keywords="import excel breakdown report spreadsheet">
-          <i class="fas fa-file-upload"></i><span class="menu-label">Import Down Report</span>
+        <li data-section="import-spreadsheet" data-roles="admin,operations,reliability" data-tooltip="Import Excel / PDF" data-keywords="import excel pdf breakdown checklist work order spreadsheet">
+          <i class="fas fa-file-upload"></i><span class="menu-label">Import Reports</span>
         </li>
         <li data-section="add-status" data-roles="admin,operations,reliability,viewer" data-tooltip="Log Status Update" data-keywords="log status update fixed down">
           <i class="fas fa-edit"></i><span class="menu-label">Log Status Update</span>
@@ -1094,7 +1096,7 @@
 
         <!-- IMPORT -->
         <section id="import-spreadsheet" class="hidden">
-          <div class="header-bar"><h1><i class="fas fa-file-excel"></i> Import Breakdown Report</h1></div>
+          <div class="header-bar"><h1><i class="fas fa-file-import"></i> Import Reports (Excel &amp; PDF)</h1></div>
           <div class="card">
             <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;" id="import-steps">
               <div class="import-step active" data-step="1"><span>1</span> Select File</div>
@@ -1102,12 +1104,23 @@
               <div class="import-step" data-step="3"><span>3</span> Preview & Import</div>
             </div>
             <div class="form-group">
-              <label>Select Excel File (.xlsx / .xls)</label>
-              <input type="file" id="excel-file" accept=".xlsx,.xls" style="padding:0.85rem;border:2px dashed var(--border);border-radius:var(--radius-md);background:var(--surface-2);width:100%;">
+              <label>Select Excel or PDF (.xlsx / .xls / .pdf)</label>
+              <input type="file" id="excel-file" accept=".xlsx,.xls,.pdf,application/pdf" style="padding:0.85rem;border:2px dashed var(--border);border-radius:var(--radius-md);background:var(--surface-2);width:100%;">
+              <p style="font-size:0.82rem;color:var(--text-3);margin-top:0.45rem;">
+                Supports breakdown Excel sheets plus PDF <strong>pre-use checklists</strong> (Loco / Caboose / Hopper),
+                <strong>Non-routine Maintenance Orders</strong>, and <strong>Action Manager</strong> reports.
+                Text PDFs are parsed directly; scanned PDFs use on-device OCR (may take longer).
+              </p>
             </div>
             <div class="form-group">
               <label>Force Shaft (optional)</label>
               <select id="import-shaft" style="max-width:320px;"><option value="">Auto-detect</option></select>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;">
+                <input type="checkbox" id="import-force-ocr" style="width:auto;">
+                Force OCR on PDF (use for scanned / image-only pages)
+              </label>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin:1.5rem 0;">
               <button onclick="handleFileUpload()" class="btn btn-primary" style="flex:1;min-width:220px;"><i class="fas fa-magic"></i> Smart Parse & Auto-Map</button>
@@ -5326,13 +5339,400 @@
     sel.innerHTML = '<option value="">Auto-detect</option>' + RBE_SHAFTS.map(s => `<option value="${s}">${s}</option>`).join('');
     if (prev) sel.value = prev;
   }
+  // ── PDF import (text + optional OCR) ─────────────────────────
+  function pdfEnsureWorker() {
+    if (typeof pdfjsLib === 'undefined') return false;
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    } catch (e) {}
+    return true;
+  }
+
+  function pdfNormalizeDate(raw) {
+    if (!raw) return new Date().toISOString().slice(0, 10);
+    const s = String(raw).trim().replace(/[./]/g, '-');
+    // DD-MM-YYYY or DD-MM-YY
+    let m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/);
+    if (m) {
+      let y = m[3].length === 2 ? ('20' + m[3]) : m[3];
+      return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    }
+    // YYYY-MM-DD
+    m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    // DD/MM/YYYY already handled; try Date parse
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function pdfExtractShaft(text) {
+    const t = String(text || '');
+    // Prefer explicit shaft markers near Operation / checked boxes context
+    const patterns = [
+      /(\d{1,2})\s*SHAFT/gi,
+      /(\d{1,2}C)\s*SHAFT/gi,
+      /\b(EF)\s*SHAFT/gi,
+      /\b(NORTH|SOUTH)\b/gi
+    ];
+    const found = [];
+    patterns.forEach(re => {
+      let m;
+      const r = new RegExp(re.source, re.flags);
+      while ((m = r.exec(t)) !== null) {
+        const label = (m[1] + ' Shaft').replace(/Shaft Shaft/i, 'Shaft');
+        if (!found.includes(label)) found.push(label);
+      }
+    });
+    // Common Impala shafts
+    const known = ['1 Shaft','6 Shaft','10 Shaft','11 Shaft','11C Shaft','12 Shaft','14 Shaft','16 Shaft','20 Shaft','EF Shaft'];
+    for (const k of known) {
+      if (new RegExp(k.replace(' ','\\s*'), 'i').test(t) && !found.some(f => f.toLowerCase() === k.toLowerCase())) {
+        // only add if appears near "Operation" or as standalone checkbox context — already collected via SHAFT pattern
+      }
+    }
+    return found[0] || '';
+  }
+
+  function pdfDetectDocType(text) {
+    const t = String(text || '').toLowerCase();
+    if (/non-?routine\s+maintenance\s+order|maint\.?\s*order\s*no|breakdown\s*order/.test(t)) return 'work_order';
+    if (/action\s*manager/.test(t)) return 'action_manager';
+    if (/imp-?pu-?hopper|hopper\s+pre-?use/.test(t)) return 'preuse_hopper';
+    if (/imp-?pu-?caboose|caboose\s+pre-?use/.test(t)) return 'preuse_caboose';
+    if (/imp-?pu-?loco|loco\s+pre-?use\s+checklist/.test(t)) return 'preuse_loco';
+    if (/pre-?use\s+checklist/.test(t)) return 'preuse_loco';
+    return 'generic_pdf';
+  }
+
+  function pdfPick(text, patterns) {
+    for (const re of patterns) {
+      const m = String(text || '').match(re);
+      if (m && m[1] && String(m[1]).trim()) return String(m[1]).trim();
+    }
+    return '';
+  }
+
+  function pdfParseWorkOrder(text, fileName) {
+    const equip = pdfPick(text, [
+      /Equipment:\s*([^\n\r]+)/i,
+      /UG\s*LOCO\s*[-–]?\s*UGLOC\s*(\d+)/i,
+      /Loco\s+(\d{2,6})/i,
+      /Unit\s*Number[:\s]*(\d+)/i
+    ]);
+    let equipId = equip;
+    const num = equip.match(/(\d{2,6})/);
+    if (num) equipId = num[1];
+    const date = pdfNormalizeDate(pdfPick(text, [
+      /Breakdown\s*n\/?Incident\s*Date:\s*([0-9./-]+)/i,
+      /Date\s*created:\s*([0-9./-]+)/i,
+      /Date\s*scheduled:\s*([0-9./-]+)/i
+    ]));
+    const reason = pdfPick(text, [
+      /Maintenance\s+Order\s+Description:\s*([^\n\r]+)/i,
+      /Description:\s*([^\n\r]{5,120})/i
+    ]) || 'Work order / breakdown';
+    const orderNo = pdfPick(text, [/Maint\.?\s*Order\s*no:\s*(\d+)/i, /Notification\s*no:\s*(\d+)/i]);
+    const shaft = pdfExtractShaft(text) || pdfPick(text, [/Plant:\s*R?(\d+)/i]);
+    const workplace = pdfPick(text, [/Functional\s+location:\s*([^\n\r]+)/i, /(\d+)\s*LEV/i]);
+    const reportedBy = pdfPick(text, [/Maint\.?\s*Ord\.?\s*created\s*by:\s*([A-Z0-9]+)/i, /Printed\s*By:\s*([A-Z0-9]+)/i]);
+    return [{
+      equipmentId: equipId || sanitizeEquipmentId(equip) || 'UNKNOWN',
+      date, time: '00:00', reason: orderNo ? `${reason} (MO ${orderNo})` : reason,
+      downtimeHours: 0, shift: '', operator: reportedBy, reportedByCompanyNumber: reportedBy,
+      signedBy: '', signedByCompanyNumber: '', shaft: shaft || '', workplace: workplace || '',
+      status: 'Down', sourceSheet: fileName, source: 'Imported Work Order PDF', selected: true,
+      docType: 'work_order'
+    }];
+  }
+
+  function pdfParseActionManager(text, fileName) {
+    const equip = pdfPick(text, [/Unit\s*Number[:\s|]*([^\n\r|]*)/i, /Equipment[:\s]*(\d+)/i]) || '';
+    let equipId = (equip.match(/(\d{2,6})/) || [])[1] || sanitizeEquipmentId(equip) || '';
+    const workplace = pdfPick(text, [/Workplace[:\s|]*([^\n\r|]*)/i, /(\d+\s*\d*\s*SC)/i]) || '';
+    const date = pdfNormalizeDate(pdfPick(text, [/Date\s*Inspected[:\s|]*([0-9./-]+)/i, /(\d{4}-\d{2}-\d{2})/]));
+    const task = pdfPick(text, [/Task[:\s|]*([^\n\r|]*)/i, /(IMP-PU-[^\n\r]+)/i]) || '';
+    const action = pdfPick(text, [/Action[:\s|]*([^\n\r|]*)/i, /Ensure\s+[^\n\r]+/i]) || '';
+    const step = pdfPick(text, [/Step[:\s|]*([^\n\r|]*)/i, /(Loco\s+Controller[^\n\r]*)/i]) || '';
+    const reportedBy = pdfPick(text, [/Reported\s*By[:\s|]*([^\n\r|]*)/i]) || '';
+    const shaft = pdfExtractShaft(text + ' ' + workplace);
+    const reason = [step, action, task].filter(Boolean).join(' — ') || 'Action Manager item';
+    const daysOd = pdfPick(text, [/Days\s*Overdue[:\s|]*(\d+)/i]);
+    return [{
+      equipmentId: equipId || 'UNKNOWN',
+      date, time: '00:00',
+      reason: daysOd ? `${reason} (${daysOd}d overdue)` : reason,
+      downtimeHours: 0, shift: '', operator: reportedBy, reportedByCompanyNumber: '',
+      signedBy: '', signedByCompanyNumber: '', shaft: shaft || '', workplace: workplace || '',
+      status: 'Down', sourceSheet: fileName, source: 'Imported Action Manager PDF', selected: true,
+      docType: 'action_manager'
+    }];
+  }
+
+  function pdfParsePreUseChecklist(text, fileName, kind) {
+    // Equipment number
+    let equipId = pdfPick(text, [
+      /Equipment\s*Number[:\s]*([A-Z0-9\- ]{1,20})/i,
+      /Equipment\s*No[:\s]*([A-Z0-9\- ]{1,12})/i
+    ]);
+    const num = (equipId.match(/(\d{2,6})/) || [])[1];
+    if (num) equipId = num;
+    equipId = sanitizeEquipmentId(equipId) || equipId || 'UNKNOWN';
+
+    const date = pdfNormalizeDate(pdfPick(text, [
+      /Capture\s*Date[:\s]*([0-9./\-\s]+)/i,
+      /(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/,
+      /(\d{4}-\d{2}-\d{2})/
+    ]));
+    const shiftRaw = pdfPick(text, [/Shift[:\s]*([MAN])/i, /\b(Morning|Afternoon|Night)\b/i]);
+    let shift = 'Morning';
+    if (/^A$/i.test(shiftRaw) || /Afternoon/i.test(shiftRaw)) shift = 'Afternoon';
+    else if (/^N$/i.test(shiftRaw) || /Night/i.test(shiftRaw)) shift = 'Night';
+
+    const operator = pdfPick(text, [/Operator\s*Name[:\s]*([^\n\r]{2,40})/i]);
+    const opIndustry = pdfPick(text, [/Operator\s*Industry\s*Number[:\s]*([A-Z0-9\- ]+)/i]);
+    const workplace = pdfPick(text, [/Workplace\s*Name[:\s]*([^\n\r]{2,40})/i]);
+    const shaft = pdfExtractShaft(text);
+
+    // STOP / FIX / NOGO items — primary reasons for a Down / Restricted event
+    const stopItems = [];
+    const lines = String(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const checkPoints = [
+      'Controller Diagnostic', 'Operator license', 'Operator License', 'Loco siren', 'Siren Operational',
+      'Emergency Stop', 'Fire extinguisher', 'Fire Extinguisher', 'Loco Controller', 'Handset',
+      'Front/Rear Lights', 'Caboose Light', 'Door magnet', 'Door Magnet', 'Chair in Working',
+      'Speed Pot', 'Buffer', 'Static Brake', 'Antenna', 'Battery', 'Loco canopy', 'Caboose Body',
+      'Access Door', 'Stretcher', 'Wheels Axles', 'Stop Sign', 'Wheel Sprag', 'Auto Coupler',
+      'Shackles', 'Loco Jack', 'Wheel Straps', 'General Body', 'Hopper Scroll', 'Coupling of Buffers',
+      'Hopper Pins'
+    ];
+    // Heuristic: line contains checkpoint name and STOP/NOGO/X nearby
+    lines.forEach(line => {
+      const lower = line.toLowerCase();
+      if (/\b(stop|nogo|no-go)\b/.test(lower) || (/\bx\b/.test(lower) && /stop/i.test(lower))) {
+        const hit = checkPoints.find(cp => lower.includes(cp.toLowerCase().slice(0, 8)));
+        if (hit) stopItems.push(hit);
+        else if (line.length < 80) stopItems.push(line.slice(0, 60));
+      }
+    });
+    // Explicit "Emergency Stop" with X in sample
+    if (/Emergency\s*Stop[\s\S]{0,40}\bX\b/i.test(text) && !stopItems.some(s => /Emergency/i.test(s))) {
+      stopItems.push('Emergency Stop');
+    }
+    // FIX column items (may operate but must fix)
+    const fixItems = [];
+    lines.forEach(line => {
+      if (/\bfix\b/i.test(line) && !/\bstop\b/i.test(line)) {
+        const hit = checkPoints.find(cp => line.toLowerCase().includes(cp.toLowerCase().slice(0, 8)));
+        if (hit) fixItems.push(hit);
+      }
+    });
+
+    const rows = [];
+    const kindLabel = kind === 'preuse_caboose' ? 'Caboose pre-use' : kind === 'preuse_hopper' ? 'Hopper pre-use' : 'Loco pre-use';
+    if (stopItems.length) {
+      rows.push({
+        equipmentId: equipId, date, time: '00:00',
+        reason: `${kindLabel} STOP: ${[...new Set(stopItems)].join('; ')}`,
+        downtimeHours: 0, shift, operator: operator || '', reportedByCompanyNumber: opIndustry || '',
+        signedBy: '', signedByCompanyNumber: '', shaft: shaft || '', workplace: workplace || '',
+        status: 'Down', sourceSheet: fileName, source: 'Imported Pre-Use Checklist PDF', selected: true,
+        docType: kind
+      });
+    }
+    if (fixItems.length) {
+      rows.push({
+        equipmentId: equipId, date, time: '00:00',
+        reason: `${kindLabel} FIX before next shift: ${[...new Set(fixItems)].join('; ')}`,
+        downtimeHours: 0, shift, operator: operator || '', reportedByCompanyNumber: opIndustry || '',
+        signedBy: '', signedByCompanyNumber: '', shaft: shaft || '', workplace: workplace || '',
+        status: 'Restricted', sourceSheet: fileName, source: 'Imported Pre-Use Checklist PDF', selected: true,
+        docType: kind
+      });
+    }
+    // If nothing flagged, still record a zero-hour info event so the checklist is searchable
+    if (!rows.length) {
+      rows.push({
+        equipmentId: equipId, date, time: '00:00',
+        reason: `${kindLabel} completed — no STOP/FIX items detected in text`,
+        downtimeHours: 0, shift, operator: operator || '', reportedByCompanyNumber: opIndustry || '',
+        signedBy: '', signedByCompanyNumber: '', shaft: shaft || '', workplace: workplace || '',
+        status: 'Up', sourceSheet: fileName, source: 'Imported Pre-Use Checklist PDF', selected: true,
+        docType: kind, isInfoOnly: true
+      });
+    }
+    return rows;
+  }
+
+  function pdfParseGeneric(text, fileName) {
+    const equipId = sanitizeEquipmentId(pdfPick(text, [
+      /Equipment[:\s#]*([A-Z0-9\- ]{1,20})/i,
+      /Loco\s*[:#]?\s*(\d{2,6})/i,
+      /Unit\s*[:#]?\s*(\d{2,6})/i
+    ])) || 'UNKNOWN';
+    const date = pdfNormalizeDate(pdfPick(text, [/(\d{4}-\d{2}-\d{2})/, /(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/]));
+    const reason = (text || '').replace(/\s+/g, ' ').trim().slice(0, 200) || 'PDF import — review manually';
+    return [{
+      equipmentId: equipId, date, time: '00:00', reason,
+      downtimeHours: 0, shift: '', operator: '', reportedByCompanyNumber: '',
+      signedBy: '', signedByCompanyNumber: '', shaft: pdfExtractShaft(text), workplace: '',
+      status: 'Down', sourceSheet: fileName, source: 'Imported PDF', selected: true, docType: 'generic_pdf'
+    }];
+  }
+
+  function pdfMapTextToRows(text, fileName) {
+    const kind = pdfDetectDocType(text);
+    if (kind === 'work_order') return { kind, rows: pdfParseWorkOrder(text, fileName) };
+    if (kind === 'action_manager') return { kind, rows: pdfParseActionManager(text, fileName) };
+    if (kind === 'preuse_loco' || kind === 'preuse_caboose' || kind === 'preuse_hopper') {
+      return { kind, rows: pdfParsePreUseChecklist(text, fileName, kind) };
+    }
+    return { kind, rows: pdfParseGeneric(text, fileName) };
+  }
+
+  async function pdfExtractTextFromPdf(arrayBuffer, statusDiv, forceOcr) {
+    if (!pdfEnsureWorker()) throw new Error('PDF.js library not loaded');
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    let fullText = '';
+    const pageCount = pdf.numPages;
+    for (let i = 1; i <= pageCount; i++) {
+      if (statusDiv) statusDiv.innerHTML = `Reading PDF page ${i}/${pageCount}…`;
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(it => it.str).join(' ');
+      fullText += pageText + '\n';
+    }
+    const textLen = fullText.replace(/\s+/g, ' ').trim().length;
+    // If almost no text or user forced OCR → rasterize + Tesseract
+    if (forceOcr || textLen < 40) {
+      if (typeof Tesseract === 'undefined') {
+        if (textLen < 10) throw new Error('Scanned PDF detected but OCR library (Tesseract) failed to load');
+        return fullText;
+      }
+      let ocrText = '';
+      for (let i = 1; i <= pageCount; i++) {
+        if (statusDiv) statusDiv.innerHTML = `OCR page ${i}/${pageCount} (scanned PDF)…`;
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const result = await Tesseract.recognize(canvas, 'eng', {
+          logger: m => {
+            if (m.status === 'recognizing text' && statusDiv) {
+              statusDiv.innerHTML = `OCR page ${i}/${pageCount}: ${Math.round((m.progress || 0) * 100)}%`;
+            }
+          }
+        });
+        ocrText += (result?.data?.text || '') + '\n';
+      }
+      return ocrText || fullText;
+    }
+    return fullText;
+  }
+
+  function pdfFeedRowsIntoPreview(rows, fileName, kind, statusDiv) {
+    const headers = ['equipmentId','date','time','reason','downtimeHours','shift','operator','shaft','workplace','status','source'];
+    rawSheetData = {};
+    const sheetRows = rows.map(r => ({
+      equipmentId: r.equipmentId,
+      date: r.date,
+      time: r.time,
+      reason: r.reason,
+      downtimeHours: r.downtimeHours,
+      shift: r.shift,
+      operator: r.operator,
+      reportedByCompany: r.reportedByCompanyNumber,
+      signedBy: r.signedBy,
+      shaft: r.shaft,
+      workplace: r.workplace,
+      status: r.status,
+      source: r.source
+    }));
+    rawSheetData[fileName] = { headers, rows: sheetRows, sheetName: fileName, pdfKind: kind };
+    currentSheetName = fileName;
+    // Build excelData directly (already mapped)
+    excelData = rows.map((r, idx) => ({
+      ...r,
+      selected: r.selected !== false,
+      _rowIndex: idx,
+      sourceSheet: fileName
+    }));
+    selectedMapping = {
+      equipmentId: 'equipmentId', date: 'date', time: 'time', reason: 'reason',
+      downtimeHours: 'downtimeHours', shift: 'shift', operator: 'operator',
+      shaft: 'shaft', workplace: 'workplace'
+    };
+    availableColumns = headers;
+    // Render preview table
+    const preview = document.getElementById('mapping-preview');
+    const table = document.getElementById('preview-table');
+    const countEl = document.getElementById('preview-count');
+    if (preview) preview.style.display = 'block';
+    if (countEl) countEl.textContent = `(${excelData.length} row(s) · ${kind})`;
+    if (table) {
+      table.innerHTML = `<thead><tr>
+        <th></th><th>Equipment</th><th>Date</th><th>Status</th><th>Reason</th><th>Shaft</th><th>Workplace</th><th>Source</th>
+      </tr></thead><tbody>` + excelData.map((r, i) => `<tr>
+        <td><input type="checkbox" ${r.selected ? 'checked' : ''} onchange="excelData[${i}].selected=this.checked"></td>
+        <td>${String(r.equipmentId||'').replace(/</g,'&lt;')}</td>
+        <td>${String(r.date||'').replace(/</g,'&lt;')}</td>
+        <td>${String(r.status||'Down').replace(/</g,'&lt;')}</td>
+        <td style="max-width:280px;">${String(r.reason||'').replace(/</g,'&lt;')}</td>
+        <td>${String(r.shaft||'').replace(/</g,'&lt;')}</td>
+        <td>${String(r.workplace||'').replace(/</g,'&lt;')}</td>
+        <td style="font-size:0.8rem;">${String(r.source||'').replace(/</g,'&lt;')}</td>
+      </tr>`).join('') + '</tbody>';
+    }
+    document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
+    document.querySelector('.import-step[data-step="2"]')?.classList.add('active');
+    document.querySelector('.import-step[data-step="3"]')?.classList.add('active');
+    if (statusDiv) {
+      statusDiv.innerHTML = `✅ PDF parsed as <strong>${kind.replace(/_/g,' ')}</strong> — ${excelData.length} record(s) ready. Review & import.`;
+      statusDiv.style.background = 'rgba(22,163,74,0.1)';
+      statusDiv.style.color = 'var(--success)';
+    }
+  }
+
+  window.handlePdfUpload = async function(file, statusDiv) {
+    const forceOcr = !!(document.getElementById('import-force-ocr')?.checked);
+    statusDiv.innerHTML = 'Reading PDF…';
+    const buffer = await file.arrayBuffer();
+    const text = await pdfExtractTextFromPdf(buffer, statusDiv, forceOcr);
+    if (!text || text.replace(/\s+/g, '').length < 8) {
+      throw new Error('No text could be extracted from this PDF. Try enabling Force OCR, or use a text-based PDF.');
+    }
+    const { kind, rows } = pdfMapTextToRows(text, file.name);
+    if (!rows.length) throw new Error('PDF was read but no equipment / checklist / work-order fields were detected.');
+    pdfFeedRowsIntoPreview(rows, file.name, kind, statusDiv);
+  };
+
   window.handleFileUpload = function() {
     fillImportShaftSelect();
     const fileInput = document.getElementById('excel-file');
     const statusDiv = document.getElementById('import-status');
     if (!fileInput?.files?.[0]) return alert('Select a file first');
+    const file = fileInput.files[0];
+    const name = (file.name || '').toLowerCase();
+    const isPdf = name.endsWith('.pdf') || file.type === 'application/pdf';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = 'Reading…';
+    statusDiv.style.background = 'rgba(29,78,216,0.08)';
+    statusDiv.style.color = 'var(--primary)';
+
+    if (isPdf) {
+      handlePdfUpload(file, statusDiv).catch(err => {
+        statusDiv.innerHTML = `❌ PDF: ${err.message || err}`;
+        statusDiv.style.background = 'rgba(220,38,38,0.1)';
+        statusDiv.style.color = 'var(--danger)';
+      });
+      return;
+    }
+
     if (typeof XLSX === 'undefined') return alert('Excel library not loaded');
-    statusDiv.style.display = 'block'; statusDiv.innerHTML = 'Reading…'; statusDiv.style.background = 'rgba(29,78,216,0.08)'; statusDiv.style.color = 'var(--primary)';
     const reader = new FileReader();
     reader.onload = function(e) {
       try {
@@ -5374,7 +5774,7 @@
         statusDiv.innerHTML = `❌ ${err.message}`; statusDiv.style.background = 'rgba(220,38,38,0.1)'; statusDiv.style.color = 'var(--danger)';
       }
     };
-    reader.readAsArrayBuffer(fileInput.files[0]);
+    reader.readAsArrayBuffer(file);
   };
   function processCurrentSheet() {
     const sheet = rawSheetData[currentSheetName];
@@ -5657,10 +6057,12 @@
           skipped++;
           continue;
         }
+        const rowStatus = String(row.status || 'Down').trim() || 'Down';
+        const isInfo = !!row.isInfoOnly || rowStatus === 'Up';
         const statusPayload = {
-          equipmentId: equipId, date: row.date, time: row.time, status: 'Down', statusCode: 'Down',
+          equipmentId: equipId, date: row.date, time: row.time, status: rowStatus, statusCode: rowStatus,
           shift: row.shift || 'Night',
-          reason: row.reason, downtimeHours: dtHrs, isFailure: isZeroHour ? '0' : '1',
+          reason: row.reason, downtimeHours: dtHrs, isFailure: (isZeroHour || isInfo) ? '0' : '1',
           startAt: startAtIso,
           operator: row.operator || '',
           reportedBy: row.operator || '',
@@ -5668,7 +6070,7 @@
           signedBy: row.signedBy || '',
           signedByCompanyNumber: row.signedByCompanyNumber || '',
           shaft: rowShaft, workplace: row.workplace || '',
-          source: 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp(),
+          source: row.source || 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp(),
           updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
           updatedByCompanyNumber: actor.companyNumber || '',
           changedAt: new Date().toISOString()
