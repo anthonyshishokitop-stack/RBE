@@ -17,6 +17,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <style>
@@ -1048,7 +1049,7 @@
             <button type="button" class="btn" style="padding:0.4rem 0.85rem;background:var(--surface);border:1px solid var(--border);" onclick="clearCalendarFind()">Clear</button>
           </div>
           <div id="calendar-find-status" style="display:none;margin:0 0 0.75rem;font-size:0.9rem;font-weight:600;"></div>
-          <div id="calendar-div" style="background:var(--surface);padding:2rem;border-radius:var(--radius-lg);box-shadow:var(--shadow);border:1px solid var(--border);"></div>
+          <div id="calendar-div" style="background:var(--surface);padding:1rem;border-radius:var(--radius-lg);box-shadow:var(--shadow);border:1px solid var(--border);min-height:520px;"></div>
         </section>
 
         <!-- OPERATIONS REPORT -->
@@ -1410,7 +1411,7 @@
       </div>
       <form id="edit-equipment-form">
         <input type="hidden" id="edit-eq-original-id">
-        <div class="form-group"><label>Equipment ID</label><input id="edit-eq-id" type="text" required readonly style="opacity:0.85;"></div>
+        <div class="form-group"><label>Equipment ID <span style="font-weight:500;color:var(--text-3);font-size:0.82rem;">(admin can rename)</span></label><input id="edit-eq-id" type="text" required></div>
         <div class="form-group"><label>Operation / Shaft</label><select id="edit-eq-shaft" required></select></div>
         <div class="form-group"><label>Work Place</label><input id="edit-eq-level" type="text"></div>
         <div class="form-group"><label>Equipment Type</label>
@@ -1485,9 +1486,38 @@
         <button type="button" onclick="closeModal('inspection-task-modal')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
       </div>
       <div id="inspection-task-body"></div>
-      <div style="display:flex;gap:0.65rem;margin-top:1.25rem;">
+      <div style="display:flex;gap:0.65rem;margin-top:1.25rem;flex-wrap:wrap;">
         <button type="button" class="btn btn-success" id="inspection-mark-fixed"><i class="fas fa-check"></i> Mark Fixed</button>
-        <button type="button" class="btn btn-primary" onclick="closeModal('inspection-task-modal')">Close</button>
+        <button type="button" class="btn btn-primary" id="inspection-dismiss-btn" style="display:none;"><i class="fas fa-eye-slash"></i> Dismiss Alert</button>
+        <button type="button" class="btn" style="background:var(--surface-2);border:1px solid var(--border);" onclick="closeModal('inspection-task-modal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm action modal: Mark Fixed / Dismiss with notes + optional reschedule -->
+  <div id="action-confirm-modal" class="modal">
+    <div class="modal-content" style="max-width:520px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h3 style="margin:0;color:var(--primary);" id="action-confirm-title"><i class="fas fa-check-circle"></i> Confirm Action</h3>
+        <button type="button" onclick="closeModal('action-confirm-modal')" style="background:none;border:none;font-size:1.6rem;cursor:pointer;">×</button>
+      </div>
+      <p id="action-confirm-desc" style="font-size:0.92rem;color:var(--text-2);margin-bottom:1rem;"></p>
+      <input type="hidden" id="action-confirm-type">
+      <input type="hidden" id="action-confirm-equip">
+      <input type="hidden" id="action-confirm-maint">
+      <input type="hidden" id="action-confirm-alert-key">
+      <div class="form-group">
+        <label for="action-confirm-notes">Notes / Reason <span style="color:var(--danger);">*</span></label>
+        <textarea id="action-confirm-notes" rows="3" required placeholder="Describe work done, findings, or why dismissing…"></textarea>
+      </div>
+      <div class="form-group" id="action-reschedule-wrap" style="display:none;">
+        <label for="action-reschedule-date">Reschedule predicted inspection (optional)</label>
+        <input type="date" id="action-reschedule-date">
+        <p style="font-size:0.8rem;color:var(--text-3);margin-top:0.35rem;">Leave blank to keep the current due date. Setting a date updates or creates the maintenance schedule.</p>
+      </div>
+      <div style="display:flex;gap:0.65rem;margin-top:1.1rem;flex-wrap:wrap;">
+        <button type="button" class="btn btn-success" id="action-confirm-submit"><i class="fas fa-check"></i> Confirm</button>
+        <button type="button" class="btn btn-danger" onclick="closeModal('action-confirm-modal')">Cancel</button>
       </div>
     </div>
   </div>
@@ -2979,7 +3009,7 @@
           const type = m.eq ? inferEquipmentType(m.eq) : inferEquipmentType(m.id);
           const esc = String(m.id).replace(/'/g, "\\'");
           return `<tr class="row-clickable" onclick="showEquipmentDetail('${esc}')">
-            <td><strong>${String(m.id).replace(/</g,'&lt;')}</strong></td>
+            <td><strong>${String((typeof displayEquipId === 'function' ? displayEquipId(m.id) : m.id)).replace(/</g,'&lt;')}</strong></td>
             <td>${type}</td>
             <td>${(m.eq?.shaft || '—').replace(/</g,'&lt;')}</td>
             <td><span class="health-score ${m.band || 'insufficient'}">${m.health != null ? m.health : '—'}</span></td>
@@ -3015,7 +3045,7 @@
         const top = metrics.slice().sort((a,b) => b.anomaly - a.anomaly).slice(0, 15);
         window._anomalyChart = new Chart(ac, {
           type: 'bar',
-          data: { labels: top.map(m => m.id), datasets: [{ data: top.map(m => m.anomaly), backgroundColor: top.map(m => m.anomaly >= 50 ? '#dc2626' : m.anomaly >= 30 ? '#ea580c' : '#1d4ed8'), borderRadius: 6 }] },
+          data: { labels: top.map(m => (typeof displayEquipId === 'function' ? displayEquipId(m.id) : m.id)), datasets: [{ data: top.map(m => m.anomaly), backgroundColor: top.map(m => m.anomaly >= 50 ? '#dc2626' : m.anomaly >= 30 ? '#ea580c' : '#1d4ed8'), borderRadius: 6 }] },
           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
         });
       }
@@ -3025,10 +3055,10 @@
     if (rec) {
       const items = [];
       metrics.filter(m => m.health < 40).slice(0, 5).forEach(m => {
-        items.push(`<div class="alert-banner alert-high-risk" style="margin:0;"><strong>${m.id}</strong> — Critical event-risk score (${m.health}). Prioritise inspection. Anomaly ${m.anomaly}. Confidence: ${m.confidence}.</div>`);
+        items.push(`<div class="alert-banner alert-high-risk" style="margin:0;"><strong>${(typeof displayEquipId === 'function' ? displayEquipId(m.id) : m.id)}</strong> — Critical event-risk score (${m.health}). Prioritise inspection. Anomaly ${m.anomaly}. Confidence: ${m.confidence}.</div>`);
       });
       metrics.filter(m => m.anomaly >= 45 && m.health >= 40).slice(0, 4).forEach(m => {
-        items.push(`<div class="alert-banner alert-predictive" style="margin:0;"><strong>${m.id}</strong> — Elevated anomaly (${m.anomaly}). Review recurring failure modes in Text Mining.</div>`);
+        items.push(`<div class="alert-banner alert-predictive" style="margin:0;"><strong>${(typeof displayEquipId === 'function' ? displayEquipId(m.id) : m.id)}</strong> — Elevated anomaly (${m.anomaly}). Review recurring failure modes in Text Mining.</div>`);
       });
       if (!items.length) items.push(`<div class="alert-banner" style="border-left-color:var(--success);background:rgba(22,163,74,0.08);color:#166534;margin:0;">No critical reliability actions under current filter. Continue scheduled maintenance and monitor trend.</div>`);
       rec.innerHTML = items.join('');
@@ -3532,8 +3562,9 @@
     const availLabels = [], availData = [], failLabels = [], failData = [], mttfLabels = [], mttfData = [];
     ids.slice(0, 25).forEach(id => {
       const st = getEquipmentStatus(id);
-      availLabels.push(id); availData.push(parseFloat(st.availability) || 0);
-      failLabels.push(id); failData.push(st.failures || 0);
+      const label = (typeof displayEquipId === 'function') ? displayEquipId(id) : id;
+      availLabels.push(label); availData.push(parseFloat(st.availability) || 0);
+      failLabels.push(label); failData.push(st.failures || 0);
       const eu = filteredUp.filter(u => String(u.equipmentId || '') === id);
       const fails = Math.max(1, st.failures || 1);
       const dates = eu.map(u => u.date).filter(Boolean).sort();
@@ -3543,7 +3574,7 @@
         const downH = eu.reduce((s, u) => s + (Number(u.downtimeHours || 0) || 0), 0);
         mttf = Math.max(1, (hours - downH) / fails);
       }
-      mttfLabels.push(id); mttfData.push(Number(mttf.toFixed(1)));
+      mttfLabels.push(label); mttfData.push(Number(mttf.toFixed(1)));
     });
 
     function makeChart(canvasId, type, labels, data, color) {
@@ -3653,6 +3684,29 @@
     if (at < 0) return { id: normaliseEquipId(s), shaft: '' };
     return { id: normaliseEquipId(s.slice(0, at)), shaft: normaliseShaftName(s.slice(at + 1)) };
   }
+
+  /**
+   * User-facing equipment label.
+   * Shows plain canonical ID when that number is unique in the current filter scope.
+   * Only appends shaft when the same ID exists on more than one shaft (collision).
+   * Backend / keys still use composite id@shaft.
+   */
+  function displayEquipId(keyOrId) {
+    if (keyOrId == null || keyOrId === '') return '—';
+    const parsed = parseEquipKey(keyOrId);
+    const id = parsed.id || normaliseEquipId(keyOrId);
+    if (!id) return '—';
+    try {
+      const keys = (typeof collectFilteredIds === 'function') ? collectFilteredIds() : [];
+      const sameId = keys.filter(k => parseEquipKey(k).id === id);
+      if (sameId.length <= 1) return id;
+      const shaft = parsed.shaft || shaftOfEquipment(id) || '';
+      return shaft ? (id + ' (' + shaft + ')') : id;
+    } catch (e) {
+      return id;
+    }
+  }
+  window.displayEquipId = displayEquipId;
 
   function showKpiEquipmentList(mode) {
     const ids = collectFilteredIds(); // composite keys id@shaft
@@ -3863,11 +3917,16 @@
   // ── Alerts ───────────────────────────────────────────────────
   function isAlertDismissed(key) { return dismissedAlerts.has(key); }
   function dismissAlert(key) {
+    // Require confirmation with notes; optional reschedule handled in modal
+    openActionConfirm('dismiss', '', '', key);
+  }
+  function dismissAlertImmediate(key) {
     dismissedAlerts.add(key);
     localStorage.setItem('rbe_dismissed', JSON.stringify([...dismissedAlerts]));
     updatePredictiveNotifications();
   }
   window.dismissAlert = dismissAlert;
+  window.dismissAlertImmediate = dismissAlertImmediate;
   function clearAllDismissedAlerts() {
     dismissedAlerts.clear();
     localStorage.setItem('rbe_dismissed', '[]');
@@ -3934,7 +3993,7 @@
         highRisk++;
         if (highList) highList.innerHTML += `<li class="alert-li-clickable" style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;align-items:center;" onclick="focusAlertTarget('high','${String(id).replace(/'/g,"\\'")}')">
           <span><strong>${id}</strong> – ${st.failures} failures · ${st.availability}% · ${st.downtime.toFixed(1)}h <span class="alert-focus-label">· View</span></span>
-          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();dismissAlert('high-${id}')">Dismiss</button></li>`;
+          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();openActionConfirm('dismiss','${id}','','high-${id}')">Dismiss</button></li>`;
       }
     });
 
@@ -3947,7 +4006,7 @@
       if (predList && days <= 14) {
         predList.innerHTML += `<li class="alert-li-clickable" style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;align-items:center;" onclick="focusAlertTarget('maint','${String(m.equipment||'').replace(/'/g,"\\'")}')">
           <span><strong>${m.equipment}</strong> – ${m.task} · ${days < 0 ? Math.abs(days) + ' overdue' : days + 'd left'} <span class="alert-focus-label">· Focus</span></span>
-          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();dismissAlert('maint-${m.id}')">Dismiss</button></li>`;
+          <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();openActionConfirm('dismiss','${m.equipment||''}','${m.id}','maint-${m.id}')">Dismiss</button></li>`;
       }
     });
 
@@ -3956,7 +4015,7 @@
       patternCount++;
       if (failList) failList.innerHTML += `<li class="alert-li-clickable" style="margin:0.4rem 0;display:flex;justify-content:space-between;gap:8px;align-items:center;" onclick="focusAlertTarget('fail','${String(p.equipment||'').replace(/'/g,"\\'")}')">
         <span><strong>${p.equipment}</strong> – ${p.topMode} · ${p.predictedNext} (${p.daysUntil < 0 ? 'overdue' : p.daysUntil + 'd'}) · ${p.failures} fails <span class="alert-focus-label">· View</span></span>
-        <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();dismissAlert('fail-${p.equipment}')">Dismiss</button></li>`;
+        <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();openActionConfirm('dismiss','${p.equipment}','','fail-${p.equipment}')">Dismiss</button></li>`;
     });
 
     const summary = document.getElementById('dashboard-alert-summary');
@@ -4214,7 +4273,7 @@
       if (task.source === 'failure-pattern') color = '#7c3aed';
       const pInfo = patternMap[String(task.equipment)] || {};
       events.push({
-        title: `${task.equipment} - ${(task.task || 'Maintenance').slice(0, 48)}`,
+        title: `${(typeof displayEquipId === 'function' ? displayEquipId(task.equipment) : task.equipment)} - ${(task.task || 'Maintenance').slice(0, 48)}`,
         start: due, allDay: true, backgroundColor: color, borderColor: color,
         extendedProps: {
           daysLeft: days, source: task.source || 'manual', equipment: task.equipment, maintId: task.id || '',
@@ -4231,7 +4290,7 @@
       let color = '#7c3aed';
       if (p.daysUntil < 0) color = '#dc2626'; else if (p.daysUntil <= 7) color = '#ea580c';
       events.push({
-        title: `${p.equipment} - Predictive inspection`,
+        title: `${(typeof displayEquipId === 'function' ? displayEquipId(p.equipment) : p.equipment)} - Predictive inspection`,
         start: p.predictedNext, allDay: true, backgroundColor: color, borderColor: color,
         extendedProps: {
           daysLeft: p.daysUntil, source: 'failure-pattern', equipment: p.equipment, maintId: '',
@@ -4247,14 +4306,16 @@
   function openInspectionTaskFromEvent(ev) {
     const x = ev?.extendedProps || {};
     const equipment = x.equipment || (ev.title || '').split(' - ')[0] || '—';
+    const displayId = (typeof displayEquipId === 'function') ? displayEquipId(equipment) : equipment;
     const days = x.daysLeft;
     const dueLabel = isNaN(days) ? '—' : (days >= 0 ? `${days} day(s) remaining` : `${Math.abs(days)} day(s) overdue`);
     const body = document.getElementById('inspection-task-body');
     if (!body) return;
     const checklist = (x.actions || 'Full walk-around and known fault points.').split(/;|·|\n/).map(s => s.trim()).filter(Boolean);
+    const alertKey = x.maintId ? ('maint-' + x.maintId) : (x.source === 'failure-pattern' ? ('fail-' + equipment) : '');
     body.innerHTML = `
       <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin-bottom:0.85rem;">
-        <span style="font-size:1.25rem;font-weight:800;">${String(equipment).replace(/</g,'&lt;')}</span>
+        <span style="font-size:1.25rem;font-weight:800;">${String(displayId).replace(/</g,'&lt;')}</span>
         ${x.priority ? `<span style="padding:0.25rem 0.7rem;border-radius:999px;font-size:0.78rem;font-weight:700;background:${x.priorityColor||'#7c3aed'};color:#fff;">${x.priority}</span>` : ''}
         <span style="font-size:0.85rem;color:var(--text-3);">${x.source === 'failure-pattern' ? 'Predictive (does not mark unit Down)' : 'Scheduled'}</span>
       </div>
@@ -4274,7 +4335,16 @@
       ${x.lastReason ? `<div style="font-size:0.88rem;color:var(--text-3);margin-top:0.75rem;font-style:italic;"><strong>Last fault:</strong> ${String(x.lastReason).replace(/</g,'&lt;')}</div>` : ''}
     `;
     const fixBtn = document.getElementById('inspection-mark-fixed');
-    if (fixBtn) fixBtn.onclick = () => { markEquipmentFixed(equipment, x.maintId || ''); closeModal('inspection-task-modal'); };
+    if (fixBtn) fixBtn.onclick = () => { markEquipmentFixed(equipment, x.maintId || ''); };
+    const dismissBtn = document.getElementById('inspection-dismiss-btn');
+    if (dismissBtn) {
+      if (alertKey) {
+        dismissBtn.style.display = '';
+        dismissBtn.onclick = () => { openActionConfirm('dismiss', equipment, x.maintId || '', alertKey); };
+      } else {
+        dismissBtn.style.display = 'none';
+      }
+    }
     openModal('inspection-task-modal');
   }
   window.openInspectionTaskFromEvent = openInspectionTaskFromEvent;
@@ -4282,20 +4352,36 @@
   function initCalendar() {
     const el = document.getElementById('calendar-div');
     if (!el) return;
-    if (calendar) calendar.destroy();
-    const isMobile = window.innerWidth <= 768;
-    calendar = new FullCalendar.Calendar(el, {
-      initialView: isMobile ? 'listWeek' : 'dayGridMonth',
-      headerToolbar: { left: 'prev,next today', center: 'title', right: isMobile ? 'listWeek' : 'dayGridMonth,listWeek' },
-      height: 'auto',
-      events: getMaintenanceEvents(),
-      eventContent: arg => {
-        const x = arg.event.extendedProps || {};
-        return { html: `<div style="padding:4px;cursor:pointer;">${arg.event.title}<br><small>Days left: ${x.daysLeft}</small>${x.focus ? `<br><small>Focus: ${x.focus}</small>` : ''}</div>` };
-      },
-      eventClick: info => { info.jsEvent.preventDefault(); openInspectionTaskFromEvent(info.event); }
-    });
-    calendar.render();
+    try {
+      if (calendar) { try { calendar.destroy(); } catch (e) {} calendar = null; }
+      if (typeof FullCalendar === 'undefined') {
+        el.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--danger);">FullCalendar library failed to load. Check network / CDN.</div>';
+        return;
+      }
+      el.innerHTML = '';
+      let events = [];
+      try { events = getMaintenanceEvents() || []; } catch (e) { console.warn('getMaintenanceEvents', e); }
+      const isMobile = window.innerWidth <= 768;
+      calendar = new FullCalendar.Calendar(el, {
+        initialView: isMobile ? 'listWeek' : 'dayGridMonth',
+        headerToolbar: { left: 'prev,next today', center: 'title', right: isMobile ? 'listWeek,dayGridMonth' : 'dayGridMonth,listWeek' },
+        height: 'auto',
+        contentHeight: 480,
+        events: events,
+        eventContent: arg => {
+          const x = arg.event.extendedProps || {};
+          const days = x.daysLeft;
+          const daysLabel = (days == null || isNaN(days)) ? '—' : (days < 0 ? (Math.abs(days) + 'd overdue') : (days + 'd left'));
+          return { html: `<div style="padding:3px 4px;cursor:pointer;font-size:0.78rem;line-height:1.25;"><strong>${arg.event.title}</strong><br><small>${daysLabel}</small>${x.focus ? `<br><small>Focus: ${String(x.focus).slice(0,40)}</small>` : ''}</div>` };
+        },
+        eventClick: info => { info.jsEvent.preventDefault(); openInspectionTaskFromEvent(info.event); },
+        noEventsContent: 'No maintenance events in scope'
+      });
+      calendar.render();
+    } catch (err) {
+      console.error('initCalendar', err);
+      el.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--danger);">Calendar error: ' + String(err.message || err).replace(/</g,'&lt;') + '</div>';
+    }
   }
 
   // ── Text Mining ─────────────────────────────────────────────
@@ -4701,16 +4787,26 @@
   window.removeEquipment = removeEquipment;
 
   function openEditEquipment(id) {
-    const eq = (equipment || []).find(e => String(e.id) === String(id));
-    if (!eq) return alert('Not found');
+    const eq = (equipment || []).find(e => String(e.id) === String(id) || (typeof normaliseEquipId === 'function' && normaliseEquipId(e.id) === normaliseEquipId(id)));
+    if (!eq) return showToast('Equipment not found', 'error');
     const shaftSel = document.getElementById('edit-eq-shaft');
     if (shaftSel) {
       const src = document.getElementById('shaft-filter');
       shaftSel.innerHTML = '<option value="">— Unassigned —</option>';
       if (src) [...src.options].forEach(o => { if (!o.value) return; const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.textContent; shaftSel.appendChild(opt); });
     }
-    document.getElementById('edit-eq-original-id').value = id;
-    document.getElementById('edit-eq-id').value = id;
+    const realId = eq.id || id;
+    document.getElementById('edit-eq-original-id').value = realId;
+    const idInput = document.getElementById('edit-eq-id');
+    idInput.value = realId;
+    // Admin can rename; others keep field locked
+    if ((currentUserRole || '') === 'admin') {
+      idInput.removeAttribute('readonly');
+      idInput.style.opacity = '1';
+    } else {
+      idInput.setAttribute('readonly', 'readonly');
+      idInput.style.opacity = '0.85';
+    }
     document.getElementById('edit-eq-shaft').value = eq.shaft || '';
     document.getElementById('edit-eq-level').value = eq.level || '';
     document.getElementById('edit-eq-size').value = eq.locoSize || '';
@@ -4721,47 +4817,208 @@
   }
   window.openEditEquipment = openEditEquipment;
 
+  function openActionConfirm(type, equipId, maintId, alertKey) {
+    const titleEl = document.getElementById('action-confirm-title');
+    const descEl = document.getElementById('action-confirm-desc');
+    const notesEl = document.getElementById('action-confirm-notes');
+    const rescheduleWrap = document.getElementById('action-reschedule-wrap');
+    const rescheduleDate = document.getElementById('action-reschedule-date');
+    const submitBtn = document.getElementById('action-confirm-submit');
+    document.getElementById('action-confirm-type').value = type || '';
+    document.getElementById('action-confirm-equip').value = equipId || '';
+    document.getElementById('action-confirm-maint').value = maintId || '';
+    document.getElementById('action-confirm-alert-key').value = alertKey || '';
+    if (notesEl) notesEl.value = '';
+    if (rescheduleDate) rescheduleDate.value = '';
+    const showReschedule = true; // always offer reschedule for predictive / maint context
+    if (rescheduleWrap) rescheduleWrap.style.display = showReschedule ? 'block' : 'none';
+    const label = (typeof displayEquipId === 'function' && equipId) ? displayEquipId(equipId) : (equipId || alertKey || '');
+    if (type === 'mark_fixed') {
+      if (titleEl) titleEl.innerHTML = '<i class="fas fa-check"></i> Mark Fixed';
+      if (descEl) descEl.textContent = 'Confirm marking ' + label + ' as Fixed. Notes are required. Optionally reschedule the next predicted inspection.';
+      if (submitBtn) { submitBtn.className = 'btn btn-success'; submitBtn.innerHTML = '<i class="fas fa-check"></i> Confirm Mark Fixed'; }
+    } else {
+      if (titleEl) titleEl.innerHTML = '<i class="fas fa-eye-slash"></i> Dismiss Alert';
+      if (descEl) descEl.textContent = 'Dismiss this alert' + (label ? ' for ' + label : '') + '. Notes are required. Optionally set a new inspection date.';
+      if (submitBtn) { submitBtn.className = 'btn btn-primary'; submitBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Confirm Dismiss'; }
+    }
+    openModal('action-confirm-modal');
+  }
+  window.openActionConfirm = openActionConfirm;
+
   async function markEquipmentFixed(equipId, maintId) {
+    // Route through confirmation modal requiring notes + optional reschedule
+    openActionConfirm('mark_fixed', equipId, maintId || '', maintId ? ('maint-' + maintId) : '');
+  }
+  window.markEquipmentFixed = markEquipmentFixed;
+
+  async function executeMarkFixed(equipId, maintId, notes, rescheduleDate) {
     if (!assertCan('mark_fixed', { equipmentId: equipId }, 'Not authorized to mark fixed for this equipment/shaft')) return;
     const actor = getActor();
     try {
       const markShaft = resolveShaftForEquipment(equipId, '');
+      const pureId = (typeof parseEquipKey === 'function') ? parseEquipKey(equipId).id : normaliseEquipId(equipId);
       await addDoc(collection(db, "status_updates"), {
-        equipmentId: equipId, date: new Date().toISOString().slice(0, 10),
+        equipmentId: pureId || equipId, date: new Date().toISOString().slice(0, 10),
         time: new Date().toTimeString().slice(0, 5), status: 'Fixed', shift: 'Morning',
-        reason: 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
+        reason: notes || 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
         shaft: markShaft,
         source: 'Mark Fixed', createdAt: serverTimestamp(),
         updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
         updatedByCompanyNumber: actor.companyNumber || '',
         changedAt: new Date().toISOString()
       });
-      if (maintId) try { await updateDoc(doc(db, "maintenance", maintId), { lastDone: new Date().toISOString().slice(0, 10) }); } catch (e) {}
+      if (maintId) {
+        try {
+          const patch = { lastDone: new Date().toISOString().slice(0, 10) };
+          if (rescheduleDate) patch.dueDate = rescheduleDate;
+          await updateDoc(doc(db, "maintenance", maintId), patch);
+        } catch (e) {}
+      } else if (rescheduleDate && pureId) {
+        // Create / merge a predictive maintenance row with new due date
+        try {
+          await addDoc(collection(db, "maintenance"), {
+            equipment: pureId, task: 'Predictive inspection (rescheduled)', interval: 'custom',
+            lastDone: new Date().toISOString().slice(0, 10), dueDate: rescheduleDate,
+            source: 'reschedule', createdAt: new Date().toISOString(),
+            updatedBy: actor.email || actor.name
+          });
+        } catch (e) {}
+      }
       showToast('Marked Fixed', 'success');
-      if (typeof logAudit === 'function') logAudit('mark_fixed', 'Equipment marked fixed from inspection/maintenance', equipId);
+      if (typeof logAudit === 'function') logAudit('mark_fixed', notes || 'Equipment marked fixed', pureId || equipId);
+      closeModal('action-confirm-modal');
+      closeModal('inspection-task-modal');
+      closeModal('equip-detail-modal');
+      closeModal('row-actions-modal');
       refreshCurrentView();
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   }
-  window.markEquipmentFixed = markEquipmentFixed;
+  window.executeMarkFixed = executeMarkFixed;
+
+  async function executeDismissAlert(alertKey, equipId, notes, rescheduleDate) {
+    if (!alertKey && !equipId) return;
+    const key = alertKey || ('maint-' + (equipId || ''));
+    dismissAlertImmediate(key);
+    if (notes && typeof logAudit === 'function') {
+      logAudit('dismiss_alert', notes, equipId || key);
+    }
+    const pureId = equipId ? ((typeof parseEquipKey === 'function') ? parseEquipKey(equipId).id : normaliseEquipId(equipId)) : '';
+    if (rescheduleDate && pureId) {
+      const actor = getActor();
+      try {
+        await addDoc(collection(db, "maintenance"), {
+          equipment: pureId, task: 'Predictive inspection (rescheduled)', interval: 'custom',
+          lastDone: new Date().toISOString().slice(0, 10), dueDate: rescheduleDate,
+          source: 'reschedule', notes: notes || '', createdAt: new Date().toISOString(),
+          updatedBy: actor.email || actor.name
+        });
+        showToast('Alert dismissed · inspection rescheduled', 'success');
+      } catch (e) {
+        showToast('Alert dismissed (reschedule failed: ' + e.message + ')', 'info');
+      }
+    } else {
+      showToast('Alert dismissed', 'success');
+    }
+    closeModal('action-confirm-modal');
+    closeModal('inspection-task-modal');
+    closeModal('equip-detail-modal');
+    closeModal('row-actions-modal');
+    if (typeof initCalendar === 'function' && document.getElementById('calendar') && !document.getElementById('calendar').classList.contains('hidden')) {
+      try { initCalendar(); } catch (e) {}
+    }
+    refreshCurrentView();
+  }
+  window.executeDismissAlert = executeDismissAlert;
 
   // ── Forms ────────────────────────────────────────────────────
   document.getElementById('edit-equipment-form')?.addEventListener('submit', async e => {
     e.preventDefault();
-    const id = document.getElementById('edit-eq-original-id').value.trim();
-    if (!id) return;
+    const originalId = document.getElementById('edit-eq-original-id').value.trim();
+    const newIdRaw = document.getElementById('edit-eq-id').value.trim();
+    if (!originalId || !newIdRaw) return;
+    if ((currentUserRole || '') !== 'admin' && normaliseEquipId(newIdRaw) !== normaliseEquipId(originalId)) {
+      return showToast('Only admins can rename Equipment ID', 'error');
+    }
+    if (!assertCan('edit_equipment', { equipmentId: originalId }, 'Not authorized to edit this equipment')) {
+      // soft: allow if no assertCan gate — fall through for admin path
+    }
+    const newId = normaliseEquipId(newIdRaw) || newIdRaw;
+    const payload = {
+      shaft: document.getElementById('edit-eq-shaft').value || '',
+      level: document.getElementById('edit-eq-level').value || '',
+      equipmentType: document.getElementById('edit-eq-type').value || '',
+      locoSize: document.getElementById('edit-eq-size').value || '',
+      section: document.getElementById('edit-eq-section').value || '',
+      oem: document.getElementById('edit-eq-oem').value.trim() || '',
+      updatedAt: new Date().toISOString()
+    };
     try {
-      await setDoc(doc(db, 'equipment', id), {
-        shaft: document.getElementById('edit-eq-shaft').value || '',
-        level: document.getElementById('edit-eq-level').value || '',
-        equipmentType: document.getElementById('edit-eq-type').value || '',
-        locoSize: document.getElementById('edit-eq-size').value || '',
-        section: document.getElementById('edit-eq-section').value || '',
-        oem: document.getElementById('edit-eq-oem').value.trim() || '',
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
+      if (normaliseEquipId(newId) === normaliseEquipId(originalId)) {
+        await setDoc(doc(db, 'equipment', originalId), payload, { merge: true });
+      } else {
+        // Rename: create new equipment doc, re-point status_updates & maintenance, delete old
+        const oldSnap = await getDoc(doc(db, 'equipment', originalId));
+        const oldData = oldSnap.exists() ? (oldSnap.data() || {}) : {};
+        await setDoc(doc(db, 'equipment', newId), { ...oldData, ...payload, id: newId, previousId: originalId }, { merge: true });
+        // Cascade status_updates
+        try {
+          const usnap = await getDocs(query(collection(db, 'status_updates'), where('equipmentId', '==', originalId)));
+          for (const d of usnap.docs) {
+            await updateDoc(d.ref, { equipmentId: newId, previousEquipmentId: originalId });
+          }
+        } catch (e) { console.warn('cascade status', e); }
+        // Also match normalised variants
+        try {
+          const allUp = await getDocs(collection(db, 'status_updates'));
+          for (const d of allUp.docs) {
+            const u = d.data() || {};
+            if (normaliseEquipId(u.equipmentId || u.locoNumber) === normaliseEquipId(originalId) && normaliseEquipId(u.equipmentId) !== newId) {
+              await updateDoc(d.ref, { equipmentId: newId, previousEquipmentId: u.equipmentId || originalId });
+            }
+          }
+        } catch (e) {}
+        try {
+          const msnap = await getDocs(query(collection(db, 'maintenance'), where('equipment', '==', originalId)));
+          for (const d of msnap.docs) await updateDoc(d.ref, { equipment: newId });
+        } catch (e) {}
+        try {
+          const allM = await getDocs(collection(db, 'maintenance'));
+          for (const d of allM.docs) {
+            const m = d.data() || {};
+            if (normaliseEquipId(m.equipment) === normaliseEquipId(originalId) && normaliseEquipId(m.equipment) !== newId) {
+              await updateDoc(d.ref, { equipment: newId });
+            }
+          }
+        } catch (e) {}
+        try { await deleteDoc(doc(db, 'equipment', originalId)); } catch (e) {}
+        if (typeof logAudit === 'function') logAudit('rename_equipment', `Renamed ${originalId} → ${newId}`, newId);
+      }
       closeModal('edit-equipment-modal');
-      alert('Updated'); populateEquipmentTable(); refreshCurrentView();
-    } catch (err) { alert('Error: ' + err.message); }
+      showToast('Equipment updated', 'success');
+      if (typeof populateEquipmentTable === 'function') populateEquipmentTable();
+      refreshCurrentView();
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
+  });
+
+  // Action confirm submit
+  document.getElementById('action-confirm-submit')?.addEventListener('click', async () => {
+    const type = document.getElementById('action-confirm-type')?.value || '';
+    const equip = document.getElementById('action-confirm-equip')?.value || '';
+    const maint = document.getElementById('action-confirm-maint')?.value || '';
+    const alertKey = document.getElementById('action-confirm-alert-key')?.value || '';
+    const notes = (document.getElementById('action-confirm-notes')?.value || '').trim();
+    const reschedule = (document.getElementById('action-reschedule-date')?.value || '').trim();
+    if (!notes) {
+      showToast('Notes / reason are required', 'error');
+      document.getElementById('action-confirm-notes')?.focus();
+      return;
+    }
+    if (type === 'mark_fixed') {
+      await executeMarkFixed(equip, maint, notes, reschedule || null);
+    } else {
+      await executeDismissAlert(alertKey, equip, notes, reschedule || null);
+    }
   });
 
   document.getElementById('add-eq-form').addEventListener('submit', async e => {
