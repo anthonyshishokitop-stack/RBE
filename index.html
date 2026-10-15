@@ -2631,10 +2631,33 @@
   }
   function getFilteredMaintenance() {
     let list = (maintenance || []).slice();
-    if (ENFORCE_SHAFT_SCOPE || currentShaftFilter || currentTypeFilter) {
-      const allowed = new Set(getFilteredEquipment().map(e => normaliseEquipId(e.id)));
-      list = list.filter(m => allowed.has(normaliseEquipId(m.equipment)));
-    }
+    const needScope = ENFORCE_SHAFT_SCOPE || currentShaftFilter || currentTypeFilter;
+    if (!needScope) return list;
+    const filteredEq = getFilteredEquipment();
+    const allowed = new Set(filteredEq.map(e => normaliseEquipId(e.id)));
+    // Map equipment → shaft for fallback matching
+    const shaftByEquip = new Map();
+    (equipment || []).forEach(e => {
+      const id = normaliseEquipId(e.id);
+      if (id) shaftByEquip.set(id, normaliseShaftName(e.shaft));
+    });
+    const wantShaft = currentShaftFilter ? normaliseShaftName(currentShaftFilter) : null;
+    const roleAllowed = ((currentUserRole || '') === 'admin')
+      ? null
+      : (currentAllowedShafts || []).map(normaliseShaftName).filter(Boolean);
+    list = list.filter(m => {
+      const mid = normaliseEquipId(m.equipment);
+      if (mid && allowed.has(mid)) return true;
+      // Fallback: maintenance row may carry shaft, or equipment exists outside filtered set with matching shaft
+      const mShaft = normaliseShaftName(m.shaft) || shaftByEquip.get(mid) || '';
+      if (wantShaft) {
+        return !!mShaft && mShaft === wantShaft;
+      }
+      // All Shafts + RBAC: allow if shaft is in role scope (or admin)
+      if (roleAllowed === null) return true; // admin — include orphan maint rows
+      if (!roleAllowed.length) return false;
+      return !!mShaft && roleAllowed.includes(mShaft);
+    });
     return list;
   }
   function getActiveFilterLabel() {
@@ -4058,14 +4081,37 @@
   function calculateDaysLeft(lastDone, interval) {
     if (!lastDone) return NaN;
     const last = new Date(lastDone);
+    if (isNaN(last.getTime())) return NaN;
     let daysAdd = interval === 'weekly' ? 7 : (interval === 'quarterly' ? 90 : 30);
     return Math.ceil((new Date(last.getTime() + daysAdd * 86400000) - new Date()) / 86400000);
   }
   function calculateNextDue(lastDone, interval) {
     if (!lastDone) return '';
     const last = new Date(lastDone);
+    if (isNaN(last.getTime())) return '';
     let daysAdd = interval === 'weekly' ? 7 : (interval === 'quarterly' ? 90 : 30);
-    return new Date(last.getTime() + daysAdd * 86400000).toISOString().slice(0, 10);
+    try {
+      return new Date(last.getTime() + daysAdd * 86400000).toISOString().slice(0, 10);
+    } catch (e) {
+      return '';
+    }
+  }
+  /** True if value is a usable YYYY-MM-DD (or parseable) calendar date for FullCalendar */
+  function isValidEventDate(val) {
+    if (val == null || val === '') return false;
+    const s = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      const d = new Date(s.slice(0, 10) + 'T12:00:00');
+      return !isNaN(d.getTime());
+    }
+    const d = new Date(s);
+    return !isNaN(d.getTime());
+  }
+  function toEventDateStr(val) {
+    if (!isValidEventDate(val)) return '';
+    const s = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    try { return new Date(s).toISOString().slice(0, 10); } catch (e) { return ''; }
   }
 
   // ── Tables ───────────────────────────────────────────────────
@@ -4278,50 +4324,71 @@
   function getMaintenanceEvents() {
     const events = [];
     const maintSource = getFilteredMaintenance();
+    // Run failure-pattern analysis once (was called twice — heavy on All Shafts)
+    let patterns = [];
+    try { patterns = analyseFailurePatterns() || []; } catch (e) { console.warn('analyseFailurePatterns', e); patterns = []; }
     const patternMap = {};
-    try { analyseFailurePatterns().forEach(p => { patternMap[String(p.equipment)] = p; }); } catch (e) {}
+    patterns.forEach(p => { patternMap[String(p.equipment)] = p; });
     const calSeen = new Set();
     maintSource.forEach(task => {
-      if (isAlertDismissed('maint-' + task.id)) return;
-      const equipKey = String(task.equipment || '').toLowerCase();
-      if (task.source === 'failure-pattern') {
-        if (!equipKey || calSeen.has('p|' + equipKey)) return;
-        calSeen.add('p|' + equipKey);
+      try {
+        if (isAlertDismissed('maint-' + task.id)) return;
+        const equipKey = String(task.equipment || '').toLowerCase();
+        if (task.source === 'failure-pattern') {
+          if (!equipKey || calSeen.has('p|' + equipKey)) return;
+          calSeen.add('p|' + equipKey);
+        }
+        let due = toEventDateStr(task.dueDate) || calculateNextDue(task.lastDone, task.interval);
+        due = toEventDateStr(due);
+        if (!due) return;
+        let days;
+        if (task.dueDate && isValidEventDate(task.dueDate)) {
+          days = Math.ceil((new Date(String(task.dueDate).slice(0, 10) + 'T12:00:00') - new Date()) / 86400000);
+        } else {
+          days = calculateDaysLeft(task.lastDone, task.interval);
+        }
+        let color = '#16a34a';
+        if (days < 0) color = '#dc2626'; else if (days <= 7) color = '#ea580c';
+        if (task.source === 'failure-pattern') color = '#7c3aed';
+        const pInfo = patternMap[String(task.equipment)] || {};
+        const equipLabel = (typeof displayEquipId === 'function' ? displayEquipId(task.equipment) : task.equipment) || task.equipment || '—';
+        events.push({
+          title: String(equipLabel) + ' - ' + String(task.task || 'Maintenance').slice(0, 48),
+          start: due, allDay: true, backgroundColor: color, borderColor: color,
+          extendedProps: {
+            daysLeft: days, source: task.source || 'manual', equipment: task.equipment, maintId: task.id || '',
+            task: task.task || '', dueDate: due, focus: pInfo.focus || '', actions: pInfo.actions || '',
+            topMode: pInfo.topMode || '', priority: pInfo.priority || '', priorityColor: pInfo.priorityColor || color,
+            lastReason: pInfo.lastReason || '', failures: pInfo.failures || '', avgDays: pInfo.avgDaysBetween || '',
+            lastDone: task.lastDone || ''
+          }
+        });
+      } catch (taskErr) {
+        console.warn('Skip bad maintenance row', task && task.id, taskErr);
       }
-      let due = task.dueDate || calculateNextDue(task.lastDone, task.interval);
-      if (!due) return;
-      const days = task.dueDate ? Math.ceil((new Date(task.dueDate) - new Date()) / 86400000) : calculateDaysLeft(task.lastDone, task.interval);
-      let color = '#16a34a';
-      if (days < 0) color = '#dc2626'; else if (days <= 7) color = '#ea580c';
-      if (task.source === 'failure-pattern') color = '#7c3aed';
-      const pInfo = patternMap[String(task.equipment)] || {};
-      events.push({
-        title: `${(typeof displayEquipId === 'function' ? displayEquipId(task.equipment) : task.equipment)} - ${(task.task || 'Maintenance').slice(0, 48)}`,
-        start: due, allDay: true, backgroundColor: color, borderColor: color,
-        extendedProps: {
-          daysLeft: days, source: task.source || 'manual', equipment: task.equipment, maintId: task.id || '',
-          task: task.task || '', dueDate: due, focus: pInfo.focus || '', actions: pInfo.actions || '',
-          topMode: pInfo.topMode || '', priority: pInfo.priority || '', priorityColor: pInfo.priorityColor || color,
-          lastReason: pInfo.lastReason || '', failures: pInfo.failures || '', avgDays: pInfo.avgDaysBetween || '',
-          lastDone: task.lastDone || ''
-        }
-      });
     });
-    analyseFailurePatterns().forEach(p => {
-      if (isAlertDismissed('fail-' + p.equipment)) return;
-      if (events.some(e => String(e.extendedProps.equipment) === String(p.equipment) && e.extendedProps.source === 'failure-pattern')) return;
-      let color = '#7c3aed';
-      if (p.daysUntil < 0) color = '#dc2626'; else if (p.daysUntil <= 7) color = '#ea580c';
-      events.push({
-        title: `${(typeof displayEquipId === 'function' ? displayEquipId(p.equipment) : p.equipment)} - Predictive inspection`,
-        start: p.predictedNext, allDay: true, backgroundColor: color, borderColor: color,
-        extendedProps: {
-          daysLeft: p.daysUntil, source: 'failure-pattern', equipment: p.equipment, maintId: '',
-          task: p.task, dueDate: p.predictedNext, focus: p.focus, actions: p.actions,
-          topMode: p.topMode, priority: p.priority, priorityColor: p.priorityColor,
-          lastReason: p.lastReason, failures: p.failures, avgDays: p.avgDaysBetween, lastDone: p.lastBreakdown
-        }
-      });
+    patterns.forEach(p => {
+      try {
+        if (isAlertDismissed('fail-' + p.equipment)) return;
+        if (events.some(e => String(e.extendedProps.equipment) === String(p.equipment) && e.extendedProps.source === 'failure-pattern')) return;
+        const start = toEventDateStr(p.predictedNext);
+        if (!start) return;
+        let color = '#7c3aed';
+        if (p.daysUntil < 0) color = '#dc2626'; else if (p.daysUntil <= 7) color = '#ea580c';
+        const equipLabel = (typeof displayEquipId === 'function' ? displayEquipId(p.equipment) : p.equipment) || p.equipment || '—';
+        events.push({
+          title: String(equipLabel) + ' - Predictive inspection',
+          start: start, allDay: true, backgroundColor: color, borderColor: color,
+          extendedProps: {
+            daysLeft: p.daysUntil, source: 'failure-pattern', equipment: p.equipment, maintId: '',
+            task: p.task, dueDate: start, focus: p.focus, actions: p.actions,
+            topMode: p.topMode, priority: p.priority, priorityColor: p.priorityColor,
+            lastReason: p.lastReason, failures: p.failures, avgDays: p.avgDaysBetween, lastDone: p.lastBreakdown
+          }
+        });
+      } catch (pErr) {
+        console.warn('Skip bad pattern event', p && p.equipment, pErr);
+      }
     });
     return events;
   }
@@ -4375,6 +4442,27 @@
   function initCalendar() {
     const el = document.getElementById('calendar-div');
     if (!el) return;
+    // Avoid stacking concurrent inits when filters change rapidly (All Shafts is heaviest)
+    if (window._calendarInitTimer) {
+      clearTimeout(window._calendarInitTimer);
+      window._calendarInitTimer = null;
+    }
+    el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--text-3);"><i class="fas fa-spinner fa-spin"></i> Loading calendar…</div>';
+    window._calendarInitTimer = setTimeout(function() {
+      window._calendarInitTimer = null;
+      _initCalendarNow(el);
+    }, 30);
+  }
+
+  function _initCalendarNow(el) {
+    if (!el) el = document.getElementById('calendar-div');
+    if (!el) return;
+    // Section must be visible for FullCalendar to measure layout
+    const section = document.getElementById('calendar');
+    if (section && section.classList.contains('hidden')) {
+      // Not the active view — skip (will run again when user opens Calendar)
+      return;
+    }
     try {
       if (calendar) { try { calendar.destroy(); } catch (e) {} calendar = null; }
       if (typeof FullCalendar === 'undefined') {
@@ -4383,7 +4471,14 @@
       }
       el.innerHTML = '';
       let events = [];
-      try { events = getMaintenanceEvents() || []; } catch (e) { console.warn('getMaintenanceEvents', e); }
+      try {
+        events = getMaintenanceEvents() || [];
+      } catch (e) {
+        console.warn('getMaintenanceEvents', e);
+        events = [];
+      }
+      // Drop any remaining invalid starts so FullCalendar never throws
+      events = events.filter(ev => isValidEventDate(ev && ev.start));
       const isMobile = window.innerWidth <= 768;
       calendar = new FullCalendar.Calendar(el, {
         initialView: isMobile ? 'listWeek' : 'dayGridMonth',
@@ -4395,12 +4490,25 @@
           const x = arg.event.extendedProps || {};
           const days = x.daysLeft;
           const daysLabel = (days == null || isNaN(days)) ? '—' : (days < 0 ? (Math.abs(days) + 'd overdue') : (days + 'd left'));
-          return { html: `<div style="padding:3px 4px;cursor:pointer;font-size:0.78rem;line-height:1.25;"><strong>${arg.event.title}</strong><br><small>${daysLabel}</small>${x.focus ? `<br><small>Focus: ${String(x.focus).slice(0,40)}</small>` : ''}</div>` };
+          const title = String(arg.event.title || '').replace(/</g, '&lt;');
+          const focus = x.focus ? String(x.focus).slice(0, 40).replace(/</g, '&lt;') : '';
+          return { html: '<div style="padding:3px 4px;cursor:pointer;font-size:0.78rem;line-height:1.25;"><strong>' + title + '</strong><br><small>' + daysLabel + '</small>' + (focus ? '<br><small>Focus: ' + focus + '</small>' : '') + '</div>' };
         },
         eventClick: info => { info.jsEvent.preventDefault(); openInspectionTaskFromEvent(info.event); },
         noEventsContent: 'No maintenance events in scope'
       });
       calendar.render();
+      // After section unhide / filter change, force a size recalculation
+      requestAnimationFrame(function() {
+        try {
+          if (calendar) calendar.updateSize();
+        } catch (e) {}
+      });
+      setTimeout(function() {
+        try {
+          if (calendar) calendar.updateSize();
+        } catch (e) {}
+      }, 120);
     } catch (err) {
       console.error('initCalendar', err);
       el.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--danger);">Calendar error: ' + String(err.message || err).replace(/</g,'&lt;') + '</div>';
