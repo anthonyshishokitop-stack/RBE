@@ -1252,10 +1252,6 @@
           </div>
           <div class="kpi-grid" id="reliability-kpi-grid"></div>
 
-
-
-
-          
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.25rem;">
             <div class="card chart-wrapper">
               <div class="chart-title"><i class="fas fa-chart-area"></i> Fleet Health Distribution</div>
@@ -3284,7 +3280,7 @@
 
   function isDownLike(u) {
     const s = String(u.status || '').toLowerCase();
-    return u.isFailure === '1' || u.isFailure === 1 || s === 'down' || s === 'offline' || s === 'failed' || s === 'broken';
+    return u.isFailure === '1' || u.isFailure === 1 || s === 'down' || s === 'offline' || s === 'failed' || s === 'broken' || s === 'restricted' || s === 'limited' || s === 'derated';
   }
 
   function isFixedLike(u) {
@@ -6173,7 +6169,7 @@
 
     if (isPdf) {
       handlePdfUpload(file, statusDiv).catch(err => {
-        statusDiv.innerHTML = `❌ PDF: ${err.message || err}`;
+        statusDiv.innerHTML = `❌ PDF: ${String(err.message || err).replace(/</g,'&lt;')}`;
         statusDiv.style.background = 'rgba(220,38,38,0.1)';
         statusDiv.style.color = 'var(--danger)';
       });
@@ -6219,7 +6215,7 @@
         document.querySelectorAll('.import-step').forEach(el => el.classList.remove('active'));
         document.querySelector('.import-step[data-step="2"]')?.classList.add('active');
       } catch (err) {
-        statusDiv.innerHTML = `❌ ${err.message}`; statusDiv.style.background = 'rgba(220,38,38,0.1)'; statusDiv.style.color = 'var(--danger)';
+        statusDiv.innerHTML = `❌ ${String(err.message||err).replace(/</g,'&lt;')}`; statusDiv.style.background = 'rgba(220,38,38,0.1)'; statusDiv.style.color = 'var(--danger)';
       }
     };
     reader.readAsArrayBuffer(file);
