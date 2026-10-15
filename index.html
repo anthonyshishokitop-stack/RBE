@@ -5418,19 +5418,23 @@
   // ── Import ───────────────────────────────────────────────────
   let rawSheetData = {}, currentSheetName = '';
   const TARGET_FIELDS = {
+    // Exact Live_Sheets RBE sheet headers (Shaft_*.xlsx) first, then legacy aliases
     date: ['date reported','date fixed','date','report date','failure date'],
-    time: ['time reported','time','start time'],
-    equipmentId: ['loco number','equipment id','equipment','loco','machine'],
+    time: ['time reported','time','start time','time loco reported at station'],
+    equipmentId: ['equipment id','loco number','equipment','loco','machine'],
     workplace: ['working place','location','level'],
-    reason: ['breakdown reported','breakdown','fault','failure','reason','problem','description'],
-    actualFault: ['actual fault found by','actual fault found','fault found'],
+    section: ['section'],
+    reason: ['reason / breakdown reported','reason / breakdown','breakdown reported','breakdown','fault','failure','reason','problem','description'],
+    actualFault: ['serviceman /artisan report','serviceman / artisan report','actual fault found by','actual fault found','fault found','artisan report'],
     downtime: ['total downtime','downtime','down hrs','hours'],
-    shift: ['shift'],
-    operator: ['reported by','operator','reported by name'],
+    shift: ['shift (m/a/n)','shift'],
+    operator: ['control room operator','reported by','operator','reported by name'],
     reportedByCompany: ['reported by company number','reported by company no','reporter company number','company number','company no','payroll number','employee number','emp no','persal'],
-    signedBy: ['sign by','signed by','fixed by'],
+    signedBy: ['repaired by','sign by','signed by','fixed by'],
     signedByCompany: ['signed by company number','sign by company number','signed by company no','fixer company number'],
-    action: ['actual fault found by','action taken','fixed y/n'],
+    action: ['fixed y/n','actual fault found by','action taken'],
+    dateRepaired: ['date repaired','date fixed'],
+    timeRepaired: ['time repaired','time fixed'],
     shaft: ['conventional','shaft','section','area']
   };
   function normalizeHeader(h) { return String(h||'').toLowerCase().replace(/[\s_\-\/\\:]+/g,' ').trim(); }
@@ -6316,7 +6320,12 @@
           statusDiv.innerHTML = '❌ No usable data'; statusDiv.style.background = 'rgba(220,38,38,0.1)'; statusDiv.style.color = 'var(--danger)';
           return;
         }
-        currentSheetName = Object.keys(rawSheetData)[0];
+        // Prefer operational RBE log over Planner sheet summaries
+        const sheetKeys = Object.keys(rawSheetData);
+        const rbeKey = sheetKeys.find(n => /^rbe$/i.test(String(n).trim()))
+          || sheetKeys.find(n => !/planner|summary/i.test(String(n)))
+          || sheetKeys[0];
+        currentSheetName = rbeKey;
         processCurrentSheet();
         statusDiv.innerHTML = `✅ Found ${Object.keys(rawSheetData).length} sheet(s). Preview: ${excelData.length} cleaned rows.`;
         statusDiv.style.background = 'rgba(22,163,74,0.1)'; statusDiv.style.color = 'var(--success)';
@@ -6368,13 +6377,39 @@
         signedByCompanyNumber = signedRaw;
         signedByName = '';
       }
+      // Downtime: use column if present, else DATE/TIME REPORTED → DATE/TIME REPAIRED
+      let dtHrs = parseFloat(get('downtime'));
+      if (!Number.isFinite(dtHrs) || dtHrs <= 0) {
+        const d0 = parseExcelDate(get('date'));
+        const t0 = parseExcelTime(get('time'));
+        const d1 = parseExcelDate(get('dateRepaired'));
+        const t1 = parseExcelTime(get('timeRepaired'));
+        if (d0 && d1) {
+          try {
+            const start = new Date(d0 + 'T' + (t0 || '00:00'));
+            const end = new Date(d1 + 'T' + (t1 || '00:00'));
+            const hrs = (end - start) / 3600000;
+            if (hrs >= 0 && hrs <= 720) dtHrs = Math.round(hrs * 100) / 100;
+          } catch (e) {}
+        }
+      }
+      if (!Number.isFinite(dtHrs) || dtHrs < 0) dtHrs = 0;
+      // Normalise shift codes M/A/N
+      let shiftVal = String(get('shift') || 'Night').trim() || 'Night';
+      const shiftCode = { M: 'Morning', A: 'Afternoon', N: 'Night' };
+      if (shiftCode[shiftVal.toUpperCase()]) shiftVal = shiftCode[shiftVal.toUpperCase()];
+      // FIXED Y/N → action / status hint
+      const fixedRaw = String(get('action') || '').trim().toUpperCase();
+      const isFixed = ['YES','Y','FIXED','TRUE','1','DONE','OK'].includes(fixedRaw);
       return {
         _rawIndex: idx, date: parseExcelDate(get('date')) || new Date().toISOString().slice(0,10),
         time: parseExcelTime(get('time')), equipmentId: equip || 'Unknown', reason,
-        downtimeHours: parseFloat(get('downtime')) || 0, shift: String(get('shift') || 'Night').trim() || 'Night',
+        downtimeHours: dtHrs, shift: shiftVal,
         operator: operatorName, reportedByCompanyNumber, signedBy: signedByName, signedByCompanyNumber,
-        action: actual,
+        action: actual || (isFixed ? 'Fixed' : ''),
+        status: isFixed ? 'Fixed' : 'Down',
         workplace: String(get('workplace') || '').trim(),
+        section: String(get('section') || '').trim(),
         shaft: document.getElementById('import-shaft')?.value || '',
         sourceSheet: currentSheetName, selected: true
       };
