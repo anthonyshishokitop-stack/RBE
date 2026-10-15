@@ -952,7 +952,7 @@
             <div class="form-group"><label>Date</label><input id="u-date" type="date" required></div>
             <div class="form-group"><label>Time</label><input id="u-time" type="time" required></div>
             <div class="form-group"><label>Equipment ID</label><input id="u-loco" list="loco-list" required></div>
-            <div class="form-group"><label>Status</label><select id="u-status"><option>Fixed</option><option>Down</option></select></div>
+            <div class="form-group"><label>Status</label><select id="u-status"><option value="Up">Up (Operational)</option><option value="Down">Down</option><option value="Up">Fixed → Up</option></select></div>
             <div class="form-group"><label>Shift</label><select id="u-shift"><option>Morning</option><option>Afternoon</option><option>Night</option></select></div>
             <div class="form-group"><label>Reason/Fault</label><textarea id="u-reason" required></textarea></div>
             <div class="form-group"><label>Downtime Hours</label><input id="u-downtime" type="number" step="0.1" min="0"></div>
@@ -2836,12 +2836,25 @@
     }
 
     const last = eu && eu[0];
+    // Current equipment status = LAST status log only.
+    // FIXED Y/N YES / status Fixed / Up  → UP
+    // FIXED Y/N NO  / status Down         → DOWN
     let statusCode = 'Up';
     if (last) {
-      if (last.statusCode && STATUS_CODES.includes(last.statusCode)) {
+      const rawStatus = String(last.statusCode || last.status || '').trim();
+      const rawLower = rawStatus.toLowerCase();
+      // Explicit Fixed / YES-style close-out always means operational (Up)
+      if (rawLower === 'fixed' || rawLower === 'yes' || rawLower === 'y' || rawLower === 'done' || rawLower === 'ok') {
+        statusCode = 'Up';
+      } else if (last.statusCode && STATUS_CODES.includes(last.statusCode)) {
         statusCode = last.statusCode;
       } else {
-        statusCode = normaliseStatusCode(last.status);
+        statusCode = normaliseStatusCode(last.status || last.statusCode);
+      }
+      // isFailure on last open event reinforces Down when status was left blank
+      if (statusCode === 'Up' && (last.isFailure === '1' || last.isFailure === 1) &&
+          !['fixed','up','operational','running','available','yes','y'].includes(rawLower)) {
+        statusCode = 'Down';
       }
     }
     const currentlyDown = (statusCode === 'Down' || statusCode === 'Restricted');
@@ -5015,7 +5028,7 @@
       const pureId = (typeof parseEquipKey === 'function') ? parseEquipKey(equipId).id : normaliseEquipId(equipId);
       await addDoc(collection(db, "status_updates"), {
         equipmentId: pureId || equipId, date: new Date().toISOString().slice(0, 10),
-        time: new Date().toTimeString().slice(0, 5), status: 'Fixed', shift: 'Morning',
+        time: new Date().toTimeString().slice(0, 5), status: 'Up', statusCode: 'Up', shift: 'Morning',
         reason: notes || 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
         shaft: markShaft,
         source: 'Mark Fixed', createdAt: serverTimestamp(),
@@ -5223,15 +5236,24 @@
     if (!assertCan('add_status', { equipmentId: equipId }, 'Not authorized to log status for this equipment/shaft')) return;
     const actor = getActor();
     const resolvedShaft = resolveShaftForEquipment(equipId, '');
+    // Canonical equipment status from form: Fixed → Up, only Up or Down stored
+    let formStatus = String(document.getElementById('u-status').value || 'Down').trim();
+    const fsLower = formStatus.toLowerCase();
+    if (fsLower === 'fixed' || fsLower === 'yes' || fsLower === 'y' || fsLower === 'up' || fsLower === 'operational') {
+      formStatus = 'Up';
+    } else {
+      formStatus = 'Down';
+    }
     const data = {
       equipmentId: equipId,
       date: document.getElementById('u-date').value,
       time: document.getElementById('u-time').value,
-      status: document.getElementById('u-status').value,
+      status: formStatus,
+      statusCode: formStatus,
       shift: document.getElementById('u-shift').value,
       reason: document.getElementById('u-reason').value.trim(),
       downtimeHours: Number(document.getElementById('u-downtime').value) || 0,
-      isFailure: document.getElementById('u-failure').value,
+      isFailure: formStatus === 'Down' ? (document.getElementById('u-failure').value || '1') : '0',
       shaft: resolvedShaft,
       createdAt: serverTimestamp(),
       updatedBy: actor.name,
@@ -5400,7 +5422,7 @@
       ['Operation / Shaft', u.shaft||'—'],
       ['ACTUAL FAULT', u.actionTaken||u.actualFault||'—'],
       ['TIME FINISHED', u.timeFinished||u.timeOff||'—'],
-      ['FIXED Y/N', String(u.status||'').toLowerCase()==='fixed' ? 'YES' : (fail ? 'NO' : u.status||'—')],
+      ['FIXED Y/N', (u.fixedYn || (['fixed','up'].includes(String(u.status||'').toLowerCase()) ? 'YES' : (fail ? 'NO' : u.status||'—')))],
       ['WORK ORDER', u.workOrder||u.workOrderNumber||'—'],
       ['DATE FIXED', u.dateFixed||'—'], ['SIGN BY', personFromUpdate(u, 'signed')],
       ['Shift', u.shift||'—'], ['Downtime (hrs)', u.downtimeHours??u.downtime??'0'],
@@ -6407,7 +6429,8 @@
         downtimeHours: dtHrs, shift: shiftVal,
         operator: operatorName, reportedByCompanyNumber, signedBy: signedByName, signedByCompanyNumber,
         action: actual || (isFixed ? 'Fixed' : ''),
-        status: isFixed ? 'Fixed' : 'Down',
+        status: isFixed ? 'Up' : 'Down',
+        fixedYn: isFixed ? 'YES' : 'NO',
         workplace: String(get('workplace') || '').trim(),
         section: String(get('section') || '').trim(),
         shaft: document.getElementById('import-shaft')?.value || '',
@@ -6644,7 +6667,14 @@
           skipped++;
           continue;
         }
-        const rowStatus = String(row.status || 'Down').trim() || 'Down';
+        let rowStatus = String(row.status || 'Down').trim() || 'Down';
+        // Canonicalise: Fixed / YES → Up, everything else that is not already Up stays Down
+        const rsLower = rowStatus.toLowerCase();
+        if (rsLower === 'fixed' || rsLower === 'yes' || rsLower === 'y' || rsLower === 'done' || rsLower === 'ok') {
+          rowStatus = 'Up';
+        } else if (rsLower !== 'up' && rsLower !== 'restricted' && rsLower !== 'standby' && rsLower !== 'outofservice') {
+          rowStatus = 'Down';
+        }
         const isInfo = !!row.isInfoOnly || rowStatus === 'Up';
         const statusPayload = {
           equipmentId: equipId, date: row.date, time: row.time, status: rowStatus, statusCode: rowStatus,
@@ -6657,6 +6687,7 @@
           signedBy: row.signedBy || '',
           signedByCompanyNumber: row.signedByCompanyNumber || '',
           shaft: rowShaft, workplace: row.workplace || '',
+          fixedYn: row.fixedYn || (rowStatus === 'Up' ? 'YES' : 'NO'),
           source: row.source || 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp(),
           updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
           updatedByCompanyNumber: actor.companyNumber || '',
