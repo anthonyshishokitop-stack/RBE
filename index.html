@@ -2818,6 +2818,37 @@
     }
     const effectiveShaft = shaftWant || (eqMaster ? normaliseShaftName(eqMaster.shaft || '') : '');
 
+    // Rank a status for "current operational state" (higher = more closed-out / up)
+    function statusRank(u) {
+      const s = String(u.statusCode || u.status || u.fixedYn || '').trim().toLowerCase();
+      if (s === 'up' || s === 'fixed' || s === 'yes' || s === 'y' || s === 'done' || s === 'ok' || s === 'operational' || s === 'running' || s === 'available') return 3;
+      if (s === 'standby' || s === 'restricted' || s === 'limited') return 2;
+      if (s === 'down' || s === 'offline' || s === 'failed' || s === 'broken' || s === 'no') return 1;
+      // blank status: treat isFailure as Down signal
+      if (u.isFailure === '1' || u.isFailure === 1) return 1;
+      return 0;
+    }
+    function eventMs(u) {
+      // Prefer explicit timestamps for true "last" ordering
+      try {
+        if (u.createdAt && typeof u.createdAt.toMillis === 'function') return u.createdAt.toMillis();
+        if (u.createdAt && typeof u.createdAt === 'object' && u.createdAt.seconds) return Number(u.createdAt.seconds) * 1000;
+        if (u.changedAt) {
+          const t = new Date(u.changedAt).getTime();
+          if (!isNaN(t)) return t;
+        }
+      } catch (e) {}
+      try {
+        const d = String(u.date || '').trim();
+        const t = String(u.time || '00:00').trim().padStart(5, '0');
+        if (d) {
+          const ms = new Date(d + 'T' + t).getTime();
+          if (!isNaN(ms)) return ms;
+        }
+      } catch (e) {}
+      return 0;
+    }
+
     // Collect updates for this ID, then keep only same-shaft (critical: no cross-shaft mixing)
     let eu = (updates || []).filter(u => {
       const uid = normaliseEquipId(u.equipmentId || u.locoNumber);
@@ -2827,7 +2858,17 @@
       if (us) return shaftsMatch(us, effectiveShaft);
       // Update has no shaft: only include if equipment master shaft matches and no conflicting updates
       return true;
-    }).sort((a, b) => String(b.date + ' ' + b.time).localeCompare(String(a.date + ' ' + a.time)));
+    }).sort((a, b) => {
+      // 1) Newest event time first
+      const msDiff = eventMs(b) - eventMs(a);
+      if (msDiff !== 0) return msDiff;
+      // 2) Same reported date/time (common with Excel Live Sync rewrites):
+      //    FIXED=YES / Up ALWAYS wins over Down so current status reflects close-out
+      const rankDiff = statusRank(b) - statusRank(a);
+      if (rankDiff !== 0) return rankDiff;
+      // 3) Stable fallback on reason length (close-out rows often append artisan text)
+      return String(b.reason || '').length - String(a.reason || '').length;
+    });
 
     // If we included shaft-less updates but also have shaft-tagged ones for this shaft, prefer tagged
     if (effectiveShaft) {
@@ -2836,24 +2877,24 @@
     }
 
     const last = eu && eu[0];
-    // Current equipment status = LAST status log only.
+    // Current equipment status = LAST status log only (after sort above).
     // FIXED Y/N YES / status Fixed / Up  → UP
     // FIXED Y/N NO  / status Down         → DOWN
     let statusCode = 'Up';
     if (last) {
-      const rawStatus = String(last.statusCode || last.status || '').trim();
+      const rawStatus = String(last.statusCode || last.status || last.fixedYn || '').trim();
       const rawLower = rawStatus.toLowerCase();
       // Explicit Fixed / YES-style close-out always means operational (Up)
-      if (rawLower === 'fixed' || rawLower === 'yes' || rawLower === 'y' || rawLower === 'done' || rawLower === 'ok') {
+      if (rawLower === 'fixed' || rawLower === 'yes' || rawLower === 'y' || rawLower === 'done' || rawLower === 'ok' || rawLower === 'up') {
         statusCode = 'Up';
       } else if (last.statusCode && STATUS_CODES.includes(last.statusCode)) {
         statusCode = last.statusCode;
       } else {
         statusCode = normaliseStatusCode(last.status || last.statusCode);
       }
-      // isFailure on last open event reinforces Down when status was left blank
-      if (statusCode === 'Up' && (last.isFailure === '1' || last.isFailure === 1) &&
-          !['fixed','up','operational','running','available','yes','y'].includes(rawLower)) {
+      // Only reinforce Down when last entry is clearly a failure and NOT a close-out
+      if (statusCode !== 'Up' && statusCode !== 'Standby' &&
+          (last.isFailure === '1' || last.isFailure === 1 || rawLower === 'down' || rawLower === 'no')) {
         statusCode = 'Down';
       }
     }
