@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor Enterprise 2.3 | Asset Reliability Platform</title>
+  <title>RBE Monitor Enterprise 2.4 | Asset Reliability Platform</title>
   <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.googletagmanager.com blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.google-analytics.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://tessdata.projectnaptha.com blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'">
@@ -3001,7 +3001,7 @@
   function getReliabilityMetrics(id) {
     const st = getEquipmentStatus(id);
     const _rk = (typeof parseEquipKey === 'function') ? parseEquipKey(id) : { id: normaliseEquipId(id), shaft: '' };
-    const eu = getFilteredUpdates().filter(u => {
+    const eu = (_relIndex().get(_rk.id) || []).filter(u => {
       if (normaliseEquipId(u.equipmentId || u.locoNumber || '') !== _rk.id) return false;
       if (_rk.shaft) {
         const us = normaliseShaftName(u.shaft || '');
@@ -3098,8 +3098,9 @@
 
   function populateReliabilityCenter() {
     const ids = collectFilteredIds ? collectFilteredIds() : [...new Set(getFilteredEquipment().map(e => String(e.id)))];
+    const _eqMap = new Map(); (equipment || []).forEach(e => { const k = String(e.id); if (!_eqMap.has(k)) _eqMap.set(k, e); });
     const metrics = ids.map(id => {
-      const eq = (equipment || []).find(e => String(e.id) === String(id));
+      const eq = _eqMap.get(String(id));
       const m = getReliabilityMetrics(id);
       return { id, eq, ...m };
     });
@@ -3314,7 +3315,7 @@
       else if (section === 'calendar') initCalendar();
       else if (section === 'operations-report') populateOperationsReport();
       else if (section === 'text-mining') refreshTextMiningInsights();
-      else if (section === 'reliability-center') populateReliabilityCenter();
+      else if (section === 'reliability-center') deferHeavy('reliability-center', populateReliabilityCenter);
       else if (section === 'audit-log') refreshAuditLog();
       else if (section === 'user-admin') refreshUserAdminList();
     } catch (e) { console.warn(e); }
@@ -4536,7 +4537,7 @@
       clearTimeout(window._calendarInitTimer);
       window._calendarInitTimer = null;
     }
-    el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--text-3);"><i class="fas fa-spinner fa-spin"></i> Loading calendar…</div>';
+    if (!calendar || calendar.el !== el || !el.firstChild) el.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--text-3);"><i class="fas fa-spinner fa-spin"></i> Loading calendar…</div>';
     window._calendarInitTimer = setTimeout(function() {
       window._calendarInitTimer = null;
       _initCalendarNow(el);
@@ -4553,12 +4554,12 @@
       return;
     }
     try {
-      if (calendar) { try { calendar.destroy(); } catch (e) {} calendar = null; }
+      if (calendar && (calendar.el !== el || !el.isConnected || !el.querySelector('.fc'))) { try { calendar.destroy(); } catch (e) {} calendar = null; }
       if (typeof FullCalendar === 'undefined') {
         el.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--danger);">FullCalendar library failed to load. Check network / CDN.</div>';
         return;
       }
-      el.innerHTML = '';
+      if (!calendar) el.innerHTML = '';
       let events = [];
       try {
         events = getMaintenanceEvents() || [];
@@ -4568,6 +4569,11 @@
       }
       // Drop any remaining invalid starts so FullCalendar never throws
       events = events.filter(ev => isValidEventDate(ev && ev.start));
+      if (calendar) {
+        calendar.batchRendering(() => { calendar.removeAllEvents(); calendar.addEventSource(events); });
+        requestAnimationFrame(() => { try { calendar.updateSize(); } catch (e) {} });
+        return;
+      }
       const isMobile = window.innerWidth <= 768;
       calendar = new FullCalendar.Calendar(el, {
         initialView: isMobile ? 'listWeek' : 'dayGridMonth',
@@ -7017,6 +7023,60 @@
   fillDatalist();
   populateShaftFilter();
   show('dashboard');
+
+/* ═══ v2.4 performance layer: memoised selectors, indexed reliability lookups, deferred heavy views ═══ */
+const _pc = { refs: null, key: '', fu: null, fe: null, fm: null, ids: null, pat: null, ev: null, rm: new Map(), idx: null };
+function _pcCheck() {
+  const key = [currentShaftFilter || '', currentTypeFilter || '', currentUserRole || '', (currentAllowedShafts || []).join(','),
+    dismissedAlerts.size, (updates || []).length, (equipment || []).length, (maintenance || []).length, new Date().toDateString()].join('|');
+  if (!_pc.refs || _pc.refs[0] !== equipment || _pc.refs[1] !== updates || _pc.refs[2] !== maintenance || _pc.key !== key) {
+    _pc.refs = [equipment, updates, maintenance]; _pc.key = key;
+    _pc.fu = _pc.fe = _pc.fm = _pc.ids = _pc.pat = _pc.ev = _pc.idx = null; _pc.rm.clear();
+  }
+}
+function _memo(slot, fn) { return function () { _pcCheck(); return _pc[slot] || (_pc[slot] = fn.apply(this, arguments)); }; }
+getFilteredUpdates = _memo('fu', getFilteredUpdates);
+getFilteredEquipment = _memo('fe', getFilteredEquipment);
+getFilteredMaintenance = _memo('fm', getFilteredMaintenance);
+collectFilteredIds = _memo('ids', collectFilteredIds);
+analyseFailurePatterns = _memo('pat', analyseFailurePatterns);
+getMaintenanceEvents = _memo('ev', getMaintenanceEvents);
+(function () {
+  const orig = getReliabilityMetrics;
+  getReliabilityMetrics = function (id) {
+    _pcCheck(); const k = String(id);
+    if (_pc.rm.has(k)) return _pc.rm.get(k);
+    const r = orig(id); _pc.rm.set(k, r); return r;
+  };
+  window.getReliabilityMetrics = getReliabilityMetrics;
+})();
+function _relIndex() {
+  _pcCheck();
+  if (_pc.idx) return _pc.idx;
+  const m = new Map();
+  getFilteredUpdates().forEach(u => {
+    const k = normaliseEquipId(u.equipmentId || u.locoNumber || '');
+    let a = m.get(k); if (!a) m.set(k, a = []); a.push(u);
+  });
+  return (_pc.idx = m);
+}
+let _deferTok = 0;
+function deferHeavy(sectionId, fn) {
+  const tok = ++_deferTok;
+  const sec = document.getElementById(sectionId);
+  if (sec && !sec.dataset.painted) {
+    const kpi = sec.querySelector('[id$="kpi-grid"]');
+    if (kpi) kpi.innerHTML = '<div style="grid-column:1/-1;padding:1.25rem;text-align:center;color:var(--text-3);"><i class="fas fa-spinner fa-spin"></i> Calculating reliability metrics…</div>';
+  }
+  requestAnimationFrame(() => setTimeout(() => {
+    if (tok !== _deferTok) return;
+    const cur = document.querySelector('section:not(.hidden)');
+    if (!cur || cur.id !== sectionId) return;
+    const t0 = performance.now();
+    try { fn(); if (sec) sec.dataset.painted = '1'; } catch (e) { console.warn(e); }
+    console.debug('[RBE] ' + sectionId + ' rendered in ' + Math.round(performance.now() - t0) + ' ms');
+  }, 0));
+}
 </script>
 
 <script>
