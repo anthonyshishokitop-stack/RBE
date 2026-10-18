@@ -3,9 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor Enterprise 2.2 | Asset Reliability Platform</title>
+  <title>RBE Monitor Enterprise 2.3 | Asset Reliability Platform</title>
   <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.googletagmanager.com blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.google-analytics.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://tessdata.projectnaptha.com blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <script>
+  /* v2.3 safety helpers (available before the app module runs) */
+  window.escapeHtml=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]});};
+  window.escJs=function(v){return String(v==null?'':v).replace(/[\\'"<>&\r\n\u2028\u2029]/g,function(c){return '\\x'+('0'+c.charCodeAt(0).toString(16)).slice(-2).replace(/^(..)$/,'$1');}).replace(/\\x(0a|0d)/g,' ');};
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -665,6 +672,21 @@
       .chart-container { height: 230px; }
       table { font-size: 0.83rem; }
     }
+
+    /* ===== v2.3 additions ===== */
+    [data-theme="dark"]{--bg:#0b1220;--surface:#111a2e;--surface-2:#16213a;--surface-3:#1e2b49;--text:#e6edf7;--text-2:#b6c2d6;--text-3:#8a98b0;--border:#2a3957;--border-light:#223050;--primary:#38bdf8;--primary-600:#0ea5e9;--primary-light:#7dd3fc;--primary-soft:rgba(56,189,248,.12);color-scheme:dark}
+    #v23-net{position:fixed;top:0;left:0;right:0;z-index:5000;background:#b45309;color:#fff;text-align:center;padding:.4rem;font-size:.8rem;font-weight:600;display:none}
+    #v23-net.show{display:block}
+    #v23-fab{position:fixed;right:14px;bottom:14px;z-index:1500;display:flex;gap:6px}
+    #v23-fab button{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:.5rem .8rem;font-size:.78rem;cursor:pointer;box-shadow:var(--shadow-md)}
+    #v23-pal{position:fixed;inset:0;background:rgba(2,6,23,.55);z-index:6000;display:none;align-items:flex-start;justify-content:center;padding-top:12vh}
+    #v23-pal.open{display:flex}
+    #v23-pal .box{width:min(560px,92vw);background:var(--surface);color:var(--text);border-radius:12px;box-shadow:var(--shadow-lg);overflow:hidden;border:1px solid var(--border)}
+    #v23-pal input{width:100%;border:0;border-bottom:1px solid var(--border);padding:1rem;font-size:1rem;background:transparent;color:inherit;outline:none}
+    #v23-pal ul{list-style:none;margin:0;padding:.3rem;max-height:50vh;overflow:auto}
+    #v23-pal li{padding:.6rem .8rem;border-radius:8px;cursor:pointer;font-size:.9rem}
+    #v23-pal li.sel,#v23-pal li:hover{background:var(--primary-soft)}
+    @media print{.sidebar,#v23-fab,#v23-net,#v23-pal,.toast{display:none!important}.main{margin:0!important}body{background:#fff!important}}
   </style>
 </head>
 <body>
@@ -1827,6 +1849,17 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+  /* v2.3 – idle session timeout (30 min, warning at 28) */
+  (function(){
+    const LIMIT=30*60*1000, WARN=28*60*1000; let t1,t2;
+    function reset(){clearTimeout(t1);clearTimeout(t2);
+      if(!auth.currentUser) return;
+      t2=setTimeout(()=>{try{showToast('Session expires in 2 minutes due to inactivity','warning');}catch(e){}},WARN);
+      t1=setTimeout(()=>{try{signOut(auth);}catch(e){}},LIMIT);}
+    ['click','keydown','mousemove','touchstart','scroll'].forEach(e=>window.addEventListener(e,reset,{passive:true}));
+    onAuthStateChanged(auth,reset);
+  })();
+
   let equipment = [], updates = [], maintenance = [], delaysData = [];
   let currentShaftFilter = '', currentTypeFilter = '';
   const EQUIPMENT_TYPES = ['Loco','Guard Car','Loader','Hopper','Carriage','Charger','Battery Charger','Winder','Winch','Compressor','Substation','Ventilation Fan','Pump','Conveyor','Drill','Transformer','Other'];
@@ -2716,32 +2749,32 @@
     const sel = document.getElementById('shaft-filter');
     if (sel) {
       const current = sel.value;
-      sel.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+      sel.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
       if (current && shafts.includes(current)) sel.value = current;
       else if (current && !shafts.includes(current)) sel.value = '';
     }
     const tsel = document.getElementById('type-filter');
     if (tsel) {
       const curT = tsel.value;
-      tsel.innerHTML = '<option value="">All Types</option>' + EQUIPMENT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+      tsel.innerHTML = '<option value="">All Types</option>' + EQUIPMENT_TYPES.map(t => `<option value="${escapeHtml(t)}">${t}</option>`).join('');
       if (curT) tsel.value = curT;
     }
     const addSel = document.getElementById('shaft');
     if (addSel) {
       const cur = addSel.value;
-      addSel.innerHTML = '<option value="">Select Operation</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+      addSel.innerHTML = '<option value="">Select Operation</option>' + shafts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
       if (cur) addSel.value = cur;
     }
     const editShaft = document.getElementById('edit-eq-shaft');
     if (editShaft) {
       const curE = editShaft.value;
-      editShaft.innerHTML = '<option value="">— Unassigned —</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+      editShaft.innerHTML = '<option value="">— Unassigned —</option>' + shafts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
       if (curE) editShaft.value = curE;
     }
     const importShaft = document.getElementById('import-shaft');
     if (importShaft) {
       const curI = importShaft.value;
-      importShaft.innerHTML = '<option value="">Auto-detect</option>' + shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+      importShaft.innerHTML = '<option value="">Auto-detect</option>' + shafts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
       if (curI) importShaft.value = curI;
     }
   }
@@ -2763,7 +2796,7 @@
       if (!isNaN(na) && !isNaN(nb)) return na - nb;
       return String(a).localeCompare(String(b));
     });
-    dl.innerHTML = ids.map(id => `<option value="${id}">`).join('');
+    dl.innerHTML = ids.map(id => `<option value="${escapeHtml(id)}">`).join('');
   }
 
   /**
@@ -3056,6 +3089,8 @@
       failures: fails,
       downtime,
       obsDays,
+      inherentAvailability: (mtbf != null && mttr != null && (mtbf + mttr) > 0) ? Math.round(mtbf / (mtbf + mttr) * 1000) / 10 : null,
+      failureRatePer1000h: (mtbf != null && mtbf > 0) ? Math.round(1000 / mtbf * 100) / 100 : null,
       confidence: (fails >= MIN_FAILURES_FOR_MTBF && obsDays >= MIN_DAYS_FOR_MTBF) ? 'High' : (eu.length >= 5 ? 'Medium' : 'Low')
     };
   }
@@ -3099,7 +3134,7 @@
       } else {
         tbody.innerHTML = metrics.slice(0, 80).map(m => {
           const type = m.eq ? inferEquipmentType(m.eq) : inferEquipmentType(m.id);
-          const esc = String(m.id).replace(/'/g, "\\'");
+          const esc = escJs(m.id);
           return `<tr class="row-clickable" onclick="showEquipmentDetail('${esc}')">
             <td><strong>${String((typeof displayEquipId === 'function' ? displayEquipId(m.id) : m.id)).replace(/</g,'&lt;')}</strong></td>
             <td>${type}</td>
@@ -3833,11 +3868,11 @@
       } else {
         tbody.innerHTML = filtered.map(x => {
           const type = x.eq ? inferEquipmentType(x.eq) : inferEquipmentType(x.id);
-          const escId = String(x.id).replace(/'/g, "\\'");
+          const escId = escJs(x.id);
           const availDisp = x.st.availabilityLabel || (x.st.availability != null ? Number(x.st.availability).toFixed(1) + '%' : 'Insufficient data');
           const sc = x.st.status;
           const statusColor = (sc === 'Down' || sc === 'Restricted') ? '#dc2626' : (sc === 'Up' || sc === 'Standby' ? '#16a34a' : '#64748b');
-          const clickKey = String(x.key || x.id).replace(/'/g, "\\'");
+          const clickKey = escJs(x.key || x.id);
           return `<tr class="row-clickable" onclick="showEquipmentDetail('${clickKey}')">
             <td><strong>${String(x.id).replace(/</g,'&lt;')}</strong></td>
             <td>${type}</td>
@@ -3929,7 +3964,7 @@
         <div style="font-weight:600;word-break:break-word;">${String(v == null || v === '' ? '—' : v).replace(/</g,'&lt;')}</div>
       </div>`).join('') + auditHtml;
     }
-    const escId = String(id).replace(/'/g, "\\'");
+    const escId = escJs(id);
     if (actions) {
       let btns = `<button type="button" class="btn btn-primary" onclick="closeAllModals();show('search-status');document.getElementById('s-loco').value='${escId}';document.getElementById('search-form').requestSubmit();"><i class="fas fa-search"></i> View History</button>`;
       if (can('mark_fixed')) {
@@ -3969,8 +4004,8 @@
         <div style="font-weight:600;word-break:break-word;">${String(v == null || v === '' ? '—' : v).replace(/</g,'&lt;')}</div>
       </div>`).join('');
     }
-    const escEq = String(m.equipment || '').replace(/'/g, "\\'");
-    const escId = String(m.id || '').replace(/'/g, "\\'");
+    const escEq = escJs(m.equipment || '');
+    const escId = escJs(m.id || '');
     if (actions) {
       actions.innerHTML = `
         <button type="button" class="btn btn-success" onclick="closeModal('equip-detail-modal');markEquipmentFixed('${escEq}','${escId}');"><i class="fas fa-check"></i> Mark Fixed</button>
@@ -4223,7 +4258,7 @@
   function populateEquipmentTable() {
     const list = getFilteredEquipment();
     const rows = list.map(e => {
-      const id = String(e.id || '').replace(/'/g, "\\'");
+      const id = escJs(e.id || '');
       return `<tr class="row-clickable" onclick="openEquipmentRowActions('${id}')" title="Click for actions / profile">
         <td>${e.shaft || '—'}</td><td>${e.level || '-'}</td><td>${inferEquipmentType(e)}</td>
         <td>${e.locoSize || '-'}</td><td><strong>${e.id}</strong></td><td>${e.section || '-'}</td><td>${e.oem || e.OEM || '—'}</td>
@@ -4235,7 +4270,7 @@
   }
 
   function openEquipmentRowActions(id) {
-    const escId = String(id).replace(/'/g, "\\'");
+    const escId = escJs(id);
     let html = `<button type="button" class="btn btn-primary" style="width:100%;" onclick="closeModal('row-actions-modal');showEquipmentDetail('${escId}');"><i class="fas fa-id-card"></i> View Profile / Detail</button>`;
     if (can('edit_equipment')) {
       html += `<button type="button" class="btn btn-primary" style="width:100%;" onclick="closeModal('row-actions-modal');openEditEquipment('${escId}');"><i class="fas fa-edit"></i> Edit</button>`;
@@ -4256,8 +4291,8 @@
       if (m.source === 'failure-pattern') pattern++;
       const disp = isNaN(days) ? '-' : (days >= 0 ? days : Math.abs(days) + ' overdue');
       const source = m.source === 'failure-pattern' ? 'Predictive' : 'Manual';
-      const escEq = String(m.equipment || '').replace(/'/g, "\\'");
-      const escId = String(m.id || '').replace(/'/g, "\\'");
+      const escEq = escJs(m.equipment || '');
+      const escId = escJs(m.id || '');
       return `<tr class="row-clickable" onclick="openMaintRowActions('${escEq}','${escId}')" title="Click for actions">
         <td>${m.equipment}</td><td>${m.task}</td><td>${m.interval || '-'}</td><td>${m.lastDone || '-'}</td>
         <td>${m.dueDate || calculateNextDue(m.lastDone, m.interval) || '-'}</td><td>${disp}</td><td>${source}</td>
@@ -4276,8 +4311,8 @@
   }
 
   function openMaintRowActions(equipId, maintId) {
-    const escEq = String(equipId).replace(/'/g, "\\'");
-    const escId = String(maintId || '').replace(/'/g, "\\'");
+    const escEq = escJs(equipId);
+    const escId = escJs(maintId || '');
     showRowActions('Maintenance: ' + equipId, `
       <button type="button" class="btn btn-success" style="width:100%;" onclick="closeModal('row-actions-modal');markEquipmentFixed('${escEq}','${escId}');"><i class="fas fa-check"></i> Mark Fixed</button>
       <button type="button" class="btn btn-primary" style="width:100%;" onclick="closeModal('row-actions-modal');showEquipmentDetail('${escEq}');"><i class="fas fa-id-card"></i> Equipment Profile</button>
@@ -4343,7 +4378,7 @@
 
     const problemHtml = problemRows.length
       ? problemRows.map(r => {
-          const escId = String(r[0]).replace(/'/g, "\\'");
+          const escId = escJs(r[0]);
           return `<tr class="row-clickable" onclick="showProblemEquipmentDetail('${escId}')" title="Click for detail">
             <td><strong>${String(r[0]).replace(/</g,'&lt;')}</strong></td><td>${r[1]}</td>
             <td style="font-weight:700;color:${r[2]==='RED'?'#dc2626':r[2]==='ORANGE'?'#ea580c':'#16a34a'}">${r[2]}</td>
@@ -4360,7 +4395,7 @@
 
     const highHtml = highRiskRows.length
       ? highRiskRows.map(r => {
-          const escId = String(r[0]).replace(/'/g, "\\'");
+          const escId = escJs(r[0]);
           return `<tr class="row-clickable" onclick="showHighRiskDetail('${escId}')" title="Click for detail">
             <td><strong>${String(r[0]).replace(/</g,'&lt;')}</strong></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}%</td></tr>`;
         })
@@ -4664,7 +4699,7 @@
 
     window._lastBadActors = analysis.badList || [];
     const badRows = (analysis.badList || []).map((r, i) => {
-      const escId = String(r.id || '').replace(/'/g, "\\'");
+      const escId = escJs(r.id || '');
       return `<tr class="row-clickable" onclick="showBadActorDetail('${escId}')" title="Click for detail">
         <td>${i+1}</td><td><strong>${String(r.id).replace(/</g,'&lt;')}</strong></td><td>${r.count}</td><td>${Math.round(r.down*10)/10}</td><td>${r.topMode}</td>
         <td style="max-width:280px;white-space:normal;">${(r.lastReason||'').replace(/</g,'&lt;')}</td></tr>`;
@@ -5528,7 +5563,7 @@
     const sel = document.getElementById('import-shaft');
     if (!sel) return;
     const prev = sel.value;
-    sel.innerHTML = '<option value="">Auto-detect</option>' + RBE_SHAFTS.map(s => `<option value="${s}">${s}</option>`).join('');
+    sel.innerHTML = '<option value="">Auto-detect</option>' + RBE_SHAFTS.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     if (prev) sel.value = prev;
   }
   // ── PDF import (text + optional OCR) ─────────────────────────
@@ -6824,7 +6859,7 @@
     const sel = document.getElementById('invite-shafts');
     if (!sel) return;
     const shafts = getKnownShaftsList();
-    sel.innerHTML = shafts.map(s => `<option value="${s}">${s}</option>`).join('');
+    sel.innerHTML = shafts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   }
 
   window.selectAllInviteShafts = function(on) {
@@ -6858,7 +6893,7 @@
         const shafts = Array.isArray(u.allowedShafts) ? u.allowedShafts : [];
         const shaftLabel = shafts.length > 4 ? shafts.slice(0, 4).join(', ') + '…' : (shafts.join(', ') || '—');
         const status = u.status || 'active';
-        const escId = String(u.id).replace(/'/g, "\\'");
+        const escId = escJs(u.id);
         return `<tr>
           <td>${String(u.email || u.id).replace(/</g,'&lt;')}</td>
           <td><span class="role-badge ${u.role || 'viewer'}">${u.role || '—'}</span></td>
@@ -7100,5 +7135,33 @@
 })();
 </script>
 
+<script>
+/* v2.3 – command palette, dark mode, offline banner, error capture */
+(function(){
+  var root=document.documentElement;
+  try{var th=localStorage.getItem('rbe_theme');if(th)root.setAttribute('data-theme',th);}catch(e){}
+  var net=document.createElement('div');net.id='v23-net';net.textContent='You are offline – changes will sync when the connection returns.';document.body.appendChild(net);
+  function upd(){net.classList.toggle('show',!navigator.onLine)}addEventListener('online',upd);addEventListener('offline',upd);upd();
+  var fab=document.createElement('div');fab.id='v23-fab';
+  fab.innerHTML='<button type="button" id="v23-k" title="Command palette (Ctrl/Cmd+K)" aria-label="Open command palette"><i class="fas fa-magnifying-glass"></i> Ctrl K</button><button type="button" id="v23-t" title="Toggle dark mode" aria-label="Toggle dark mode"><i class="fas fa-circle-half-stroke"></i></button>';
+  document.body.appendChild(fab);
+  document.getElementById('v23-t').onclick=function(){var d=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',d);try{localStorage.setItem('rbe_theme',d)}catch(e){}};
+  var pal=document.createElement('div');pal.id='v23-pal';pal.setAttribute('role','dialog');pal.setAttribute('aria-modal','true');pal.setAttribute('aria-label','Command palette');
+  pal.innerHTML='<div class="box"><input type="text" placeholder="Jump to a section…" aria-label="Search sections"><ul></ul></div>';
+  document.body.appendChild(pal);
+  var inp=pal.querySelector('input'),ul=pal.querySelector('ul'),items=[],sel=0;
+  function build(){items=[].slice.call(document.querySelectorAll('#sidebar li[data-section]')).filter(function(li){return li.offsetParent!==null||li.getClientRects().length||true}).filter(function(li){return !li.hidden&&getComputedStyle(li).display!=='none'}).map(function(li){return{el:li,label:(li.getAttribute('data-tooltip')||li.textContent).trim(),kw:(li.getAttribute('data-keywords')||'')}})}
+  function render(){var q=inp.value.toLowerCase().trim();var r=items.filter(function(i){return !q||(i.label+' '+i.kw).toLowerCase().indexOf(q)>-1});if(sel>=r.length)sel=0;ul.innerHTML='';r.forEach(function(i,ix){var li=document.createElement('li');li.textContent=i.label;if(ix===sel)li.className='sel';li.onclick=function(){go(i)};ul.appendChild(li)});pal._r=r}
+  function go(i){close();i.el.click()}
+  function open(){build();inp.value='';sel=0;render();pal.classList.add('open');inp.focus()}
+  function close(){pal.classList.remove('open')}
+  document.getElementById('v23-k').onclick=open;
+  pal.addEventListener('click',function(e){if(e.target===pal)close()});
+  inp.addEventListener('input',function(){sel=0;render()});
+  inp.addEventListener('keydown',function(e){var r=pal._r||[];if(e.key==='ArrowDown'){sel=Math.min(sel+1,r.length-1);render();e.preventDefault()}else if(e.key==='ArrowUp'){sel=Math.max(sel-1,0);render();e.preventDefault()}else if(e.key==='Enter'&&r[sel]){go(r[sel])}else if(e.key==='Escape'){close()}});
+  addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();pal.classList.contains('open')?close():open()}});
+  addEventListener('unhandledrejection',function(e){console.error('Unhandled:',e.reason)});
+})();
+</script>
 </body>
 </html>
