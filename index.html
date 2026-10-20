@@ -2311,6 +2311,87 @@
   }
 
   // ── Core helpers ─────────────────────────────────────────────
+  /**
+   * Parse structured Equipment IDs used on shafts (esp. 16 Shaft), e.g.:
+   *   16L10T047  → shaft 16, type Loco (L), size 10T (10 Ton), number 047
+   *   16-L-10T-047 / 16L10T-047 (hyphen variants)
+   *   11W56WN0340-style is handled separately via wn/lh patterns
+   * Returns null if the ID is not structured this way.
+   */
+  function parseStructuredEquipId(raw) {
+    let s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!s) return null;
+    // Strip optional LOCO prefix before structure check
+    s = s.replace(/^(LOCO|LOCOMOTIVE)[\-_]?/i, '');
+    const typeMap = {
+      L: 'Loco',           // Locomotive — e.g. 16L10T047
+      W: 'Winch',
+      H: 'Hopper',
+      G: 'Guard Car',
+      C: 'Carriage',
+      V: 'Ventilation Fan',
+      P: 'Pump',
+      D: 'Drill',
+      T: 'Transformer',
+      F: 'Ventilation Fan',
+      X: 'Conveyor',
+      S: 'Substation',
+      R: 'Loader'          // R = LHD / Loader when used in structured form
+    };
+    // Prefer size with explicit T (tonnage): 16L10T047, 16-L-10T-047, 12L8T012
+    let m = s.match(/^(\d{1,2})[\-_]?([A-Z])[\-_]?(\d{1,3}T)[\-_]?(\d{2,6})$/i);
+    if (m) {
+      const typeLetter = m[2].toUpperCase();
+      if (!typeMap[typeLetter]) return null;
+      const size = String(m[3] || '').toUpperCase();
+      return {
+        shaftNum: m[1],
+        shaft: m[1] + ' Shaft',
+        typeLetter,
+        type: typeMap[typeLetter],
+        size,
+        number: m[4],
+        canonical: (m[1] + typeLetter + size + m[4]).toUpperCase(),
+        matched: true
+      };
+    }
+    // Size without T but clearly separated: 16L10-047 (hyphen before number)
+    m = s.match(/^(\d{1,2})[\-_]?([A-Z])[\-_]?(\d{1,3})[\-_](\d{2,6})$/i);
+    if (m) {
+      const typeLetter = m[2].toUpperCase();
+      if (!typeMap[typeLetter]) return null;
+      const size = String(m[3] || '').toUpperCase();
+      return {
+        shaftNum: m[1],
+        shaft: m[1] + ' Shaft',
+        typeLetter,
+        type: typeMap[typeLetter],
+        size: size + 'T',
+        number: m[4],
+        canonical: (m[1] + typeLetter + size + 'T' + m[4]).toUpperCase(),
+        matched: true
+      };
+    }
+    // Shaft + type + number only (no size): 16L047
+    m = s.match(/^(\d{1,2})[\-_]?([A-Z])[\-_]?(\d{2,6})$/i);
+    if (m) {
+      const typeLetter = m[2].toUpperCase();
+      if (!typeMap[typeLetter]) return null;
+      return {
+        shaftNum: m[1],
+        shaft: m[1] + ' Shaft',
+        typeLetter,
+        type: typeMap[typeLetter],
+        size: '',
+        number: m[3],
+        canonical: (m[1] + typeLetter + m[3]).toUpperCase(),
+        matched: true
+      };
+    }
+    return null;
+  }
+  window.parseStructuredEquipId = parseStructuredEquipId;
+
   function inferEquipmentType(eqOrId, sizeHint) {
     let explicit = '';
     let id = '';
@@ -2324,6 +2405,10 @@
     // Always classify from the ID first — stored equipmentType is often wrong ("Loco" default from imports)
     const s = (id + ' ' + String(sizeHint || '')).toLowerCase().trim();
     const idOnly = id.toLowerCase().trim();
+
+    // --- Structured shaft IDs: 16L10T047 → Loco (checked before generic patterns) ---
+    const structured = parseStructuredEquipId(id);
+    if (structured && structured.type) return structured.type;
 
     // --- Named asset classes (checked before Loco) ---
     if (/battery\s*charg|batt\s*charg/.test(s)) return 'Battery Charger';
@@ -2389,6 +2474,14 @@
     if (explicitShaft && String(explicitShaft).trim()) {
       return (typeof normaliseShaftName === 'function')
         ? normaliseShaftName(explicitShaft) : String(explicitShaft).trim();
+    }
+    // Structured IDs encode shaft: 16L10T047 → 16 Shaft
+    if (typeof parseStructuredEquipId === 'function') {
+      const st = parseStructuredEquipId(equipmentId);
+      if (st && st.shaft) {
+        return (typeof normaliseShaftName === 'function')
+          ? normaliseShaftName(st.shaft) : st.shaft;
+      }
     }
     const idNorm = (typeof normaliseEquipId === 'function')
       ? normaliseEquipId(equipmentId) : String(equipmentId || '').trim();
@@ -2563,7 +2656,22 @@
     s = s.replace(/^(LOCO|Loco|loco)[\s\-_]*/i, '').trim();
     s = s.replace(/[\/\\#?\[\]]+/g, '-').replace(/\s+/g, ' ').trim();
     // Canonical form is always UPPERCASE so 12G21 / 12g21 never diverge
-    return s.toUpperCase();
+    s = s.toUpperCase();
+    // Structured shaft IDs: collapse optional hyphens → 16L10T047 (stable matching)
+    if (typeof parseStructuredEquipId === 'function') {
+      const st = parseStructuredEquipId(s);
+      if (st && st.canonical) return st.canonical;
+    }
+    // Also collapse hyphens in near-structured forms so 16-L-10T-047 matches 16L10T047
+    const collapsed = s.replace(/[\-_]+/g, '');
+    if (/^\d{1,2}[A-Z]\d/.test(collapsed) && collapsed !== s) {
+      if (typeof parseStructuredEquipId === 'function') {
+        const st2 = parseStructuredEquipId(collapsed);
+        if (st2 && st2.canonical) return st2.canonical;
+      }
+      return collapsed;
+    }
+    return s;
   }
 
   function equipIdsMatch(a, b) {
@@ -2582,8 +2690,21 @@
   }
 
   function shaftOfEquipment(eqOrId) {
-    if (eqOrId && typeof eqOrId === 'object') return normaliseShaftName(eqOrId.shaft || '');
+    if (eqOrId && typeof eqOrId === 'object') {
+      if (eqOrId.shaft) return normaliseShaftName(eqOrId.shaft || '');
+      // Fall through to ID structure if object has no shaft
+      const oid = String(eqOrId.id || eqOrId.equipmentId || '');
+      if (oid && typeof parseStructuredEquipId === 'function') {
+        const st = parseStructuredEquipId(oid);
+        if (st && st.shaft) return normaliseShaftName(st.shaft);
+      }
+      return '';
+    }
     const id = String(eqOrId || '');
+    if (typeof parseStructuredEquipId === 'function') {
+      const st = parseStructuredEquipId(id);
+      if (st && st.shaft) return normaliseShaftName(st.shaft);
+    }
     const eq = (equipment || []).find(e => normaliseEquipId(e.id) === normaliseEquipId(id)
       && (!currentShaftFilter || shaftsMatch(e.shaft, currentShaftFilter)));
     if (eq) return normaliseShaftName(eq.shaft || '');
@@ -4261,8 +4382,8 @@
     const rows = list.map(e => {
       const id = escJs(e.id || '');
       return `<tr class="row-clickable" onclick="openEquipmentRowActions('${id}')" title="Click for actions / profile">
-        <td>${e.shaft || '—'}</td><td>${e.level || '-'}</td><td>${inferEquipmentType(e)}</td>
-        <td>${e.locoSize || '-'}</td><td><strong>${e.id}</strong></td><td>${e.section || '-'}</td><td>${e.oem || e.OEM || '—'}</td>
+        <td>${e.shaft || (typeof parseStructuredEquipId === 'function' && parseStructuredEquipId(e.id)?.shaft) || '—'}</td><td>${e.level || '-'}</td><td>${inferEquipmentType(e)}</td>
+        <td>${e.locoSize || (typeof parseStructuredEquipId === 'function' && (() => { const st = parseStructuredEquipId(e.id); if (!st || !st.size) return '-'; return /^\d+T$/i.test(st.size) ? st.size.replace(/T$/i,'') + ' Ton' : st.size; })()) || '-'}</td><td><strong>${e.id}</strong></td><td>${e.section || '-'}</td><td>${e.oem || e.OEM || '—'}</td>
         <td style="color:var(--text-3);font-size:0.85rem;"><i class="fas fa-ellipsis-h"></i> Actions</td></tr>`;
     });
     renderPagedTable('equipment', rows);
@@ -5284,7 +5405,45 @@
     }
   })();
 
-  document.getElementById('add-eq-form').addEventListener('submit', async e => {
+  
+  // Auto-classify structured Equipment IDs (e.g. 16L10T047 → Loco, 10T, 16 Shaft)
+  (function bindStructuredEquipIdAutofill() {
+    const idInput = document.getElementById('loco-number');
+    if (!idInput || idInput.dataset.structuredBound) return;
+    idInput.dataset.structuredBound = '1';
+    function applyFromId() {
+      const raw = idInput.value.trim();
+      if (!raw || typeof parseStructuredEquipId !== 'function') return;
+      const st = parseStructuredEquipId(raw);
+      if (!st || !st.matched) return;
+      const typeSel = document.getElementById('eq-type');
+      const sizeInp = document.getElementById('loco-size');
+      const shaftSel = document.getElementById('shaft');
+      if (typeSel && st.type) {
+        // Select matching option if present
+        const opts = [...typeSel.options];
+        const hit = opts.find(o => o.value.toLowerCase() === st.type.toLowerCase());
+        if (hit) typeSel.value = hit.value;
+        else typeSel.value = st.type;
+      }
+      if (sizeInp && st.size) {
+        // Prefer human-readable size when tonnage letter present
+        if (/^\d+T$/i.test(st.size)) sizeInp.value = st.size.replace(/T$/i, '') + ' Ton';
+        else sizeInp.value = st.size;
+      }
+      if (shaftSel && st.shaft) {
+        const want = (typeof normaliseShaftName === 'function') ? normaliseShaftName(st.shaft) : st.shaft;
+        const opts = [...shaftSel.options];
+        const hit = opts.find(o => o.value === want || o.value === st.shaft ||
+          ((typeof normaliseShaftName === 'function') && normaliseShaftName(o.value) === want));
+        if (hit) shaftSel.value = hit.value;
+      }
+    }
+    idInput.addEventListener('blur', applyFromId);
+    idInput.addEventListener('change', applyFromId);
+  })();
+
+document.getElementById('add-eq-form').addEventListener('submit', async e => {
     e.preventDefault();
     const shaftVal = document.getElementById('shaft').value;
     if (!assertCan('add_equipment', { shaft: shaftVal }, 'Not authorized to add equipment for this shaft')) return;
@@ -5293,12 +5452,25 @@
     const id = sanitizeEquipmentId(rawId);
     if (!id) return showToast('Valid Equipment ID required', 'error');
     try {
+      let eqType = document.getElementById('eq-type').value || '';
+      let eqSize = document.getElementById('loco-size').value || '';
+      let eqShaft = shaftVal;
+      if (typeof parseStructuredEquipId === 'function') {
+        const st = parseStructuredEquipId(rawId) || parseStructuredEquipId(id);
+        if (st && st.matched) {
+          if (!eqType && st.type) eqType = st.type;
+          if (!eqSize && st.size) {
+            eqSize = /^\d+T$/i.test(st.size) ? (st.size.replace(/T$/i, '') + ' Ton') : st.size;
+          }
+          if (!eqShaft && st.shaft) eqShaft = (typeof normaliseShaftName === 'function') ? normaliseShaftName(st.shaft) : st.shaft;
+        }
+      }
       const payload = {
-        shaft: shaftVal,
+        shaft: eqShaft,
         level: document.getElementById('level').value,
-        equipmentType: document.getElementById('eq-type').value || '',
+        equipmentType: eqType,
         oem: document.getElementById('eq-oem').value.trim() || '',
-        locoSize: document.getElementById('loco-size').value,
+        locoSize: eqSize,
         section: document.getElementById('section').value,
         updatedBy: actor.name,
         updatedByEmail: actor.email,
@@ -6811,15 +6983,28 @@
         const existingShaft = existingEq && existingEq.shaft ? String(existingEq.shaft).trim() : '';
         const writeShaft = rowShaft || existingShaft || '';
         // Do not clear a known shaft with an empty value on merge
-        const eqType = row.equipmentType
+        let eqType = row.equipmentType
           || ((typeof inferEquipmentType === 'function') ? inferEquipmentType(equipId) : '')
           || (existingEq && existingEq.equipmentType) || 'Other';
+        let eqSize = (existingEq && existingEq.locoSize) || '';
+        let structuredShaft = '';
+        if (typeof parseStructuredEquipId === 'function') {
+          const st = parseStructuredEquipId(equipId);
+          if (st && st.matched) {
+            if (st.type) eqType = st.type;
+            if (st.size && !eqSize) {
+              eqSize = /^\d+T$/i.test(st.size) ? (st.size.replace(/T$/i, '') + ' Ton') : st.size;
+            }
+            if (st.shaft) structuredShaft = (typeof normaliseShaftName === 'function') ? normaliseShaftName(st.shaft) : st.shaft;
+          }
+        }
         const eqLevel = row.level || row.workplace || (existingEq && existingEq.level) || '';
         await setDoc(doc(db, 'equipment', equipId), {
-          shaft: writeShaft,
+          shaft: writeShaft || structuredShaft || '',
           level: eqLevel,
           crosscut: row.crosscut || (existingEq && existingEq.crosscut) || '',
           equipmentType: eqType,
+          locoSize: eqSize || (existingEq && existingEq.locoSize) || '',
           source: row.source || 'Imported Breakdown Report',
           updatedAt: new Date().toISOString(),
           updatedBy: actor.name, updatedByEmail: actor.email
