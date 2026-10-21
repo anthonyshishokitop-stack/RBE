@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor Enterprise 2.4 | Asset Reliability Platform</title>
+  <title>RBE Monitor Enterprise 2.5 | Asset Reliability Platform</title>
   <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.googletagmanager.com blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.google-analytics.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://tessdata.projectnaptha.com blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'">
@@ -949,20 +949,25 @@
         <section id="add-equipment" class="hidden">
           <div class="header-bar"><h1>Add New Equipment</h1></div>
           <form id="add-eq-form" style="max-width:600px;margin:0 auto;">
-            <div class="form-group"><label>Operation</label><select id="shaft" required><option value="">Select Operation</option></select></div>
-            <div class="form-group"><label>Work Place</label><input id="level" type="text" required></div>
-            <div class="form-group"><label>Equipment Type</label>
+            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;line-height:1.45;">
+              Register assets that appear in status updates, reliability KPIs and the executive PDF.
+              <strong>Operation</strong>, <strong>Equipment ID</strong> and <strong>Type</strong> are required for availability and shaft scoping.
+            </p>
+            <div class="form-group"><label>Operation <span style="color:var(--danger)">*</span></label><select id="shaft" required><option value="">Select Operation</option></select></div>
+            <div class="form-group"><label>Work Place / Level</label><input id="level" type="text" placeholder="e.g. 21, 16L, Tip area"></div>
+            <div class="form-group"><label>Equipment Type <span style="color:var(--danger)">*</span></label>
               <select id="eq-type" required>
                 <option value="">Select Type</option>
-                <option>Loco</option><option>Winder</option><option>Winch</option><option>Compressor</option>
+                <option>Loco</option><option>Caboose</option><option>Hopper</option>
+                <option>Winder</option><option>Winch</option><option>Compressor</option>
                 <option>Loader</option><option>Substation</option><option>Ventilation Fan</option><option>Pump</option>
                 <option>Conveyor</option><option>Drill</option><option>Transformer</option><option>Other</option>
               </select>
             </div>
-            <div class="form-group"><label>Equipment Size</label><input id="loco-size" type="text" required></div>
-            <div class="form-group"><label>Equipment ID</label><input id="loco-number" type="text" required></div>
-            <div class="form-group"><label>SECTION</label><input id="section" type="text" required></div>
-            <div class="form-group"><label>OEM</label><input id="eq-oem" type="text" placeholder="e.g. OEM / manufacturer"></div>
+            <div class="form-group"><label>Equipment Size</label><input id="loco-size" type="text" placeholder="e.g. 10 Ton, 16T (optional)"></div>
+            <div class="form-group"><label>Equipment ID <span style="color:var(--danger)">*</span></label><input id="loco-number" type="text" required placeholder="e.g. 16L10T026" pattern="[A-Za-z0-9\-_/]+" title="Letters, numbers, hyphen, underscore"></div>
+            <div class="form-group"><label>SECTION</label><input id="section" type="text" placeholder="e.g. Main, Tip, UN&amp;S (optional)"></div>
+            <div class="form-group"><label>OEM / Manufacturer</label><input id="eq-oem" type="text" placeholder="e.g. OEM / manufacturer (optional)"></div>
             <button type="submit" class="btn btn-primary" style="width:100%;margin-top:1rem;">Add Equipment</button>
           </form>
         </section>
@@ -971,14 +976,35 @@
         <section id="add-status" class="hidden">
           <div class="header-bar"><h1>Status Update</h1></div>
           <form id="add-status-form" style="max-width:600px;margin:0 auto;">
-            <div class="form-group"><label>Date</label><input id="u-date" type="date" required></div>
-            <div class="form-group"><label>Time</label><input id="u-time" type="time" required></div>
-            <div class="form-group"><label>Equipment ID</label><input id="u-loco" list="loco-list" required></div>
-            <div class="form-group"><label>Status</label><select id="u-status"><option value="Up">Up (Operational)</option><option value="Down">Down</option><option value="Up">Fixed → Up</option></select></div>
-            <div class="form-group"><label>Shift</label><select id="u-shift"><option>Morning</option><option>Afternoon</option><option>Night</option></select></div>
-            <div class="form-group"><label>Reason/Fault</label><textarea id="u-reason" required></textarea></div>
-            <div class="form-group"><label>Downtime Hours</label><input id="u-downtime" type="number" step="0.1" min="0"></div>
-            <div class="form-group"><label>Is Failure?</label><select id="u-failure"><option value="0">No</option><option value="1">Yes</option></select></div>
+            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;line-height:1.45;">
+              Logs feed availability, MTBF/MTTR, failure patterns (day / shift) and the executive PDF.
+              Use <strong>Down</strong> for faults, <strong>Fixed → Up</strong> when restored. Downtime hours and Is Failure drive reliability metrics.
+            </p>
+            <div class="form-group"><label>Date <span style="color:var(--danger)">*</span></label><input id="u-date" type="date" required></div>
+            <div class="form-group"><label>Time <span style="color:var(--danger)">*</span></label><input id="u-time" type="time" required></div>
+            <div class="form-group"><label>Equipment ID <span style="color:var(--danger)">*</span></label><input id="u-loco" list="loco-list" required placeholder="Select or type equipment ID"></div>
+            <div class="form-group"><label>Status <span style="color:var(--danger)">*</span></label>
+              <select id="u-status">
+                <option value="Up">Up (Operational)</option>
+                <option value="Down" selected>Down</option>
+                <option value="Fixed">Fixed → Up</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Shift <span style="color:var(--danger)">*</span></label>
+              <select id="u-shift">
+                <option value="Morning">Morning (≈06:00–14:00)</option>
+                <option value="Afternoon">Afternoon (≈14:00–22:00)</option>
+                <option value="Night">Night (≈22:00–06:00)</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Reason / Fault <span style="color:var(--danger)">*</span></label><textarea id="u-reason" required placeholder="e.g. Door switch faulty | Proximity antenna replaced"></textarea></div>
+            <div class="form-group"><label>Downtime Hours</label><input id="u-downtime" type="number" step="0.1" min="0" placeholder="Hours offline (0 if still Up)"></div>
+            <div class="form-group"><label>Is Failure?</label>
+              <select id="u-failure">
+                <option value="1">Yes (counts toward failures / MTBF)</option>
+                <option value="0">No (planned / non-failure stop)</option>
+              </select>
+            </div>
             <button type="submit" class="btn btn-primary" style="width:100%;margin-top:1rem;">Submit Update</button>
           </form>
         </section>
@@ -4049,6 +4075,121 @@
   }
   window.showKpiEquipmentList = showKpiEquipmentList;
 
+  /** Analyse when failures are most likely for one equipment (day-of-week + shift + hour band). */
+  function analyseFailureTiming(id) {
+    const parsed = (typeof parseEquipKey === 'function') ? parseEquipKey(id) : { id: normaliseEquipId(id), shaft: '' };
+    const displayId = parsed.id || String(id);
+    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const byDay = { Sunday:0, Monday:0, Tuesday:0, Wednesday:0, Thursday:0, Friday:0, Saturday:0 };
+    const byShift = { Morning:0, Afternoon:0, Night:0, Unknown:0 };
+    const byHourBand = { '00-06':0, '06-12':0, '12-18':0, '18-24':0 };
+    let failureEvents = [];
+    const updates = (typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (updates || [])).filter(u => {
+      if (normaliseEquipId(u.equipmentId || u.locoNumber || '') !== displayId) return false;
+      const isFail = (u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true)
+        || String(u.status || '').toLowerCase() === 'down'
+        || (Number(u.downtimeHours) > 0 && String(u.status || '').toLowerCase() !== 'up');
+      return isFail;
+    });
+    updates.forEach(u => {
+      const d = u.date ? new Date(u.date + (u.time ? 'T' + u.time : 'T12:00:00')) : null;
+      if (d && !isNaN(d.getTime())) {
+        byDay[dayNames[d.getDay()]]++;
+        const h = d.getHours();
+        if (h < 6) byHourBand['00-06']++;
+        else if (h < 12) byHourBand['06-12']++;
+        else if (h < 18) byHourBand['12-18']++;
+        else byHourBand['18-24']++;
+      }
+      let sh = String(u.shift || '').trim();
+      if (!sh) {
+        if (d && !isNaN(d.getTime())) {
+          const h = d.getHours();
+          sh = h >= 6 && h < 14 ? 'Morning' : (h >= 14 && h < 22 ? 'Afternoon' : 'Night');
+        } else sh = 'Unknown';
+      } else {
+        const sl = sh.toLowerCase();
+        if (sl.indexOf('morn') >= 0) sh = 'Morning';
+        else if (sl.indexOf('after') >= 0 || sl.indexOf('day') >= 0) sh = 'Afternoon';
+        else if (sl.indexOf('night') >= 0) sh = 'Night';
+        else if (!byShift.hasOwnProperty(sh)) sh = 'Unknown';
+      }
+      byShift[sh] = (byShift[sh] || 0) + 1;
+      failureEvents.push({
+        date: u.date || '—',
+        time: u.time || '',
+        shift: sh,
+        reason: String(u.reason || u.fault || '').slice(0, 120),
+        downtime: Number(u.downtimeHours) || 0,
+        status: u.status || 'Down'
+      });
+    });
+    const total = failureEvents.length || 1;
+    function topKey(obj) {
+      let best = null, bestN = -1;
+      Object.keys(obj).forEach(k => { if (obj[k] > bestN) { bestN = obj[k]; best = k; } });
+      return { key: best, n: bestN, pct: total ? Math.round(bestN / total * 100) : 0 };
+    }
+    const topDay = topKey(byDay);
+    const topShift = topKey(byShift);
+    const topBand = topKey(byHourBand);
+    let likelihood = 'Insufficient failure history to estimate pattern.';
+    if (failureEvents.length >= 2) {
+      likelihood = 'Most likely on ' + topDay.key + 's during ' + topShift.key + ' shift'
+        + (topBand.key ? ' (' + topBand.key + 'h window, ' + topBand.pct + '% of events)' : '')
+        + '. Based on ' + failureEvents.length + ' failure report(s).';
+    } else if (failureEvents.length === 1) {
+      likelihood = 'Only one failure logged (' + failureEvents[0].date + ' · ' + failureEvents[0].shift + '). Need more events for a reliable pattern.';
+    }
+    return { byDay, byShift, byHourBand, failureEvents, topDay, topShift, topBand, likelihood, total: failureEvents.length };
+  }
+  window.analyseFailureTiming = analyseFailureTiming;
+
+  function showDowntimeBreakdown(id) {
+    const timing = analyseFailureTiming(id);
+    const st = getEquipmentStatus(id);
+    const titleEl = document.getElementById('equip-detail-title');
+    const body = document.getElementById('equip-detail-body');
+    const actions = document.getElementById('equip-detail-actions');
+    if (titleEl) titleEl.innerHTML = '<i class="fas fa-clock"></i> Downtime breakdown · ' + String(id).replace(/</g,'&lt;');
+    const sumHrs = timing.failureEvents.reduce((s, e) => s + (e.downtime || 0), 0);
+    const rows = timing.failureEvents.length
+      ? timing.failureEvents.map((e, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${String(e.date).replace(/</g,'&lt;')} ${String(e.time || '').replace(/</g,'&lt;')}</td>
+          <td>${String(e.shift).replace(/</g,'&lt;')}</td>
+          <td>${Number(e.downtime).toFixed(1)}</td>
+          <td style="max-width:220px;word-break:break-word;">${String(e.reason || '—').replace(/</g,'&lt;')}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" style="color:var(--text-3);">No failure downtime events recorded.</td></tr>';
+    if (body) {
+      body.style.display = 'block';
+      body.innerHTML = `
+        <div style="background:var(--surface-2);border-radius:10px;padding:1rem;border:1px solid var(--border);margin-bottom:1rem;">
+          <div style="display:flex;flex-wrap:wrap;gap:1.25rem;">
+            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Total downtime (status)</div>
+              <div style="font-size:1.4rem;font-weight:800;color:var(--danger);">${(st.downtime || 0).toFixed(1)} h</div></div>
+            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Sum of reported events</div>
+              <div style="font-size:1.4rem;font-weight:800;">${sumHrs.toFixed(1)} h</div></div>
+            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Failure events</div>
+              <div style="font-size:1.4rem;font-weight:800;">${timing.total}</div></div>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;font-size:0.88rem;">
+            <thead><tr><th>#</th><th>Date / Time</th><th>Shift</th><th>Down hrs</th><th>Reason / Fault</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+    if (actions) {
+      const esc = escJs(id);
+      actions.innerHTML = `<button type="button" class="btn btn-primary" onclick="showEquipmentDetail('${esc}')"><i class="fas fa-arrow-left"></i> Back to profile</button>`;
+    }
+    openModal('equip-detail-modal');
+  }
+  window.showDowntimeBreakdown = showDowntimeBreakdown;
+
   function showEquipmentDetail(id) {
     const parsed = (typeof parseEquipKey === 'function') ? parseEquipKey(id) : { id: normaliseEquipId(id), shaft: '' };
     const displayId = parsed.id || String(id);
@@ -4080,6 +4221,7 @@
     const body = document.getElementById('equip-detail-body');
     const actions = document.getElementById('equip-detail-actions');
     if (titleEl) titleEl.innerHTML = `<i class="fas fa-id-card"></i> ${String(displayId).replace(/</g,'&lt;')}` + (st.shaft && st.shaft !== '—' ? ` <span style="font-weight:500;font-size:0.9rem;opacity:0.85;">· ${String(st.shaft).replace(/</g,'&lt;')}</span>` : '');
+    const timing = analyseFailureTiming(id);
     const fields = [
       ['Equipment ID', displayId],
       ['Type', eq ? inferEquipmentType(eq) : inferEquipmentType(displayId)],
@@ -4095,16 +4237,35 @@
       ['Color Risk', st.color || '—'],
       ['Last Update', st.lastUpdate || '—'],
       ['Last Reason / Fault', st.lastReason || last?.reason || '—'],
-      ['Last changed by', last ? personFromUpdate(last, 'changed') : '—'],
-      ['Status History Events', String(eu.length)]
+      ['Last changed by', last ? personFromUpdate(last) : '—']
     ];
-    const auditHtml = `<div class="audit-trail">
-      <h4><i class="fas fa-history"></i> Audit trail (who / when)</h4>
+    const dayBars = Object.entries(timing.byDay).map(([d, n]) => {
+      const max = Math.max(1, ...Object.values(timing.byDay));
+      const pct = Math.round((n / max) * 100);
+      return `<div style="display:flex;align-items:center;gap:6px;margin:2px 0;"><span style="width:72px;font-size:0.78rem;color:var(--text-3);">${d.slice(0,3)}</span><div style="flex:1;background:var(--surface-3);border-radius:4px;height:10px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:var(--primary);"></div></div><span style="font-size:0.78rem;font-weight:600;width:20px;text-align:right;">${n}</span></div>`;
+    }).join('');
+    const shiftBars = Object.entries(timing.byShift).filter(([k]) => k !== 'Unknown' || timing.byShift.Unknown).map(([s, n]) => {
+      const max = Math.max(1, ...Object.values(timing.byShift));
+      const pct = Math.round((n / max) * 100);
+      return `<div style="display:flex;align-items:center;gap:6px;margin:2px 0;"><span style="width:80px;font-size:0.78rem;color:var(--text-3);">${s}</span><div style="flex:1;background:var(--surface-3);border-radius:4px;height:10px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:var(--warning);"></div></div><span style="font-size:0.78rem;font-weight:600;width:20px;text-align:right;">${n}</span></div>`;
+    }).join('');
+    const patternHtml = `
+      <div style="grid-column:1/-1;background:linear-gradient(135deg,rgba(12,74,110,0.06),rgba(14,165,233,0.04));border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;margin-top:0.25rem;">
+        <div style="font-weight:700;color:var(--primary);margin-bottom:0.45rem;display:flex;align-items:center;gap:8px;"><i class="fas fa-chart-line"></i> Failure likelihood &amp; performance pattern</div>
+        <p style="font-size:0.9rem;margin:0 0 0.75rem;color:var(--text-2);line-height:1.45;">${String(timing.likelihood).replace(/</g,'&lt;')}</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
+          <div><div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-3);margin-bottom:0.35rem;">By day of week</div>${dayBars || '<span style="color:var(--text-3);font-size:0.85rem;">No data</span>'}</div>
+          <div><div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-3);margin-bottom:0.35rem;">By shift</div>${shiftBars || '<span style="color:var(--text-3);font-size:0.85rem;">No data</span>'}</div>
+        </div>
+      </div>`;
+    const auditHtml = `
+    <div style="grid-column:1/-1;margin-top:0.5rem;">
+      <div style="font-weight:700;color:var(--primary);margin-bottom:0.5rem;"><i class="fas fa-history"></i> Audit trail (who / when)</div>
       ${eu.length ? eu.slice(0, 12).map(u => {
-        const reported = personFromUpdate(u, 'reported');
-        const signed = personFromUpdate(u, 'signed');
-        const changed = personFromUpdate(u, 'changed');
-        const when = [u.date, u.time].filter(Boolean).join(' ') || '—';
+        const when = ((u.date || '') + ' ' + (u.time || '')).trim() || '—';
+        const reported = personFromUpdate(u);
+        const signed = u.signedBy || u.signed || '';
+        const changed = u.updatedBy || u.changedBy || '';
         const status = u.status || '—';
         const reason = String(u.reason || u.fault || '').slice(0, 120);
         const whoBits = [];
@@ -4119,11 +4280,21 @@
       }).join('') : '<p style="color:var(--text-3);font-size:0.9rem;">No status history yet.</p>'}
     </div>`;
     if (body) {
-      body.innerHTML = fields.map(([k, v]) => `<div style="background:var(--surface-2);border-radius:8px;padding:0.65rem 0.85rem;border:1px solid var(--border);">
+      body.style.display = 'grid';
+      body.style.gridTemplateColumns = 'repeat(auto-fit,minmax(200px,1fr))';
+      body.style.gap = '0.85rem';
+      const escIdForClick = escJs(id);
+      body.innerHTML = fields.map(([k, v]) => {
+        const isDown = k === 'Total Downtime (h)';
+        const click = isDown ? ` style="cursor:pointer;outline:1px dashed var(--primary);" title="Click for breakdown" onclick="showDowntimeBreakdown('${escIdForClick}')"` : '';
+        const hint = isDown ? '<div style="font-size:0.72rem;color:var(--primary);margin-top:0.2rem;">Click for breakdown →</div>' : '';
+        return `<div${click} style="background:var(--surface-2);border-radius:8px;padding:0.65rem 0.85rem;border:1px solid var(--border);${isDown ? 'cursor:pointer;' : ''}">
         <div style="font-size:0.78rem;color:var(--text-3);font-weight:600;text-transform:uppercase;margin-bottom:0.25rem;">${k}</div>
-        <div style="font-weight:600;word-break:break-word;">${String(v == null || v === '' ? '—' : v).replace(/</g,'&lt;')}</div>
-      </div>`).join('') + auditHtml;
+        <div style="font-weight:600;word-break:break-word;">${String(v == null || v === '' ? '—' : v).replace(/</g,'&lt;')}</div>${hint}
+      </div>`;
+      }).join('') + patternHtml + auditHtml;
     }
+
     const escId = escJs(id);
     if (actions) {
       let btns = `<button type="button" class="btn btn-primary" onclick="closeAllModals();show('search-status');document.getElementById('s-loco').value='${escId}';document.getElementById('search-form').requestSubmit();"><i class="fas fa-search"></i> View History</button>`;
@@ -4974,6 +5145,7 @@
       alternateRowStyles: { fillColor: [241, 245, 249] },
       margin
     };
+    const MAX_EQ_ROWS = 10; // equipment-ID tables: never more than 10
     function ensureSpace(need) {
       if (y + need > pageHeight - 18) {
         addFooter(doc.internal.getNumberOfPages());
@@ -4988,8 +5160,71 @@
       y += 5;
       doc.setTextColor(15, 23, 42);
     }
+    function hasSufficientData(m) {
+      if (!m) return false;
+      if (m.band && String(m.band).toLowerCase() === 'insufficient') return false;
+      if (m.health == null && (m.failures || 0) === 0 && (m.obsDays || 0) < 5) return false;
+      return true;
+    }
+    /** Simple horizontal bar chart drawn in PDF (no external image dependency). */
+    function drawBarChart(title, items, valueKey, labelKey, colorRgb, maxBars) {
+      const data = (items || []).slice(0, maxBars || 10);
+      if (!data.length) return;
+      ensureSpace(18 + data.length * 7);
+      sectionTitle(title);
+      const maxVal = Math.max(1, ...data.map(d => Number(d[valueKey]) || 0));
+      const barMaxW = pageWidth - 14 - 14 - 55;
+      data.forEach(d => {
+        const label = String(d[labelKey] || '').slice(0, 18);
+        const val = Number(d[valueKey]) || 0;
+        const w = Math.max(2, (val / maxVal) * barMaxW);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(51, 65, 85);
+        doc.text(label, 14, y + 3.2);
+        doc.setFillColor.apply(doc, colorRgb);
+        doc.rect(70, y, w, 4.2, 'F');
+        doc.setTextColor(15, 23, 42);
+        doc.text(String(val), 72 + w, y + 3.2);
+        y += 6.5;
+      });
+      y += 4;
+    }
+    /** Simple donut-style health distribution using coloured rectangles + legend. */
+    function drawHealthBars(bands) {
+      ensureSpace(28);
+      sectionTitle('3. Fleet Health Distribution (chart)');
+      const order = [
+        ['excellent', [22, 163, 74], 'Excellent'],
+        ['good', [34, 197, 94], 'Good'],
+        ['fair', [234, 88, 12], 'Fair'],
+        ['poor', [185, 28, 28], 'Poor'],
+        ['critical', [127, 29, 29], 'Critical']
+      ];
+      const total = order.reduce((s, [k]) => s + (bands[k] || 0), 0) || 1;
+      const barW = pageWidth - 28;
+      let x = 14;
+      order.forEach(([k, rgb]) => {
+        const n = bands[k] || 0;
+        const w = Math.max(n ? 3 : 0, (n / total) * barW);
+        if (w > 0) {
+          doc.setFillColor.apply(doc, rgb);
+          doc.rect(x, y, w, 8, 'F');
+          x += w;
+        }
+      });
+      y += 11;
+      doc.setFontSize(7.5);
+      order.forEach(([k, rgb, label]) => {
+        const n = bands[k] || 0;
+        doc.setFillColor.apply(doc, rgb);
+        doc.rect(14, y - 2.5, 4, 4, 'F');
+        doc.setTextColor(51, 65, 85);
+        doc.text(label + ': ' + n, 20, y);
+        y += 5;
+      });
+      y += 3;
+    }
 
-    // ── Collect fleet IDs & status ──
+    // ── Collect asset IDs & status ──
     const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
     getFilteredUpdates().forEach(u => { if (u.equipmentId) ids.add(String(u.equipmentId)); });
     const idList = [...ids].filter(id => !isUnknownEquipmentId(id)).sort((a,b) => String(a).localeCompare(String(b), undefined, {numeric:true}));
@@ -5004,24 +5239,16 @@
       totalDownHrs += st.downtime || 0;
       statusRows.push({ id, st });
     });
-    const n = idList.length || 1;
     const avgAvail = idList.length ? (totalAvail / idList.length).toFixed(1) : '100.0';
     const opPct = idList.length ? ((up / idList.length) * 100).toFixed(1) : '100.0';
 
-    // Fleet availability (30d) if DOM shows it
-    let fleetAvail30 = avgAvail;
-    try {
-      const el = document.querySelector('#dashboard-kpi-grid, #dash-kpi-grid, .kpi-grid');
-      // fall back to computed avgAvail
-    } catch (_) {}
-
-    // Reliability metrics
     let sumRisk = 0, riskN = 0, critical = 0, highAnomaly = 0;
     let sumMtbf = 0, mtbfN = 0, sumMttr = 0, mttrN = 0, insuffData = 0;
     const healthBands = { excellent: 0, good: 0, fair: 0, poor: 0, critical: 0 };
     const anomalyRows = [];
     const failCountRows = [];
     const mtbfRows = [];
+    const failChartItems = [];
     idList.forEach(id => {
       let m = null;
       try { m = getReliabilityMetrics(id); } catch (_) {}
@@ -5036,10 +5263,15 @@
       if (m.health == null || m.band === 'insufficient') insuffData++;
       const band = (m.band || '').toLowerCase();
       if (band && healthBands[band] != null) healthBands[band]++;
-      anomalyRows.push([String(id), anom != null ? String(Math.round(anom)) : '—', risk != null ? String(Math.round(risk)) : '—']);
+
+      // Accurate tables only: skip insufficient-data assets
+      if (!hasSufficientData(m)) return;
       const st = getEquipmentStatus(id);
-      failCountRows.push([String(id), String(st.failures || m.failures || 0), (st.downtime != null ? Number(st.downtime).toFixed(1) : '0'), String(st.availability != null ? st.availability : '—')]);
+      const fails = st.failures || m.failures || 0;
+      anomalyRows.push([String(id), anom != null ? String(Math.round(anom)) : '—', risk != null ? String(Math.round(risk)) : '—']);
+      failCountRows.push([String(id), String(fails), (st.downtime != null ? Number(st.downtime).toFixed(1) : '0'), String(st.availability != null ? st.availability : '—')]);
       mtbfRows.push([String(id), m.mtbfLabel || (m.mtbf != null ? Math.round(m.mtbf) + 'h' : '—'), m.mttrLabel || (m.mttr != null ? (Math.round(m.mttr * 10) / 10) + 'h' : '—')]);
+      if (fails > 0) failChartItems.push({ id: String(id), fails: Number(fails) });
     });
     const avgRisk = riskN ? (sumRisk / riskN).toFixed(1) : '—';
     const avgMtbf = mtbfN ? (Math.round(sumMtbf / mtbfN) + 'h') : '—';
@@ -5081,26 +5313,18 @@
     });
     y = doc.lastAutoTable.finalY + 8;
 
-    // 3) Fleet health distribution
-    sectionTitle('3. Fleet Health Distribution');
-    doc.autoTable({
-      startY: y,
-      head: [['Band', 'Count']],
-      body: [
-        ['Excellent', String(healthBands.excellent)],
-        ['Good', String(healthBands.good)],
-        ['Fair', String(healthBands.fair)],
-        ['Poor', String(healthBands.poor)],
-        ['Critical', String(healthBands.critical)]
-      ],
-      ...tableOpts,
-      headStyles: { fillColor: [194, 65, 12], textColor: 255, fontStyle: 'bold' }
-    });
-    y = doc.lastAutoTable.finalY + 8;
+    // 3) Health chart
+    drawHealthBars(healthBands);
 
-    // 4) Bad Actors
-    const badActors = (window._lastBadActors || []).slice(0, 25);
-    sectionTitle('4. Bad Actors (Top by fault entries)');
+    // 4) Bad Actors (max 10, sufficient data only)
+    let badActors = (window._lastBadActors || []).slice();
+    badActors = badActors.filter(r => {
+      try {
+        const m = getReliabilityMetrics(r.id);
+        return hasSufficientData(m);
+      } catch (_) { return (r.count || r.faults || 0) > 0; }
+    }).slice(0, MAX_EQ_ROWS);
+    sectionTitle('4. Bad Actors (Top ' + MAX_EQ_ROWS + ' by fault entries)');
     if (badActors.length) {
       doc.autoTable({
         startY: y,
@@ -5119,13 +5343,13 @@
       y = doc.lastAutoTable.finalY + 8;
     } else {
       doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-      doc.text('No bad-actor data available (open Reliability / Trend Mining once).', 14, y);
+      doc.text('No bad-actor data with sufficient history.', 14, y);
       y += 8;
     }
 
-    // 5) Recurrence warnings
-    const recur = (window._lastRecurrence || []).slice(0, 30);
-    sectionTitle('5. Recurrence Warnings');
+    // 5) Recurrence (max 10)
+    const recur = (window._lastRecurrence || []).slice(0, MAX_EQ_ROWS);
+    sectionTitle('5. Recurrence Warnings (Top ' + MAX_EQ_ROWS + ')');
     if (recur.length) {
       doc.autoTable({
         startY: y,
@@ -5147,18 +5371,18 @@
       y += 8;
     }
 
-    // 6) Predictive / upcoming maintenance from calendar patterns
+    // 6) Predictive inspections
     let upcoming = [];
     try {
       if (typeof getMaintenanceEvents === 'function') {
         upcoming = (getMaintenanceEvents() || []).filter(ev => {
           const d = ev.daysLeft != null ? ev.daysLeft : ev.days;
           return d != null && d <= 15;
-        }).sort((a, b) => (a.daysLeft ?? a.days ?? 0) - (b.daysLeft ?? b.days ?? 0)).slice(0, 40);
+        }).sort((a, b) => (a.daysLeft ?? a.days ?? 0) - (b.daysLeft ?? b.days ?? 0)).slice(0, MAX_EQ_ROWS);
       }
     } catch (_) {}
     if (!upcoming.length && Array.isArray(window._lastUpcomingMaint)) {
-      upcoming = window._lastUpcomingMaint.slice(0, 40);
+      upcoming = window._lastUpcomingMaint.slice(0, MAX_EQ_ROWS);
     }
     sectionTitle('6. Predictive Inspections (≤15 days / overdue)');
     if (upcoming.length) {
@@ -5185,44 +5409,61 @@
       y += 8;
     }
 
-    // 7) Failure count by equipment
-    sectionTitle('7. Failure Count by Equipment');
+    // 7) Failure count chart + table (max 10, sufficient only)
+    failChartItems.sort((a, b) => b.fails - a.fails);
+    drawBarChart('7. Failure Count by Equipment (Top ' + MAX_EQ_ROWS + ')', failChartItems, 'fails', 'id', [185, 28, 28], MAX_EQ_ROWS);
     failCountRows.sort((a, b) => Number(b[1]) - Number(a[1]));
-    doc.autoTable({
-      startY: y,
-      head: [['Equipment ID', 'Failures', 'Down hrs', 'Availability %']],
-      body: failCountRows.slice(0, 40),
-      ...tableOpts,
-      headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }
-    });
-    y = doc.lastAutoTable.finalY + 8;
+    sectionTitle('Failure Count detail (sufficient data only)');
+    if (failCountRows.length) {
+      doc.autoTable({
+        startY: y,
+        head: [['Equipment ID', 'Failures', 'Down hrs', 'Availability %']],
+        body: failCountRows.slice(0, MAX_EQ_ROWS),
+        ...tableOpts,
+        headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    } else {
+      doc.setFontSize(9); doc.text('No equipment with sufficient failure history.', 14, y); y += 8;
+    }
 
-    // 8) Anomaly / event-risk by equipment
-    sectionTitle('8. Anomaly & Event-Risk by Equipment');
+    // 8) Anomaly (max 10)
+    sectionTitle('8. Anomaly & Event-Risk by Equipment (Top ' + MAX_EQ_ROWS + ')');
     anomalyRows.sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
-    doc.autoTable({
-      startY: y,
-      head: [['Equipment ID', 'Anomaly Score', 'Event-Risk']],
-      body: anomalyRows.slice(0, 40),
-      ...tableOpts
-    });
-    y = doc.lastAutoTable.finalY + 8;
+    if (anomalyRows.length) {
+      doc.autoTable({
+        startY: y,
+        head: [['Equipment ID', 'Anomaly Score', 'Event-Risk']],
+        body: anomalyRows.slice(0, MAX_EQ_ROWS),
+        ...tableOpts
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    } else {
+      doc.setFontSize(9); doc.text('No sufficient-data assets for anomaly ranking.', 14, y); y += 8;
+    }
 
-    // 9) MTBF / MTTR by equipment
-    sectionTitle('9. Mean Time Metrics by Equipment');
-    doc.autoTable({
-      startY: y,
-      head: [['Equipment ID', 'MTBF', 'MTTR']],
-      body: mtbfRows.slice(0, 40),
-      ...tableOpts,
-      headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold' }
-    });
-    y = doc.lastAutoTable.finalY + 8;
+    // 9) MTBF / MTTR (max 10, only rows with real metrics)
+    const mtbfSufficient = mtbfRows.filter(r => r[1] && r[1] !== '—' && !String(r[1]).includes('Insufficient'));
+    sectionTitle('9. Mean Time Metrics by Equipment (Top ' + MAX_EQ_ROWS + ')');
+    if (mtbfSufficient.length) {
+      doc.autoTable({
+        startY: y,
+        head: [['Equipment ID', 'MTBF', 'MTTR']],
+        body: mtbfSufficient.slice(0, MAX_EQ_ROWS),
+        ...tableOpts,
+        headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold' }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    } else {
+      doc.setFontSize(9); doc.text('No gated MTBF/MTTR available yet (need ≥3 failures & ≥30 observation days).', 14, y); y += 8;
+    }
 
     // 10) Notes
-    ensureSpace(20);
+    ensureSpace(22);
     doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
-    doc.text('MTBF/MTTR are data-density gated. Bad Actors & Recurrence require Trend Mining to have run in this session.', 14, y);
+    doc.text('Equipment tables limited to 10 rows. Assets with insufficient data are excluded from detailed rankings.', 14, y);
+    y += 4;
+    doc.text('MTBF/MTTR are data-density gated. Charts are generated from live session metrics.', 14, y);
     y += 4;
     doc.text('Filter scope: ' + (getActiveFilterLabel() || 'All Shafts · All Types') + '  |  Generated for executive review.', 14, y);
 
@@ -5775,6 +6016,12 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     } else {
       formStatus = 'Down';
     }
+    // Align with reliability layer: only Down + Is Failure=Yes counts as a failure event
+    let isFail = document.getElementById('u-failure').value || '0';
+    if (formStatus === 'Up') isFail = '0';
+    if (formStatus === 'Down' && isFail === '0' && Number(document.getElementById('u-downtime').value) > 0) {
+      // non-failure stop still records downtime for availability
+    }
     const data = {
       equipmentId: equipId,
       date: document.getElementById('u-date').value,
@@ -5784,7 +6031,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
       shift: document.getElementById('u-shift').value,
       reason: document.getElementById('u-reason').value.trim(),
       downtimeHours: Number(document.getElementById('u-downtime').value) || 0,
-      isFailure: formStatus === 'Down' ? (document.getElementById('u-failure').value || '1') : '0',
+      isFailure: formStatus === 'Down' ? isFail : '0',
       shaft: resolvedShaft,
       createdAt: serverTimestamp(),
       updatedBy: actor.name,
@@ -7509,7 +7756,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
   populateShaftFilter();
   show('dashboard');
 
-/* ═══ v2.4 performance layer: memoised selectors, indexed reliability lookups, deferred heavy views ═══ */
+/* ═══ v2.5 performance layer: memoised selectors, indexed reliability lookups, deferred heavy views ═══ */
 const _pc = { refs: null, key: '', fu: null, fe: null, fm: null, ids: null, pat: null, ev: null, rm: new Map(), idx: null };
 function _pcCheck() {
   const key = [currentShaftFilter || '', currentTypeFilter || '', currentUserRole || '', (currentAllowedShafts || []).join(','),
