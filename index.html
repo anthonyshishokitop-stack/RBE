@@ -987,9 +987,14 @@
         <section id="search-status" class="hidden">
           <div class="header-bar"><h1>Search Equipment History</h1></div>
           <form id="search-form" style="max-width:640px;margin:0 auto;">
-            <p style="font-size:0.9rem;color:var(--text-3);margin-bottom:1.1rem;">Flexible search — Equipment ID, Date, and/or Reason / Fault.</p>
+            <p style="font-size:0.9rem;color:var(--text-3);margin-bottom:1.1rem;">Flexible search — Equipment ID, date range (From / To), and/or Reason / Fault.</p>
             <div class="form-group"><label>Equipment ID (optional)</label><input id="s-loco" list="loco-list" placeholder="Leave blank for all"></div>
-            <div class="form-group"><label>Date (optional)</label><input id="s-date" type="date"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+              <div class="form-group"><label>From date (optional)</label><input id="s-date-from" type="date" title="Start of date range"></div>
+              <div class="form-group"><label>To date (optional)</label><input id="s-date-to" type="date" title="End of date range"></div>
+            </div>
+            <p style="font-size:0.82rem;color:var(--text-3);margin:-0.5rem 0 1rem;">Leave both blank for any date. Use only <em>From</em> for “on or after”, only <em>To</em> for “on or before”, or both for a range. Legacy single-date field is also accepted if present.</p>
+            <input type="hidden" id="s-date" value="">
             <div class="form-group"><label>Reason / Fault filter (optional)</label><input id="s-reason" type="text" placeholder="e.g. brake, antenna"></div>
             <div style="margin:1.5rem 0;display:flex;align-items:center;gap:8px;">
               <input type="checkbox" id="show-all-history">
@@ -4960,35 +4965,274 @@
   }
 
   window.exportDashboardPDF = function() {
-    const { doc, addFooter, startY } = createExecutivePDF('Executive Dashboard Summary', getActiveFilterLabel() || 'All Shafts · All Types');
+    const { doc, pageWidth, pageHeight, addFooter, startY } = createExecutivePDF('Executive Dashboard Summary', getActiveFilterLabel() || 'All Shafts · All Types');
+    let y = startY;
+    const margin = { left: 14, right: 14 };
+    const tableOpts = {
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [12, 74, 110], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [241, 245, 249] },
+      margin
+    };
+    function ensureSpace(need) {
+      if (y + need > pageHeight - 18) {
+        addFooter(doc.internal.getNumberOfPages());
+        doc.addPage();
+        y = 18;
+      }
+    }
+    function sectionTitle(t) {
+      ensureSpace(12);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(12, 74, 110);
+      doc.text(t, 14, y);
+      y += 5;
+      doc.setTextColor(15, 23, 42);
+    }
+
+    // ── Collect fleet IDs & status ──
     const ids = new Set(getFilteredEquipment().map(e => String(e.id)));
     getFilteredUpdates().forEach(u => { if (u.equipmentId) ids.add(String(u.equipmentId)); });
-    let up = 0, down = 0, totalAvail = 0;
-    [...ids].forEach(id => {
+    const idList = [...ids].filter(id => !isUnknownEquipmentId(id)).sort((a,b) => String(a).localeCompare(String(b), undefined, {numeric:true}));
+    let up = 0, down = 0, totalAvail = 0, totalFailures = 0, totalDownHrs = 0;
+    const statusRows = [];
+    idList.forEach(id => {
       const st = getEquipmentStatus(id);
       if (st.status === 'Up') up++; else down++;
-      totalAvail += parseFloat(st.availability) || 0;
+      const av = parseFloat(st.availability);
+      totalAvail += isFinite(av) ? av : 100;
+      totalFailures += st.failures || 0;
+      totalDownHrs += st.downtime || 0;
+      statusRows.push({ id, st });
     });
-    const avgAvail = ids.size ? (totalAvail / ids.size).toFixed(1) : '100.0';
-    doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-    doc.text('Key Performance Indicators', 14, startY);
+    const n = idList.length || 1;
+    const avgAvail = idList.length ? (totalAvail / idList.length).toFixed(1) : '100.0';
+    const opPct = idList.length ? ((up / idList.length) * 100).toFixed(1) : '100.0';
+
+    // Fleet availability (30d) if DOM shows it
+    let fleetAvail30 = avgAvail;
+    try {
+      const el = document.querySelector('#dashboard-kpi-grid, #dash-kpi-grid, .kpi-grid');
+      // fall back to computed avgAvail
+    } catch (_) {}
+
+    // Reliability metrics
+    let sumRisk = 0, riskN = 0, critical = 0, highAnomaly = 0;
+    let sumMtbf = 0, mtbfN = 0, sumMttr = 0, mttrN = 0, insuffData = 0;
+    const healthBands = { excellent: 0, good: 0, fair: 0, poor: 0, critical: 0 };
+    const anomalyRows = [];
+    const failCountRows = [];
+    const mtbfRows = [];
+    idList.forEach(id => {
+      let m = null;
+      try { m = getReliabilityMetrics(id); } catch (_) {}
+      if (!m) return;
+      const risk = m.health;
+      if (risk != null && isFinite(risk)) { sumRisk += risk; riskN++; }
+      if (risk != null && risk < 40) critical++;
+      const anom = m.anomaly != null ? m.anomaly : null;
+      if (anom != null && isFinite(anom) && anom >= 40) highAnomaly++;
+      if (m.mtbf != null && isFinite(m.mtbf) && m.mtbf > 0) { sumMtbf += m.mtbf; mtbfN++; }
+      if (m.mttr != null && isFinite(m.mttr) && m.mttr >= 0) { sumMttr += m.mttr; mttrN++; }
+      if (m.health == null || m.band === 'insufficient') insuffData++;
+      const band = (m.band || '').toLowerCase();
+      if (band && healthBands[band] != null) healthBands[band]++;
+      anomalyRows.push([String(id), anom != null ? String(Math.round(anom)) : '—', risk != null ? String(Math.round(risk)) : '—']);
+      const st = getEquipmentStatus(id);
+      failCountRows.push([String(id), String(st.failures || m.failures || 0), (st.downtime != null ? Number(st.downtime).toFixed(1) : '0'), String(st.availability != null ? st.availability : '—')]);
+      mtbfRows.push([String(id), m.mtbfLabel || (m.mtbf != null ? Math.round(m.mtbf) + 'h' : '—'), m.mttrLabel || (m.mttr != null ? (Math.round(m.mttr * 10) / 10) + 'h' : '—')]);
+    });
+    const avgRisk = riskN ? (sumRisk / riskN).toFixed(1) : '—';
+    const avgMtbf = mtbfN ? (Math.round(sumMtbf / mtbfN) + 'h') : '—';
+    const avgMttr = mttrN ? ((sumMttr / mttrN).toFixed(1) + 'h') : '—';
+
+    // 1) Fleet operational KPIs
+    sectionTitle('1. Fleet Operational Snapshot');
     doc.autoTable({
-      startY: startY + 4,
+      startY: y,
       head: [['Metric', 'Value']],
       body: [
-        ['Total Equipment', String(ids.size)],
+        ['Total Equipment', String(idList.length)],
         ['Operational (Up)', String(up)],
-        ['Down', String(down)],
-        ['Fleet Availability', avgAvail + '%'],
-        ['Operational %', ids.size ? ((up / ids.size) * 100).toFixed(1) + '%' : '100%']
+        ['Down / Restricted', String(down)],
+        ['Fleet Availability (avg)', avgAvail + '%'],
+        ['Operational %', opPct + '%'],
+        ['Total Failures (logged)', String(totalFailures)],
+        ['Total Downtime Hours', totalDownHrs.toFixed(1) + 'h']
       ],
-      styles: { font: 'helvetica', fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [29, 78, 216], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [241, 245, 249] },
-      margin: { left: 14, right: 14 }
+      ...tableOpts
     });
-    addFooter(1);
+    y = doc.lastAutoTable.finalY + 8;
+
+    // 2) Reliability / risk KPIs
+    sectionTitle('2. Reliability & Risk Indicators');
+    doc.autoTable({
+      startY: y,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Avg Event-Risk Score', String(avgRisk)],
+        ['Critical Risk (<40)', String(critical)],
+        ['High Anomaly Score', String(highAnomaly)],
+        ['Avg MTBF (gated)', String(avgMtbf)],
+        ['Avg MTTR (gated)', String(avgMttr)],
+        ['Assets · insuff. data', String(insuffData)]
+      ],
+      ...tableOpts,
+      headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold' }
+    });
+    y = doc.lastAutoTable.finalY + 8;
+
+    // 3) Fleet health distribution
+    sectionTitle('3. Fleet Health Distribution');
+    doc.autoTable({
+      startY: y,
+      head: [['Band', 'Count']],
+      body: [
+        ['Excellent', String(healthBands.excellent)],
+        ['Good', String(healthBands.good)],
+        ['Fair', String(healthBands.fair)],
+        ['Poor', String(healthBands.poor)],
+        ['Critical', String(healthBands.critical)]
+      ],
+      ...tableOpts,
+      headStyles: { fillColor: [194, 65, 12], textColor: 255, fontStyle: 'bold' }
+    });
+    y = doc.lastAutoTable.finalY + 8;
+
+    // 4) Bad Actors
+    const badActors = (window._lastBadActors || []).slice(0, 25);
+    sectionTitle('4. Bad Actors (Top by fault entries)');
+    if (badActors.length) {
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Equipment ID', 'Fault entries', 'Down hrs', 'Top mode', 'Last fault']],
+        body: badActors.map((r, i) => [
+          String(i + 1),
+          String(r.id),
+          String(r.count ?? r.faults ?? ''),
+          String(Math.round((r.down ?? r.downHrs ?? 0) * 10) / 10),
+          String(r.topMode || '—'),
+          String(r.lastReason || r.lastFault || '').slice(0, 48)
+        ]),
+        ...tableOpts,
+        headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    } else {
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+      doc.text('No bad-actor data available (open Reliability / Trend Mining once).', 14, y);
+      y += 8;
+    }
+
+    // 5) Recurrence warnings
+    const recur = (window._lastRecurrence || []).slice(0, 30);
+    sectionTitle('5. Recurrence Warnings');
+    if (recur.length) {
+      doc.autoTable({
+        startY: y,
+        head: [['Equipment ID', 'Mode', 'Times', 'Dates', 'Suggestion']],
+        body: recur.map(r => [
+          String(r.id),
+          String(r.mode || ''),
+          String(r.times ?? ''),
+          String(r.dates ?? ''),
+          'Escalate'
+        ]),
+        ...tableOpts,
+        headStyles: { fillColor: [124, 58, 237], textColor: 255, fontStyle: 'bold' }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    } else {
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+      doc.text('No recurrence warnings loaded.', 14, y);
+      y += 8;
+    }
+
+    // 6) Predictive / upcoming maintenance from calendar patterns
+    let upcoming = [];
+    try {
+      if (typeof getMaintenanceEvents === 'function') {
+        upcoming = (getMaintenanceEvents() || []).filter(ev => {
+          const d = ev.daysLeft != null ? ev.daysLeft : ev.days;
+          return d != null && d <= 15;
+        }).sort((a, b) => (a.daysLeft ?? a.days ?? 0) - (b.daysLeft ?? b.days ?? 0)).slice(0, 40);
+      }
+    } catch (_) {}
+    if (!upcoming.length && Array.isArray(window._lastUpcomingMaint)) {
+      upcoming = window._lastUpcomingMaint.slice(0, 40);
+    }
+    sectionTitle('6. Predictive Inspections (≤15 days / overdue)');
+    if (upcoming.length) {
+      doc.autoTable({
+        startY: y,
+        head: [['Equipment', 'Focus / Task', 'Days', 'Status']],
+        body: upcoming.map(m => {
+          const days = m.daysLeft != null ? m.daysLeft : m.days;
+          const label = days < 0 ? Math.abs(days) + 'd overdue' : days + 'd left';
+          return [
+            String(m.equipment || m.id || ''),
+            String(m.task || m.focus || m.title || 'Predictive inspection').slice(0, 55),
+            label,
+            days < 0 ? 'Overdue' : (days <= 3 ? 'Urgent' : 'Scheduled')
+          ];
+        }),
+        ...tableOpts,
+        headStyles: { fillColor: [194, 65, 12], textColor: 255, fontStyle: 'bold' }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    } else {
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+      doc.text('No predictive inspection window data available.', 14, y);
+      y += 8;
+    }
+
+    // 7) Failure count by equipment
+    sectionTitle('7. Failure Count by Equipment');
+    failCountRows.sort((a, b) => Number(b[1]) - Number(a[1]));
+    doc.autoTable({
+      startY: y,
+      head: [['Equipment ID', 'Failures', 'Down hrs', 'Availability %']],
+      body: failCountRows.slice(0, 40),
+      ...tableOpts,
+      headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }
+    });
+    y = doc.lastAutoTable.finalY + 8;
+
+    // 8) Anomaly / event-risk by equipment
+    sectionTitle('8. Anomaly & Event-Risk by Equipment');
+    anomalyRows.sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
+    doc.autoTable({
+      startY: y,
+      head: [['Equipment ID', 'Anomaly Score', 'Event-Risk']],
+      body: anomalyRows.slice(0, 40),
+      ...tableOpts
+    });
+    y = doc.lastAutoTable.finalY + 8;
+
+    // 9) MTBF / MTTR by equipment
+    sectionTitle('9. Mean Time Metrics by Equipment');
+    doc.autoTable({
+      startY: y,
+      head: [['Equipment ID', 'MTBF', 'MTTR']],
+      body: mtbfRows.slice(0, 40),
+      ...tableOpts,
+      headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold' }
+    });
+    y = doc.lastAutoTable.finalY + 8;
+
+    // 10) Notes
+    ensureSpace(20);
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+    doc.text('MTBF/MTTR are data-density gated. Bad Actors & Recurrence require Trend Mining to have run in this session.', 14, y);
+    y += 4;
+    doc.text('Filter scope: ' + (getActiveFilterLabel() || 'All Shafts · All Types') + '  |  Generated for executive review.', 14, y);
+
+    const pages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= pages; p++) {
+      doc.setPage(p);
+      addFooter(p);
+    }
     doc.save('RBE_Executive_Dashboard.pdf');
+    if (typeof showToast === 'function') showToast('Executive PDF exported', 'success');
   };
 
   window.exportEquipmentPDF = function() {
@@ -5623,13 +5867,28 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
   document.getElementById('search-form').addEventListener('submit', async e => {
     e.preventDefault();
     const equipmentId = document.getElementById('s-loco').value.trim();
-    const dateFilter = document.getElementById('s-date').value;
+    const dateFromEl = document.getElementById('s-date-from');
+    const dateToEl = document.getElementById('s-date-to');
+    const legacyDateEl = document.getElementById('s-date');
+    let dateFrom = (dateFromEl && dateFromEl.value) ? dateFromEl.value.trim() : '';
+    let dateTo = (dateToEl && dateToEl.value) ? dateToEl.value.trim() : '';
+    // Support legacy single-date if range inputs empty
+    if (!dateFrom && !dateTo && legacyDateEl && legacyDateEl.value) {
+      dateFrom = dateTo = legacyDateEl.value.trim();
+    }
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      const tmp = dateFrom; dateFrom = dateTo; dateTo = tmp;
+      if (dateFromEl) dateFromEl.value = dateFrom;
+      if (dateToEl) dateToEl.value = dateTo;
+    }
     const reasonFilter = (document.getElementById('s-reason')?.value || '').trim().toLowerCase();
     const showAll = document.getElementById('show-all-history').checked;
-    if (!equipmentId && !dateFilter && !reasonFilter) return alert('Enter at least one criterion');
+    if (!equipmentId && !dateFrom && !dateTo && !reasonFilter) return alert('Enter at least one criterion (equipment, date range, or fault)');
     const parts = [];
     if (equipmentId) parts.push('Equip: ' + equipmentId);
-    if (dateFilter) parts.push('Date: ' + dateFilter);
+    if (dateFrom && dateTo) parts.push('Dates: ' + dateFrom + ' → ' + dateTo);
+    else if (dateFrom) parts.push('From: ' + dateFrom);
+    else if (dateTo) parts.push('To: ' + dateTo);
     if (reasonFilter) parts.push('Fault: ' + reasonFilter);
     await addToSearchHistory(parts.join(' · '));
 
@@ -5641,7 +5900,15 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
       const want = normaliseEquipId(equipmentId);
       filtered = filtered.filter(u => normaliseEquipId(u.equipmentId || u.locoNumber) === want);
     }
-    if (dateFilter && !(showAll && equipmentId)) filtered = filtered.filter(u => String(u.date || '') === dateFilter);
+    if ((dateFrom || dateTo) && !(showAll && equipmentId)) {
+      filtered = filtered.filter(u => {
+        const d = String(u.date || '').slice(0, 10);
+        if (!d) return false;
+        if (dateFrom && d < dateFrom) return false;
+        if (dateTo && d > dateTo) return false;
+        return true;
+      });
+    }
     if (reasonFilter) filtered = filtered.filter(u => String(u.reason || u.fault || '').toLowerCase().includes(reasonFilter));
     filtered = filtered.filter(u => !isUnknownEquipmentId(u.equipmentId || u.locoNumber));
 
