@@ -4185,37 +4185,46 @@
       `;
     }
 
-    const availLabels = [], availData = [], failLabels = [], failData = [], mttfLabels = [], mttfData = [];
-    ids.slice(0, 25).forEach(id => {
-      const st = getEquipmentStatus(id);
-      const label = (typeof displayEquipId === 'function') ? displayEquipId(id) : id;
-      availLabels.push(label); availData.push(parseFloat(st.availability) || 0);
-      failLabels.push(label); failData.push(st.failures || 0);
-      const eu = filteredUp.filter(u => String(u.equipmentId || '') === id);
-      const fails = Math.max(1, st.failures || 1);
-      const dates = eu.map(u => u.date).filter(Boolean).sort();
-      let mttf = 24;
-      if (dates.length >= 2) {
-        const hours = Math.max(24, (new Date(dates[dates.length - 1]) - new Date(dates[0])) / 3600000 + 24);
-        const downH = eu.reduce((s, u) => s + (Number(u.downtimeHours || 0) || 0), 0);
-        mttf = Math.max(1, (hours - downH) / fails);
-      }
-      mttfLabels.push(label); mttfData.push(Number(mttf.toFixed(1)));
-    });
+    const MAXC = 15;
+    const _per = getSystemPeriod();
+    const rowsAll = ids.map(id => ({ id, st: getEquipmentStatus(id) }));
+    const availRows = rowsAll.filter(r => r.st.availability != null).sort((x, y) => x.st.availability - y.st.availability).slice(0, MAXC);
+    const failRows = rowsAll.filter(r => (r.st.failures || 0) > 0).sort((x, y) => y.st.failures - x.st.failures).slice(0, MAXC);
+    const mtbfRows = rowsAll.map(r => { let m = null; try { m = getReliabilityMetrics(r.id); } catch (e) {} return { id: r.id, mtbf: (m && m.mtbf != null) ? m.mtbf : null }; })
+      .filter(r => r.mtbf != null).sort((x, y) => x.mtbf - y.mtbf).slice(0, MAXC);
+    const nAvail = rowsAll.filter(r => r.st.availability != null).length;
+    const nFail = rowsAll.filter(r => (r.st.failures || 0) > 0).length;
+    const nMtbf = rowsAll.length - 0; // total considered
+    const lab = (id) => (typeof displayEquipId === 'function') ? displayEquipId(id) : id;
+    const availColor = (v) => v >= 95 ? '#16a34a' : (v >= 85 ? '#f59e0b' : '#dc2626');
 
-    function makeChart(canvasId, type, labels, data, color) {
+    function setTitle(canvasId, icon, text) {
+      const c = document.getElementById(canvasId);
+      const el = c && c.closest('.chart-wrapper') && c.closest('.chart-wrapper').querySelector('.chart-title');
+      if (el) el.innerHTML = '<i class="fas ' + icon + '"></i> ' + escapeHtml(text);
+    }
+    function makeChart(canvasId, type, labels, data, color, opts) {
+      opts = opts || {};
       const canvas = document.getElementById(canvasId);
       if (!canvas) return;
       if (charts[canvasId]) charts[canvasId].destroy();
+      const empty = !labels.length;
+      const y = { beginAtZero: true, ticks: { precision: opts.precision == null ? 0 : opts.precision } };
+      if (opts.max != null) y.max = opts.max;
+      if (opts.title) y.title = { display: true, text: opts.title };
       charts[canvasId] = new Chart(canvas, {
         type,
-        data: { labels: labels.length ? labels : ['No data'], datasets: [{ data: data.length ? data : [0], backgroundColor: color, borderRadius: 6 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: type === 'bar' ? { y: { beginAtZero: true, ticks: { precision: 0 } } } : {} }
+        data: { labels: empty ? [opts.emptyText || 'No data'] : labels, datasets: [{ data: empty ? [0] : data, backgroundColor: color, borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => (opts.unit ? c.parsed.y + ' ' + opts.unit : String(c.parsed.y)) } } }, scales: type === 'bar' ? { y } : {} }
       });
     }
-    makeChart('availabilityChart', 'bar', availLabels, availData, '#1d4ed8');
-    makeChart('failuresChart', 'bar', failLabels, failData, '#dc2626');
-    makeChart('mttfChart', 'bar', mttfLabels, mttfData, '#16a34a');
+    const minF = (typeof MIN_FAILURES_FOR_MTBF !== 'undefined') ? MIN_FAILURES_FOR_MTBF : 2;
+    setTitle('availabilityChart', 'fa-chart-bar', 'Lowest Availability by Equipment (%) – ' + _per.label + ' · worst ' + availRows.length + ' of ' + nAvail + ' with enough data' + (rowsAll.length - nAvail > 0 ? ' (' + (rowsAll.length - nAvail) + ' hidden: insufficient data)' : ''));
+    setTitle('failuresChart', 'fa-exclamation-triangle', 'Failure Count by Equipment – ' + _per.label + ' · top ' + failRows.length + ' of ' + nFail + ' with failures');
+    setTitle('mttfChart', 'fa-clock', 'MTBF by Equipment (hours) – shortest ' + mtbfRows.length + ' · needs ≥' + minF + ' failures in period');
+    makeChart('availabilityChart', 'bar', availRows.map(r => lab(r.id)), availRows.map(r => Number(parseFloat(r.st.availability).toFixed(1))), availRows.map(r => availColor(r.st.availability)), { max: 100, precision: 0, unit: '%', emptyText: 'Insufficient data' });
+    makeChart('failuresChart', 'bar', failRows.map(r => lab(r.id)), failRows.map(r => r.st.failures), '#dc2626', { precision: 0, emptyText: 'No failures in period' });
+    makeChart('mttfChart', 'bar', mtbfRows.map(r => lab(r.id)), mtbfRows.map(r => Number(r.mtbf.toFixed(0))), '#16a34a', { precision: 0, unit: 'h', emptyText: 'Insufficient data' });
 
     try { renderTrendCharts(); } catch (e) { console.warn('Trend charts', e); }
     renderUpcomingMaintenance();
