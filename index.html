@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor Enterprise 2.5 | Asset Reliability Platform</title>
+  <title>RBE Monitor Enterprise 2.6 | Asset Reliability Platform</title>
   <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.googletagmanager.com blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.google-analytics.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://tessdata.projectnaptha.com blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'">
@@ -1668,6 +1668,10 @@
   import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
   import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, serverTimestamp, query, orderBy, deleteDoc, updateDoc, where, getDocs, getDoc, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
+  /* ═══ v2.6 speed layer: pure-function caches (IDs/shafts are normalised thousands of times per refresh) ═══ */
+  const _neiCache = new Map(), _nshCache = new Map(), _ietCache = new Map(), _msWM = new WeakMap();
+  try { if (window.Chart) { Chart.defaults.animation = false; } } catch (e) {}
+
 
   /* ═══════════════════════════════════════════════════════════
      Modal stack manager – open/close in sequence + body scroll lock
@@ -2063,7 +2067,7 @@
     };
     auditEvents.unshift(entry);
     if (auditEvents.length > 500) auditEvents = auditEvents.slice(0, 500);
-    try { localStorage.setItem('rbe_audit_events', JSON.stringify(auditEvents)); } catch (e) {}
+    clearTimeout(window._auditLsT); window._auditLsT = setTimeout(() => { try { localStorage.setItem('rbe_audit_events', JSON.stringify(auditEvents)); } catch (e) {} }, 1000);
     // Always attempt Firestore audit_log for privileged / change actions (rules enforce immutability)
     try {
       if (auth.currentUser) {
@@ -2274,26 +2278,29 @@
     unsubscribeFunctions = [];
     // Performance: debounce UI rebuilds so rapid watcher writes don't freeze navigation
     let _refreshTimer = null;
+    const _first = { eq: true, up: true, mt: true };
     const scheduleRefresh = (opts) => {
       opts = opts || {};
+      window._dataVer = (window._dataVer || 0) + 1;
       if (_refreshTimer) clearTimeout(_refreshTimer);
       _refreshTimer = setTimeout(() => {
         _refreshTimer = null;
         try { refreshCurrentView(); } catch (e) { console.warn(e); }
-        try { updatePredictiveNotifications(); } catch (e) { console.warn(e); }
+        /* predictive notifications are already rebuilt by refreshCurrentView on the dashboard (no duplicate pass) */
         // Text mining only when that section is visible (expensive)
         if (opts.textMining || document.getElementById('text-mining') && !document.getElementById('text-mining').classList.contains('hidden')) {
           if (typeof refreshTextMiningInsights === 'function') {
             try { refreshTextMiningInsights(); } catch (e) { console.warn(e); }
           }
         }
-      }, 400);
+      }, 120);
     };
     // Build per-equipment index so getEquipmentStatus is O(k) not O(n)
     window._updatesByEquip = window._updatesByEquip || new Map();
     window._statusCache = window._statusCache || new Map();
 
     unsubscribeFunctions.push(onSnapshot(collection(db, "equipment"), snap => {
+      if (!_first.eq && !snap.docChanges().length) return; _first.eq = false;
       // Collapse LOCO-prefix variants only within the SAME shaft.
       // 183@11 Shaft and 183@12 Shaft remain separate assets.
       const rawEq = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -2330,6 +2337,7 @@
     }));
 
     const applyUpdates = snap => {
+      if (!_first.up && !snap.docChanges().length) return; _first.up = false;
       const mapped = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       mapped.sort((a, b) => `${b.date||''} ${b.time||''}`.localeCompare(`${a.date||''} ${a.time||''}`));
       const seen = new Set();
@@ -2351,6 +2359,14 @@
         byEquip.get(eid).push(u);
       }
       window._updatesByEquip = byEquip;
+      /* v2.6: duplicate-free plain-id index so getEquipmentStatus is O(k) instead of scanning every update */
+      const _plain = new Map();
+      for (const u of updates) {
+        const k = normaliseEquipId(u.equipmentId || u.locoNumber);
+        if (!k) continue;
+        let a = _plain.get(k); if (!a) _plain.set(k, a = []); a.push(u);
+      }
+      window._updByPlain = _plain; window._updByPlainRef = updates; window._updByPlainLen = updates.length;
       window._statusCache && window._statusCache.clear();
       scheduleRefresh({ textMining: false });
     };
@@ -2365,6 +2381,7 @@
       unsubscribeFunctions.push(onSnapshot(collection(db, "status_updates"), applyUpdates));
     }
     unsubscribeFunctions.push(onSnapshot(collection(db, "maintenance"), snap => {
+      if (!_first.mt && !snap.docChanges().length) return; _first.mt = false;
       maintenance = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       scheduleRefresh();
     }));
@@ -2470,7 +2487,7 @@
   }
   window.parseStructuredEquipId = parseStructuredEquipId;
 
-  function inferEquipmentType(eqOrId, sizeHint) {
+  function _inferEquipmentTypeRaw(eqOrId, sizeHint) {
     let explicit = '';
     let id = '';
     if (eqOrId && typeof eqOrId === 'object') {
@@ -2536,6 +2553,17 @@
     }
 
     return 'Other';
+  }
+  function inferEquipmentType(eqOrId, sizeHint) {
+    let key;
+    if (eqOrId && typeof eqOrId === 'object') {
+      key = 'o|' + String(eqOrId.equipmentType || eqOrId.type || '') + '|' + String(eqOrId.locoSize || eqOrId.size || sizeHint || '') + '|' + String(eqOrId.id || eqOrId.equipmentId || '');
+    } else {
+      key = 's|' + String(eqOrId || '') + '|' + String(sizeHint || '');
+    }
+    let v = _ietCache.get(key);
+    if (v === undefined) { v = _inferEquipmentTypeRaw(eqOrId, sizeHint); if (_ietCache.size > 20000) _ietCache.clear(); _ietCache.set(key, v); }
+    return v;
   }
   function isUnknownEquipmentId(id) {
     const s = String(id || '').trim();
@@ -2686,7 +2714,7 @@
 
   
   /** Canonical shaft names used by RBE_SHAFTS + Excel watcher */
-  function normaliseShaftName(raw) {
+  function _normaliseShaftNameRaw(raw) {
     let s = String(raw || '').trim();
     if (!s) return '';
     // Shaft_12 / shaft-12 / SHAFT 12 → try map to "12 Shaft"
@@ -2727,6 +2755,13 @@
     return s;
   }
 
+  function normaliseShaftName(raw) {
+    const k = String(raw || '');
+    let v = _nshCache.get(k);
+    if (v === undefined) { v = _normaliseShaftNameRaw(raw); if (_nshCache.size > 5000) _nshCache.clear(); _nshCache.set(k, v); }
+    return v;
+  }
+
   function shaftsMatch(a, b) {
     if (!a && !b) return true;
     if (!a || !b) return false;
@@ -2739,7 +2774,7 @@
    * so "LOCO 183", "LOCO183", "loco 183", "183" all become "183".
    * Single source of truth for matching, de-duplication, and display.
    */
-  function normaliseEquipId(raw) {
+  function _normaliseEquipIdRaw(raw) {
     let s = String(raw || '').trim();
     if (!s) return '';
     s = s.replace(/^(LOCO|Loco|loco)[\s\-_]*/i, '').trim();
@@ -2765,6 +2800,13 @@
       return collapsed;
     }
     return s;
+  }
+
+  function normaliseEquipId(raw) {
+    const k = String(raw || '');
+    let v = _neiCache.get(k);
+    if (v === undefined) { v = _normaliseEquipIdRaw(raw); if (_neiCache.size > 30000) _neiCache.clear(); _neiCache.set(k, v); }
+    return v;
   }
 
   function equipIdsMatch(a, b) {
@@ -2957,7 +2999,7 @@
     currentTypeFilter = document.getElementById('type-filter')?.value || '';
     const chip = document.getElementById('filter-status-chip');
     if (chip) chip.textContent = (currentShaftFilter || 'All Shafts') + ' · ' + (currentTypeFilter || 'All Types');
-    refreshCurrentView(); updatePredictiveNotifications();
+    refreshCurrentView();
     if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
   }
   window.applySystemFilters = applySystemFilters;
@@ -3116,6 +3158,11 @@
       return 0;
     }
     function eventMs(u) {
+      let c = _msWM.get(u);
+      if (c === undefined) { c = _eventMsRaw(u); _msWM.set(u, c); }
+      return c;
+    }
+    function _eventMsRaw(u) {
       // Prefer explicit timestamps for true "last" ordering
       try {
         if (u.createdAt && typeof u.createdAt.toMillis === 'function') return u.createdAt.toMillis();
@@ -3137,7 +3184,9 @@
     }
 
     // Collect updates for this ID, then keep only same-shaft (critical: no cross-shaft mixing)
-    let eu = (updates || []).filter(u => {
+    const _src = (window._updByPlain && window._updByPlainRef === updates && window._updByPlainLen === updates.length)
+      ? (window._updByPlain.get(idNorm) || []) : (updates || []);
+    let eu = _src.filter(u => {
       const uid = normaliseEquipId(u.equipmentId || u.locoNumber);
       if (uid !== idNorm) return false;
       if (!effectiveShaft) return true; // no shaft context — last resort
@@ -3615,6 +3664,12 @@
   };
 
   // ── Navigation ───────────────────────────────────────────────
+  const _SKIP_SECS = new Set(['dashboard', 'manage-equipment', 'maintenance-schedule', 'operations-report', 'reliability-center']);
+  function _viewKey() {
+    let pk = ''; try { pk = getSystemPeriod().key; } catch (e) {}
+    return [window._dataVer || 0, currentShaftFilter || '', currentTypeFilter || '', currentUserRole || '', (currentAllowedShafts || []).join(','),
+      (typeof dismissedAlerts !== 'undefined' ? dismissedAlerts.size : 0), pk, Math.floor(Date.now() / 300000)].join('|');
+  }
   function show(section) {
     // Leaving a section closes any open cards so navigation stays clean
     if (typeof closeAllModals === 'function') closeAllModals();
@@ -3650,6 +3705,11 @@
       const cm = document.getElementById('sidebar-close-mobile');
       if (cm) cm.style.display = 'none';
     }
+    if (el && _SKIP_SECS.has(section) && el.dataset.rkOk === '1' && el.dataset.rk === _viewKey()) {
+      /* nothing changed since this tab was last painted — show it instantly */
+      if (section === 'dashboard') { try { Object.values(charts || {}).forEach(c => { try { c.resize(); } catch (e) {} }); } catch (e) {} }
+      return;
+    }
     refreshCurrentView();
   }
   window.show = show;
@@ -3668,6 +3728,7 @@
       else if (section === 'audit-log') refreshAuditLog();
       else if (section === 'user-admin') refreshUserAdminList();
     } catch (e) { console.warn(e); }
+    try { const _el = document.getElementById(section); if (_el && section !== 'reliability-center') { _el.dataset.rk = _viewKey(); _el.dataset.rkOk = '1'; } } catch (e) {}
   }
   window.refreshCurrentView = refreshCurrentView;
 
@@ -4120,16 +4181,17 @@
     // Bare IDs (no shaft) are merged into shaft-specific rows when a shaft is known.
     const byIdShaft = new Map(); // "id|shaft" -> { id, shaft, key }
 
+    const _eqShaftBy = new Map(), _upShaftBy = new Map();
+    (filteredEq || []).forEach(e => { if (e.shaft) { const k = normaliseEquipId(e.id); if (!_eqShaftBy.has(k)) _eqShaftBy.set(k, e.shaft); } });
+    (filteredUp || []).forEach(u => { if (u.shaft) { const k = normaliseEquipId(u.equipmentId || u.locoNumber); if (!_upShaftBy.has(k)) _upShaftBy.set(k, u.shaft); } });
     function resolveShaft(id, shaftRaw) {
       let shaft = normaliseShaftName(shaftRaw || '');
       if (currentShaftFilter) return normaliseShaftName(currentShaftFilter);
       if (shaft) return shaft;
       // Infer from equipment master
-      const eq = (filteredEq || []).find(e => normaliseEquipId(e.id) === id && e.shaft);
-      if (eq) return normaliseShaftName(eq.shaft);
+      if (_eqShaftBy.has(id)) return normaliseShaftName(_eqShaftBy.get(id));
       // Infer from any update for this id that has a shaft
-      const up = (filteredUp || []).find(u => normaliseEquipId(u.equipmentId || u.locoNumber) === id && u.shaft);
-      if (up) return normaliseShaftName(up.shaft);
+      if (_upShaftBy.has(id)) return normaliseShaftName(_upShaftBy.get(id));
       return '';
     }
 
@@ -4183,8 +4245,9 @@
     if (!id) return '—';
     try {
       const keys = (typeof collectFilteredIds === 'function') ? collectFilteredIds() : [];
-      const sameId = keys.filter(k => parseEquipKey(k).id === id);
-      if (sameId.length <= 1) return id;
+      let _cm = window._dispIdCnt;
+      if (!_cm || _cm.ref !== keys) { const m = new Map(); keys.forEach(k => { const pid = parseEquipKey(k).id; m.set(pid, (m.get(pid) || 0) + 1); }); _cm = window._dispIdCnt = { ref: keys, m }; }
+      if ((_cm.m.get(id) || 0) <= 1) return id;
       const shaft = parsed.shaft || shaftOfEquipment(id) || '';
       return shaft ? (id + ' (' + shaft + ')') : id;
     } catch (e) {
@@ -4608,9 +4671,10 @@
     const patterns = analyseFailurePatterns();
     const maint = getFilteredMaintenance();
     let overdue = 0, dueSoon = 0, patternCount = 0, highRisk = 0;
-    const highList = document.getElementById('high-risk-list');
-    const predList = document.getElementById('predictive-list');
-    const failList = document.getElementById('failure-pattern-list');
+    const _mkBuf = (el) => el ? { el, s: '', get innerHTML() { return this.s; }, set innerHTML(v) { this.s = v; } } : null;
+    const highList = _mkBuf(document.getElementById('high-risk-list'));
+    const predList = _mkBuf(document.getElementById('predictive-list'));
+    const failList = _mkBuf(document.getElementById('failure-pattern-list'));
     if (highList) highList.innerHTML = '';
     if (predList) predList.innerHTML = '';
     if (failList) failList.innerHTML = '';
@@ -4649,6 +4713,9 @@
         <button class="btn btn-primary" style="padding:0.25rem 0.6rem;font-size:0.8rem;" onclick="event.stopPropagation();openActionConfirm('dismiss','${p.equipment}','','fail-${p.equipment}')">Dismiss</button></li>`;
     });
 
+    if (highList) highList.el.innerHTML = highList.s;
+    if (predList) predList.el.innerHTML = predList.s;
+    if (failList) failList.el.innerHTML = failList.s;
     const summary = document.getElementById('dashboard-alert-summary');
     const summaryText = document.getElementById('dash-alert-summary-text');
     if (summary && summaryText) {
@@ -4840,10 +4907,12 @@
     const statusSummary = { Up: 0, Down: 0 };
     const problemRows = [], highRiskRows = [];
 
+    const _euMap = new Map();
+    filteredUp.forEach(u => { const k = normaliseEquipId(u.equipmentId || u.locoNumber); if (!k) return; let a = _euMap.get(k); if (!a) _euMap.set(k, a = []); a.push(u); });
     allIds.forEach(id => {
       const st = getEquipmentStatus(id);
       statusSummary[st.status] = (statusSummary[st.status] || 0) + 1;
-      const eu = filteredUp.filter(u => normaliseEquipId(u.equipmentId || u.locoNumber) === id);
+      const eu = _euMap.get(id) || [];
       const totalDownHrs = eu.reduce((s, u) => s + (Number(u.downtimeHours || 0) || 0), 0);
       const fails = st.failures;
       const lastDown = eu.find(u => String(u.status || '').toLowerCase() === 'down');
@@ -5810,16 +5879,28 @@
   }
   window.clearCalendarFind = clearCalendarFind;
 
+  async function _commitBatched(ops) {
+    const CH = 400, jobs = [];
+    for (let i = 0; i < ops.length; i += CH) {
+      const b = writeBatch(db);
+      ops.slice(i, i + CH).forEach(o => o.del ? b.delete(o.ref) : b.update(o.ref, o.patch));
+      jobs.push(b.commit());
+    }
+    await Promise.all(jobs);
+  }
   function removeEquipment(id) {
     if (!assertCan('delete_equipment', { equipmentId: id }, 'Only admins can delete equipment')) return;
     if (!confirm(`Delete equipment "${id}" and all related records?`)) return;
     (async () => {
       try {
-        await deleteDoc(doc(db, "equipment", id));
-        const usnap = await getDocs(query(collection(db, "status_updates"), where("equipmentId", "==", id)));
-        for (const d of usnap.docs) await deleteDoc(d.ref);
-        const msnap = await getDocs(query(collection(db, "maintenance"), where("equipment", "==", id)));
-        for (const d of msnap.docs) await deleteDoc(d.ref);
+        const [usnap, msnap] = await Promise.all([
+          getDocs(query(collection(db, "status_updates"), where("equipmentId", "==", id))),
+          getDocs(query(collection(db, "maintenance"), where("equipment", "==", id)))
+        ]);
+        const _dels = [{ ref: doc(db, "equipment", id), del: true }];
+        usnap.docs.forEach(d => _dels.push({ ref: d.ref, del: true }));
+        msnap.docs.forEach(d => _dels.push({ ref: d.ref, del: true }));
+        await _commitBatched(_dels);
         showToast('Equipment removed', 'success');
         refreshCurrentView();
       } catch (err) { showToast('Error: ' + err.message, 'error'); }
@@ -5919,7 +6000,7 @@
     try {
       const markShaft = resolveShaftForEquipment(equipId, '');
       const pureId = (typeof parseEquipKey === 'function') ? parseEquipKey(equipId).id : normaliseEquipId(equipId);
-      await addDoc(collection(db, "status_updates"), {
+      const _fixP = addDoc(collection(db, "status_updates"), {
         equipmentId: pureId || equipId, date: new Date().toISOString().slice(0, 10),
         time: new Date().toTimeString().slice(0, 5), status: 'Up', statusCode: 'Up', shift: 'Morning',
         reason: notes || 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
@@ -5929,21 +6010,22 @@
         updatedByCompanyNumber: actor.companyNumber || '',
         changedAt: new Date().toISOString()
       });
+      _fixP.catch(err => showToast('Save failed: ' + err.message, 'error'));
       if (maintId) {
         try {
           const patch = { lastDone: new Date().toISOString().slice(0, 10) };
           if (rescheduleDate) patch.dueDate = rescheduleDate;
-          await updateDoc(doc(db, "maintenance", maintId), patch);
+          updateDoc(doc(db, "maintenance", maintId), patch).catch(function () {});
         } catch (e) {}
       } else if (rescheduleDate && pureId) {
         // Create / merge a predictive maintenance row with new due date
         try {
-          await addDoc(collection(db, "maintenance"), {
+          addDoc(collection(db, "maintenance"), {
             equipment: pureId, task: 'Predictive inspection (rescheduled)', interval: 'custom',
             lastDone: new Date().toISOString().slice(0, 10), dueDate: rescheduleDate,
             source: 'reschedule', createdAt: new Date().toISOString(),
             updatedBy: actor.email || actor.name
-          });
+          }).catch(function () {});
         } catch (e) {}
       }
       showToast('Marked Fixed', 'success');
@@ -5968,12 +6050,12 @@
     if (rescheduleDate && pureId) {
       const actor = getActor();
       try {
-        await addDoc(collection(db, "maintenance"), {
+        addDoc(collection(db, "maintenance"), {
           equipment: pureId, task: 'Predictive inspection (rescheduled)', interval: 'custom',
           lastDone: new Date().toISOString().slice(0, 10), dueDate: rescheduleDate,
           source: 'reschedule', notes: notes || '', createdAt: new Date().toISOString(),
           updatedBy: actor.email || actor.name
-        });
+        }).catch(function (e) { showToast('Reschedule failed: ' + e.message, 'error'); });
         showToast('Alert dismissed · inspection rescheduled', 'success');
       } catch (e) {
         showToast('Alert dismissed (reschedule failed: ' + e.message + ')', 'info');
@@ -6022,42 +6104,27 @@
         const oldSnap = await getDoc(doc(db, 'equipment', originalId));
         const oldData = oldSnap.exists() ? (oldSnap.data() || {}) : {};
         await setDoc(doc(db, 'equipment', newId), { ...oldData, ...payload, id: newId, previousId: originalId }, { merge: true });
-        // Cascade status_updates
+        // Cascade (batched + parallel): status_updates & maintenance, exact and normalised-variant matches
+        const _nOrig = normaliseEquipId(originalId);
         try {
-          const usnap = await getDocs(query(collection(db, 'status_updates'), where('equipmentId', '==', originalId)));
-          for (const d of usnap.docs) {
-            await updateDoc(d.ref, { equipmentId: newId, previousEquipmentId: originalId });
-          }
-        } catch (e) { console.warn('cascade status', e); }
-        // Also match normalised variants
-        try {
-          const allUp = await getDocs(collection(db, 'status_updates'));
-          for (const d of allUp.docs) {
+          const [allUp, allM] = await Promise.all([getDocs(collection(db, 'status_updates')), getDocs(collection(db, 'maintenance'))]);
+          const ops = [];
+          allUp.docs.forEach(d => {
             const u = d.data() || {};
-            if (normaliseEquipId(u.equipmentId || u.locoNumber) === normaliseEquipId(originalId) && normaliseEquipId(u.equipmentId) !== newId) {
-              await updateDoc(d.ref, { equipmentId: newId, previousEquipmentId: u.equipmentId || originalId });
-            }
-          }
-        } catch (e) {}
-        try {
-          const msnap = await getDocs(query(collection(db, 'maintenance'), where('equipment', '==', originalId)));
-          for (const d of msnap.docs) await updateDoc(d.ref, { equipment: newId });
-        } catch (e) {}
-        try {
-          const allM = await getDocs(collection(db, 'maintenance'));
-          for (const d of allM.docs) {
+            if (u.equipmentId === originalId) ops.push({ ref: d.ref, patch: { equipmentId: newId, previousEquipmentId: originalId } });
+            else if (normaliseEquipId(u.equipmentId || u.locoNumber) === _nOrig && normaliseEquipId(u.equipmentId) !== newId) ops.push({ ref: d.ref, patch: { equipmentId: newId, previousEquipmentId: u.equipmentId || originalId } });
+          });
+          allM.docs.forEach(d => {
             const m = d.data() || {};
-            if (normaliseEquipId(m.equipment) === normaliseEquipId(originalId) && normaliseEquipId(m.equipment) !== newId) {
-              await updateDoc(d.ref, { equipment: newId });
-            }
-          }
-        } catch (e) {}
+            if (m.equipment === originalId || (normaliseEquipId(m.equipment) === _nOrig && normaliseEquipId(m.equipment) !== newId)) ops.push({ ref: d.ref, patch: { equipment: newId } });
+          });
+          await _commitBatched(ops);
+        } catch (e) { console.warn('cascade rename', e); }
         try { await deleteDoc(doc(db, 'equipment', originalId)); } catch (e) {}
         if (typeof logAudit === 'function') logAudit('rename_equipment', `Renamed ${originalId} → ${newId}`, newId);
       }
       closeModal('edit-equipment-modal');
       showToast('Equipment updated', 'success');
-      if (typeof populateEquipmentTable === 'function') populateEquipmentTable();
       refreshCurrentView();
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   });
@@ -6167,7 +6234,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
         updatedAt: new Date().toISOString()
       };
       if (rawId && rawId !== id) payload.originalId = rawId;
-      await setDoc(doc(db, "equipment", id), payload, { merge: true });
+      setDoc(doc(db, "equipment", id), payload, { merge: true }).catch(err => showToast('Save failed: ' + err.message, 'error'));
       showToast(rawId !== id ? `Equipment saved as "${id}"` : 'Equipment saved', 'success');
       try { logAudit('equipment_create', 'Added equipment ' + id, id, { shaft: payload.shaft, source: 'ui' }); } catch (e) {}
       e.target.reset();
@@ -6217,7 +6284,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     }
     if (!data.equipmentId || !data.date || !data.reason) return showToast('Required fields missing', 'error');
     try {
-      await addDoc(collection(db, "status_updates"), data);
+      addDoc(collection(db, "status_updates"), data).catch(err => showToast('Save failed: ' + err.message, 'error'));
       showToast('Status update saved', 'success');
       if (typeof logAudit === 'function') logAudit('status_update', data.status + ': ' + (data.reason || '').slice(0, 80), data.equipmentId);
       e.target.reset();
@@ -6228,12 +6295,12 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     e.preventDefault();
     const id = document.getElementById('edit-index').value;
     try {
-      await updateDoc(doc(db, "maintenance", id), {
+      updateDoc(doc(db, "maintenance", id), {
         equipment: document.getElementById('edit-equipment').value,
         task: document.getElementById('edit-task').value,
         interval: document.getElementById('edit-interval').value,
         lastDone: document.getElementById('edit-last').value
-      });
+      }).catch(err => showToast('Save failed: ' + err.message, 'error'));
       closeModal('edit-modal');
       refreshCurrentView();
     } catch (err) { alert('Error: ' + err.message); }
@@ -6254,8 +6321,8 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     };
     if (!data.equipment || !data.task || !data.lastDone) return alert('Required fields missing');
     try {
-      await addDoc(collection(db, "maintenance"), data);
-      alert('Added'); closeModal('add-maint-modal'); e.target.reset();
+      addDoc(collection(db, "maintenance"), data).catch(err => showToast('Save failed: ' + err.message, 'error'));
+      showToast('Maintenance task added', 'success'); closeModal('add-maint-modal'); e.target.reset();
     } catch (err) { alert('Error: ' + err.message); }
   });
 
@@ -7982,7 +8049,7 @@ function deferHeavy(sectionId, fn) {
     const cur = document.querySelector('section:not(.hidden)');
     if (!cur || cur.id !== sectionId) return;
     const t0 = performance.now();
-    try { fn(); if (sec) sec.dataset.painted = '1'; } catch (e) { console.warn(e); }
+    try { fn(); if (sec) { sec.dataset.painted = '1'; sec.dataset.rk = _viewKey(); sec.dataset.rkOk = '1'; } } catch (e) { console.warn(e); }
     console.debug('[RBE] ' + sectionId + ' rendered in ' + Math.round(performance.now() - t0) + ' ms');
   }, 0));
 }
