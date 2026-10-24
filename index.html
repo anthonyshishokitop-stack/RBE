@@ -885,13 +885,14 @@
           <div class="card" style="padding:0.85rem 1.15rem;margin-bottom:1rem;">
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.75rem;">
               <div style="display:flex;align-items:center;gap:0.65rem;flex-wrap:wrap;">
-                <strong style="color:var(--primary);"><i class="fas fa-chart-line"></i> Trend analysis period</strong>
+                <strong style="color:var(--primary);"><i class="fas fa-chart-line"></i> Analysis period</strong>
                 <select id="trend-period" onchange="window.onTrendPeriodChange && window.onTrendPeriodChange()" style="min-width:160px;padding:0.5rem 0.85rem;border-radius:8px;border:1px solid var(--border);font-weight:600;background:var(--surface);">
                   <option value="daily">Daily (last 14 days)</option>
                   <option value="weekly" selected>Weekly (last 12 weeks)</option>
                   <option value="monthly">Monthly (last 12 months)</option>
                   <option value="quarterly">Quarterly (last 8 quarters)</option>
                 </select>
+                <span style="font-size:0.78rem;color:var(--text-3);">Applies to the whole system: KPIs, tables, charts, reliability &amp; reports</span>
               </div>
               <div id="trend-summary-chips" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
             </div>
@@ -1324,8 +1325,8 @@
               </div>
             </div>
             <p style="font-size:0.82rem;color:var(--text-3);margin:0.25rem 0 0.75rem;">
-              <strong>Availability</strong> = 30-day uptime %. <strong>MTBF (h)</strong> = operating hours ÷ failures. <strong>MTTR (h)</strong> = downtime hours ÷ failures.
-              Rows with fewer than 3 failures or under 30 observed days are marked <em>Low confidence</em>. Click a row for the full equipment profile.
+              <strong>Availability</strong> = uptime % over the selected analysis period (<span id="equip-rel-period">—</span>). <strong>MTBF (h)</strong> = operating hours ÷ failures. <strong>MTTR (h)</strong> = downtime hours ÷ failures.
+              Rows with fewer than 3 failures in the period are marked <em>Low confidence</em>. Click a row for the full equipment profile.
             </p>
             <div style="overflow:auto;max-height:60vh;border:1px solid var(--border);border-radius:10px;">
               <table style="width:100%;">
@@ -2811,6 +2812,40 @@
   }
 
 
+  // ── System-wide analysis period (driven by the #trend-period selector) ──
+  const SYSTEM_PERIOD_LABELS = { daily: 'last 14 days', weekly: 'last 12 weeks', monthly: 'last 12 months', quarterly: 'last 8 quarters' };
+  function _ymd(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function getSystemPeriod() {
+    let key = 'weekly';
+    try { const sel = document.getElementById('trend-period'); if (sel && sel.value) key = sel.value; } catch (e) {}
+    if (!SYSTEM_PERIOD_LABELS[key]) key = 'weekly';
+    const day = new Date().toDateString();
+    let c = window._sysPeriodCache;
+    if (!c || c.key !== key || c.day !== day) {
+      const cfg = getTrendPeriodConfig();
+      const start = new Date(cfg.buckets[0].start);
+      const today = new Date();
+      c = window._sysPeriodCache = {
+        key, day, label: SYSTEM_PERIOD_LABELS[key], start,
+        startStr: _ymd(start), endStr: _ymd(today),
+        days: Math.max(1, Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) - start) / 86400000) + 1)
+      };
+    }
+    return { key: c.key, label: c.label, start: c.start, startStr: c.startStr, endStr: c.endStr, days: c.days,
+             hours: Math.max(24, (Date.now() - c.start.getTime()) / 3600000) };
+  }
+  window.getSystemPeriod = getSystemPeriod;
+  function updateInPeriod(u, per) {
+    let d = String((u && u.date) || '').trim();
+    if (!d) return false;
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) d = d.slice(0, 10);
+    else { const t = new Date(d); if (isNaN(t.getTime())) return false; d = _ymd(t); }
+    return d >= per.startStr && d <= per.endStr;
+  }
+  window.updateInPeriod = updateInPeriod;
+
   function getFilteredEquipment() {
     let list = equipment || [];
     // Shaft-scoped RBAC: non-admins only see equipment whose shaft is in allowedShafts.
@@ -2831,7 +2866,7 @@
     if (currentTypeFilter) list = list.filter(e => inferEquipmentType(e) === currentTypeFilter);
     return list;
   }
-  function getFilteredUpdates() {
+  function getScopedUpdates() {
     let list = (updates || []).filter(u => !isUnknownEquipmentId(u.equipmentId || u.locoNumber));
     // Build allowed equipment ID set (normalised) from filtered equipment
     const filteredEq = getFilteredEquipment();
@@ -2874,6 +2909,11 @@
       });
     }
     return list;
+  }
+  // Shaft/type/RBAC scope AND the selected analysis period
+  function getFilteredUpdates() {
+    const per = getSystemPeriod();
+    return getScopedUpdates().filter(u => updateInPeriod(u, per));
   }
   function getFilteredMaintenance() {
     let list = (maintenance || []).slice();
@@ -3021,7 +3061,7 @@
   const RESOLUTION_CODES = ['Repaired', 'Adjusted', 'Replaced', 'NoFaultFound', 'Deferred', 'Cancelled', 'Other'];
   const MAX_EVENT_HOURS = 72;
   const MIN_FAILURES_FOR_MTBF = 3;
-  const MIN_DAYS_FOR_MTBF = 30;
+  const MIN_DAYS_FOR_MTBF = 14; // minimum length of the selected analysis period
   const MIN_DAYS_FOR_AVAIL = 7;
 
   function isAttendedOrFixed(reasonText, statusText) {
@@ -3049,7 +3089,8 @@
     const parsed = (typeof parseEquipKey === 'function') ? parseEquipKey(id) : { id: normaliseEquipId(id), shaft: '' };
     const idNorm = parsed.id || normaliseEquipId(id);
     const shaftWant = parsed.shaft || (currentShaftFilter ? normaliseShaftName(currentShaftFilter) : '');
-    const cacheKey = equipCompositeKey(idNorm, shaftWant) || idNorm;
+    const per = getSystemPeriod();
+    const cacheKey = (equipCompositeKey(idNorm, shaftWant) || idNorm) + '#' + per.key;
     if (window._statusCache && window._statusCache.has(cacheKey)) {
       return window._statusCache.get(cacheKey);
     }
@@ -3146,8 +3187,10 @@
     }
     const currentlyDown = (statusCode === 'Down' || statusCode === 'Restricted');
 
+    // Current status above uses ALL events; failures / downtime / availability use the selected period only
+    const euP = (eu || []).filter(u => updateInPeriod(u, per));
     let downtime = 0;
-    (eu || []).forEach(u => {
+    euP.forEach(u => {
       let hrs = 0;
       if (u.startAt && u.endAt) {
         hrs = Math.max(0, (new Date(u.endAt) - new Date(u.startAt)) / 3600000);
@@ -3160,20 +3203,17 @@
       downtime += hrs;
     });
 
-    const failures = (eu || []).filter(u => {
+    const failures = euP.filter(u => {
       const sc = u.statusCode || normaliseStatusCode(u.status);
       return (u.isFailure === '1' || u.isFailure === 1 || sc === 'Down');
     }).length;
 
-    const windowDays = 30;
-    const windowHours = windowDays * 24;
-    const now = new Date();
-    const windowStart = new Date(now.getTime() - windowDays * 86400000);
+    const windowDays = Math.ceil(per.days);
+    const windowHours = per.hours;
     let downtimeInWindow = 0;
     let hasObservation = false;
-    (eu || []).forEach(u => {
-      const d = u.date ? new Date(u.date) : null;
-      if (d && d >= windowStart) {
+    euP.forEach(u => {
+      {
         hasObservation = true;
         let hrs = Number(u.downtimeHours || u.downtime || 0) || 0;
         if (u.startAt && u.endAt) hrs = Math.max(0, (new Date(u.endAt) - new Date(u.startAt)) / 3600000);
@@ -3196,6 +3236,8 @@
       availability: avail,
       availabilityLabel,
       dataDays,
+      periodKey: per.key,
+      periodLabel: per.label,
       shaft: effectiveShaft || '—',
       equipId: idNorm,
       lastUpdate: last ? (last.date + ' ' + (last.time || '')) : '-',
@@ -3226,6 +3268,8 @@
     const fails = Math.max(0, st.failures || 0);
     const downtime = st.downtime || 0;
     const avail = st.availability;
+    const per = getSystemPeriod();
+    const periodDays = Math.ceil(per.days);
 
     const dates = eu.map(u => u.date).filter(Boolean).sort();
     let obsDays = 0;
@@ -3239,8 +3283,8 @@
     let mttr = null;
     let mtbfLabel = 'Insufficient data';
     let mttrLabel = 'Insufficient data';
-    if (fails >= MIN_FAILURES_FOR_MTBF && obsDays >= MIN_DAYS_FOR_MTBF) {
-      const hoursSpan = Math.max(24, obsDays * 24);
+    if (fails >= MIN_FAILURES_FOR_MTBF && periodDays >= MIN_DAYS_FOR_MTBF) {
+      const hoursSpan = Math.max(24, per.hours);
       mtbf = Math.max(8, (hoursSpan - downtime) / fails);
       mtbfLabel = mtbf.toFixed(0) + ' h';
       mttr = downtime / fails;
@@ -3304,7 +3348,7 @@
       obsDays,
       inherentAvailability: (mtbf != null && mttr != null && (mtbf + mttr) > 0) ? Math.round(mtbf / (mtbf + mttr) * 1000) / 10 : null,
       failureRatePer1000h: (mtbf != null && mtbf > 0) ? Math.round(1000 / mtbf * 100) / 100 : null,
-      confidence: (fails >= MIN_FAILURES_FOR_MTBF && obsDays >= MIN_DAYS_FOR_MTBF) ? 'High' : (eu.length >= 5 ? 'Medium' : 'Low')
+      confidence: (fails >= MIN_FAILURES_FOR_MTBF && periodDays >= MIN_DAYS_FOR_MTBF) ? 'High' : (eu.length >= 5 ? 'Medium' : 'Low')
     };
   }
   window.getReliabilityMetrics = getReliabilityMetrics;
@@ -3318,14 +3362,14 @@
     const m = getReliabilityMetrics(id);
     const fails = Math.max(0, st.failures || 0);
     const downtime = st.downtime || 0;
-    const obsDays = m.obsDays || 0;
-    const hoursSpan = Math.max(24, obsDays * 24);
+    const per = getSystemPeriod();
+    const hoursSpan = Math.max(24, per.hours);
     let mtbf = null, mttr = null;
     if (fails > 0) {
       mtbf = Math.max(0, (hoursSpan - downtime) / fails);
       mttr = downtime / fails;
     }
-    const high = fails >= MIN_FAILURES_FOR_MTBF && obsDays >= MIN_DAYS_FOR_MTBF;
+    const high = fails >= MIN_FAILURES_FOR_MTBF && Math.ceil(per.days) >= MIN_DAYS_FOR_MTBF;
     return {
       id,
       shaft: (typeof parseEquipKey === 'function' ? parseEquipKey(id).shaft : '') || st.shaft || '—',
@@ -3345,6 +3389,7 @@
   function renderEquipReliabilityTable(ids) {
     const tbody = document.getElementById('equip-reliability-tbody');
     if (!tbody) return;
+    const _pl = document.getElementById('equip-rel-period'); if (_pl) _pl.textContent = getSystemPeriod().label;
     if (Array.isArray(ids)) {
       _equipRelRows = ids.map(id => { try { return computeEquipReliabilityRow(id); } catch (e) { return null; } }).filter(Boolean);
     }
@@ -3915,12 +3960,20 @@
   }
   window.renderTrendCharts = renderTrendCharts;
   window.onTrendPeriodChange = function() {
-    try { renderTrendCharts(); } catch (e) { console.warn(e); }
+    try {
+      const v = document.getElementById('trend-period')?.value;
+      try { localStorage.setItem('rbe_period', v); } catch (e) {}
+      window._sysPeriodCache = null;
+      if (window._statusCache) window._statusCache.clear();
+      // Re-run the same refresh the shaft / type filters use, so every view follows the period
+      applySystemFilters();
+    } catch (e) { console.warn(e); }
   };
 
   // ── Dashboard ────────────────────────────────────────────────
   function computeDataQualityMetrics() {
-    const ups = updates || [];
+    const _per = getSystemPeriod();
+    const ups = (updates || []).filter(u => updateInPeriod(u, _per));
     const total = ups.length;
     if (!total) return { completeness: 0, outlierRate: 0, lagHours: null, unclassified: 0, total: 0 };
     let withDuration = 0, outliers = 0, unclassified = 0;
@@ -3985,7 +4038,7 @@
         <div class="kpi-card blue clickable" onclick="showKpiEquipmentList('all')" title="Click to view equipment list"><i class="fas fa-cogs"></i><h2>${ids.length}</h2><p>Total Equipment</p></div>
         <div class="kpi-card green clickable" onclick="showKpiEquipmentList('up')" title="Click to view operational equipment"><i class="fas fa-check-circle"></i><h2>${upCount}</h2><p>Operational (Up)</p></div>
         <div class="kpi-card red clickable" onclick="showKpiEquipmentList('down')" title="Click to view down equipment"><i class="fas fa-exclamation-circle"></i><h2>${downCount}</h2><p>Down / Restricted</p></div>
-        <div class="kpi-card purple clickable" onclick="showKpiEquipmentList('all')" title="Click to view fleet"><i class="fas fa-percentage"></i><h2 style="font-size:1.15rem;">${avgAvail}</h2><p>Fleet Availability (30d)</p></div>
+        <div class="kpi-card purple clickable" onclick="showKpiEquipmentList('all')" title="Click to view fleet"><i class="fas fa-percentage"></i><h2 style="font-size:1.15rem;">${avgAvail}</h2><p>Fleet Availability (${getSystemPeriod().label})</p></div>
         <div class="kpi-card orange clickable" onclick="showKpiEquipmentList('failures')" title="Click to view equipment with failures"><i class="fas fa-bolt"></i><h2>${totalFails}</h2><p>Total Failures</p></div>
         <div class="kpi-card blue clickable" onclick="showKpiEquipmentList('up')" title="Click to view operational equipment"><i class="fas fa-tachometer-alt"></i><h2>${operationalPct}%</h2><p>Operational %</p></div>
       `;
@@ -5574,7 +5627,7 @@
       });
       y = doc.lastAutoTable.finalY + 8;
     } else {
-      doc.setFontSize(9); doc.text('No gated MTBF/MTTR available yet (need ≥3 failures & ≥30 observation days).', 14, y); y += 8;
+      doc.setFontSize(9); doc.text('No gated MTBF/MTTR available yet (need ≥3 failures & ≥' + MIN_DAYS_FOR_MTBF + '-day period).', 14, y); y += 8;
     }
 
     // 10) Notes
@@ -5584,7 +5637,7 @@
     y += 4;
     doc.text('MTBF/MTTR are data-density gated. Charts are generated from live session metrics.', 14, y);
     y += 4;
-    doc.text('Filter scope: ' + (getActiveFilterLabel() || 'All Shafts · All Types') + '  |  Generated for executive review.', 14, y);
+    doc.text('Filter scope: ' + (getActiveFilterLabel() || 'All Shafts · All Types') + '  |  Period: ' + getSystemPeriod().label + '  |  Generated for executive review.', 14, y);
 
     const pages = doc.internal.getNumberOfPages();
     for (let p = 1; p <= pages; p++) {
@@ -7871,6 +7924,11 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
   });
 
   // ── Initial ──────────────────────────────────────────────────
+  try {
+    const _sp = localStorage.getItem('rbe_period');
+    const _ps = document.getElementById('trend-period');
+    if (_sp && _ps && [].some.call(_ps.options, o => o.value === _sp)) _ps.value = _sp;
+  } catch (e) {}
   fillDatalist();
   populateShaftFilter();
   show('dashboard');
@@ -7879,7 +7937,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
 const _pc = { refs: null, key: '', fu: null, fe: null, fm: null, ids: null, pat: null, ev: null, rm: new Map(), idx: null };
 function _pcCheck() {
   const key = [currentShaftFilter || '', currentTypeFilter || '', currentUserRole || '', (currentAllowedShafts || []).join(','),
-    dismissedAlerts.size, (updates || []).length, (equipment || []).length, (maintenance || []).length, new Date().toDateString()].join('|');
+    dismissedAlerts.size, getSystemPeriod().key, (updates || []).length, (equipment || []).length, (maintenance || []).length, new Date().toDateString()].join('|');
   if (!_pc.refs || _pc.refs[0] !== equipment || _pc.refs[1] !== updates || _pc.refs[2] !== maintenance || _pc.key !== key) {
     _pc.refs = [equipment, updates, maintenance]; _pc.key = key;
     _pc.fu = _pc.fe = _pc.fm = _pc.ids = _pc.pat = _pc.ev = _pc.idx = null; _pc.rm.clear();
