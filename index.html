@@ -1315,6 +1315,34 @@
               <div class="chart-container"><canvas id="anomalyChart"></canvas></div>
             </div>
           </div>
+          <div class="card" id="equip-reliability-card">
+            <div class="table-toolbar" style="flex-wrap:wrap;gap:8px;">
+              <h2 style="margin:0;"><i class="fas fa-table"></i> Equipment Reliability — Availability, MTBF &amp; MTTR</h2>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <input type="search" id="equip-rel-search" placeholder="Search Equipment ID / shaft…" oninput="renderEquipReliabilityTable()" style="padding:0.4rem 0.7rem;border:1px solid var(--border);border-radius:8px;min-width:200px;"/>
+                <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="exportEquipReliabilityCSV()"><i class="fas fa-file-csv"></i> CSV</button>
+              </div>
+            </div>
+            <p style="font-size:0.82rem;color:var(--text-3);margin:0.25rem 0 0.75rem;">
+              <strong>Availability</strong> = 30-day uptime %. <strong>MTBF (h)</strong> = operating hours ÷ failures. <strong>MTTR (h)</strong> = downtime hours ÷ failures.
+              Rows with fewer than 3 failures or under 30 observed days are marked <em>Low confidence</em>. Click a row for the full equipment profile.
+            </p>
+            <div style="overflow:auto;max-height:60vh;border:1px solid var(--border);border-radius:10px;">
+              <table style="width:100%;">
+                <thead><tr>
+                  <th style="cursor:pointer" onclick="sortEquipReliability('id')">Equipment ID</th>
+                  <th>Shaft</th>
+                  <th style="cursor:pointer" onclick="sortEquipReliability('availability')">Availability (%)</th>
+                  <th style="cursor:pointer" onclick="sortEquipReliability('mtbf')">MTBF (hours)</th>
+                  <th style="cursor:pointer" onclick="sortEquipReliability('mttr')">MTTR (hours)</th>
+                  <th style="cursor:pointer" onclick="sortEquipReliability('failures')">Failures</th>
+                  <th>Confidence</th>
+                </tr></thead>
+                <tbody id="equip-reliability-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="card">
             <h2 style="margin:0 0 0.75rem;"><i class="fas fa-lightbulb"></i> Reliability Recommendations</h2>
             <div id="reliability-recommendations" style="display:grid;gap:0.65rem;"></div>
@@ -3281,6 +3309,96 @@
   }
   window.getReliabilityMetrics = getReliabilityMetrics;
 
+  // ── Equipment reliability table: Availability / MTBF (h) / MTTR (h) per Equipment ID ──
+  let _equipRelRows = [];
+  let _equipRelSort = { key: 'id', dir: 1 };
+
+  function computeEquipReliabilityRow(id) {
+    const st = getEquipmentStatus(id);
+    const m = getReliabilityMetrics(id);
+    const fails = Math.max(0, st.failures || 0);
+    const downtime = st.downtime || 0;
+    const obsDays = m.obsDays || 0;
+    const hoursSpan = Math.max(24, obsDays * 24);
+    let mtbf = null, mttr = null;
+    if (fails > 0) {
+      mtbf = Math.max(0, (hoursSpan - downtime) / fails);
+      mttr = downtime / fails;
+    }
+    const high = fails >= MIN_FAILURES_FOR_MTBF && obsDays >= MIN_DAYS_FOR_MTBF;
+    return {
+      id,
+      shaft: (typeof parseEquipKey === 'function' ? parseEquipKey(id).shaft : '') || st.shaft || '—',
+      availability: st.availability,
+      mtbf, mttr, fails, failures: fails,
+      confidence: high ? 'High' : 'Low confidence'
+    };
+  }
+
+  function sortEquipReliability(key) {
+    if (_equipRelSort.key === key) _equipRelSort.dir *= -1;
+    else _equipRelSort = { key, dir: 1 };
+    renderEquipReliabilityTable();
+  }
+  window.sortEquipReliability = sortEquipReliability;
+
+  function renderEquipReliabilityTable(ids) {
+    const tbody = document.getElementById('equip-reliability-tbody');
+    if (!tbody) return;
+    if (Array.isArray(ids)) {
+      _equipRelRows = ids.map(id => { try { return computeEquipReliabilityRow(id); } catch (e) { return null; } }).filter(Boolean);
+    }
+    const q = ((document.getElementById('equip-rel-search') || {}).value || '').trim().toLowerCase();
+    const disp = r => String(typeof displayEquipId === 'function' ? displayEquipId(r.id) : r.id);
+    let rows = _equipRelRows.filter(r => !q || (disp(r) + ' ' + r.shaft).toLowerCase().includes(q));
+    const k = _equipRelSort.key, d = _equipRelSort.dir;
+    rows.sort((a, b) => {
+      if (k === 'id') return d * disp(a).localeCompare(disp(b), undefined, { numeric: true });
+      const av = a[k], bv = b[k];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return d * (av - bv);
+    });
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-3);">No equipment in filter.</td></tr>';
+      return;
+    }
+    const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    tbody.innerHTML = rows.map(r => {
+      const av = r.availability;
+      const avColor = av == null ? 'var(--text-3)' : av >= 90 ? '#16a34a' : av >= 75 ? '#ea580c' : '#dc2626';
+      return `<tr class="row-clickable" onclick="showEquipmentDetail('${escJs(r.id)}')">
+        <td><strong>${esc(disp(r))}</strong></td>
+        <td>${esc(r.shaft)}</td>
+        <td style="font-weight:700;color:${avColor}">${av != null ? Number(av).toFixed(1) + ' %' : 'No data'}</td>
+        <td>${r.mtbf != null ? r.mtbf.toFixed(1) + ' h' : (r.fails === 0 ? 'No failures' : '—')}</td>
+        <td>${r.mttr != null ? r.mttr.toFixed(1) + ' h' : (r.fails === 0 ? '—' : '—')}</td>
+        <td>${r.fails}</td>
+        <td style="font-size:0.78rem;color:${r.confidence === 'High' ? '#16a34a' : 'var(--text-3)'}">${r.confidence}</td>
+      </tr>`;
+    }).join('');
+  }
+  window.renderEquipReliabilityTable = renderEquipReliabilityTable;
+
+  function exportEquipReliabilityCSV() {
+    const disp = r => String(typeof displayEquipId === 'function' ? displayEquipId(r.id) : r.id);
+    const lines = [['Equipment ID', 'Shaft', 'Availability %', 'MTBF (hours)', 'MTTR (hours)', 'Failures', 'Confidence']];
+    _equipRelRows.forEach(r => lines.push([
+      disp(r), r.shaft,
+      r.availability != null ? Number(r.availability).toFixed(1) : '',
+      r.mtbf != null ? r.mtbf.toFixed(1) : '',
+      r.mttr != null ? r.mttr.toFixed(1) : '',
+      r.fails, r.confidence
+    ]));
+    const csv = lines.map(l => l.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    a.download = 'equipment_reliability_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  window.exportEquipReliabilityCSV = exportEquipReliabilityCSV;
+
   function populateReliabilityCenter() {
     const ids = collectFilteredIds ? collectFilteredIds() : [...new Set(getFilteredEquipment().map(e => String(e.id)))];
     const _eqMap = new Map(); (equipment || []).forEach(e => { const k = String(e.id); if (!_eqMap.has(k)) _eqMap.set(k, e); });
@@ -3300,6 +3418,7 @@
     const avgMtbf = mtbfVals.length ? (mtbfVals.reduce((s, v) => s + v, 0) / mtbfVals.length).toFixed(0) + 'h' : 'Insufficient data';
     const avgMttr = mttrVals.length ? (mttrVals.reduce((s, v) => s + v, 0) / mttrVals.length).toFixed(1) + 'h' : 'Insufficient data';
     const insuff = metrics.filter(m => m.health == null).length;
+    try { renderEquipReliabilityTable(ids); } catch (e) { console.warn('Equip reliability table', e); }
 
     const kpi = document.getElementById('reliability-kpi-grid');
     if (kpi) {
