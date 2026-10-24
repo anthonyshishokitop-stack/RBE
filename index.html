@@ -790,6 +790,9 @@
         <li data-section="user-admin" data-roles="admin" data-tooltip="User Management" data-keywords="users invite role shafts admin">
           <i class="fas fa-users-cog"></i><span class="menu-label">User Management</span>
         </li>
+        <li data-section="data-cleanup" data-roles="admin" data-tooltip="Data Cleanup" data-keywords="delete erase clean remove purge data shaft type admin">
+          <i class="fas fa-trash-alt"></i><span class="menu-label">Data Cleanup</span>
+        </li>
         <li data-section="enterprise-support" data-roles="admin,executive,reliability" data-tooltip="Support & SLA" data-keywords="support sla governance platform">
           <i class="fas fa-headset"></i><span class="menu-label">Support &amp; SLA</span>
         </li>
@@ -1376,6 +1379,78 @@
 
 
         <!-- USER MANAGEMENT (admin) -->
+        <section id="data-cleanup" class="hidden">
+          <div class="header-bar">
+            <h1><i class="fas fa-trash-alt"></i> Data Cleanup</h1>
+          </div>
+          <div class="compliance-bar">
+            <span><i class="fas fa-user-shield"></i> Administrators only</span>
+            <span><i class="fas fa-eye"></i> Preview before delete</span>
+            <span><i class="fas fa-download"></i> Optional backup download</span>
+            <span><i class="fas fa-history"></i> Logged in Audit Trail</span>
+          </div>
+
+          <div class="card">
+            <h2 style="margin:0 0 0.75rem;"><i class="fas fa-bullseye"></i> 1. What do you want to delete?</h2>
+            <div style="display:grid;gap:0.5rem;max-width:760px;">
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="radio" name="dc-mode" value="type" checked onchange="dcSetMode()"> <span><strong>By equipment type</strong> – e.g. all Winches, all Hoppers (optionally limited to chosen shafts)</span></label>
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="radio" name="dc-mode" value="shaft" onchange="dcSetMode()"> <span><strong>By shaft</strong> – clean everything for one or more shafts, or wipe the whole system</span></label>
+              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="radio" name="dc-mode" value="select" onchange="dcSetMode()"> <span><strong>Select specific equipment</strong> – tick exactly the units whose data must go</span></label>
+            </div>
+
+            <div id="dc-panel-type" style="margin-top:1rem;display:grid;gap:0.75rem;max-width:760px;">
+              <div class="form-group" style="margin:0;"><label>Equipment type(s)</label><select id="dc-types" multiple size="7" style="min-height:130px;" onchange="dcOnChange()"></select></div>
+              <div class="form-group" style="margin:0;"><label>Limit to shaft(s) <span style="color:var(--text-3);font-weight:400;">(leave empty = all shafts)</span></label><select id="dc-type-shafts" multiple size="6" style="min-height:110px;" onchange="dcOnChange()"></select></div>
+            </div>
+
+            <div id="dc-panel-shaft" style="margin-top:1rem;display:none;gap:0.75rem;max-width:760px;">
+              <label style="display:flex;gap:8px;align-items:center;cursor:pointer;color:#b91c1c;font-weight:700;"><input type="checkbox" id="dc-all-shafts" onchange="dcOnChange()"> ALL shafts – wipe the entire system</label>
+              <div class="form-group" style="margin:0;"><label>Shaft(s)</label><select id="dc-shafts" multiple size="8" style="min-height:140px;" onchange="dcOnChange()"></select></div>
+            </div>
+
+            <div id="dc-panel-select" style="margin-top:1rem;display:none;">
+              <div class="table-toolbar" style="gap:8px;flex-wrap:wrap;">
+                <input type="search" id="dc-search" placeholder="Search ID / shaft / type…" oninput="dcFilterRows()" style="padding:0.4rem 0.7rem;border:1px solid var(--border);border-radius:8px;min-width:220px;">
+                <button type="button" class="btn btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem;" onclick="dcSelectVisible(true)">Select visible</button>
+                <button type="button" class="btn btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem;background:#64748b;" onclick="dcSelectVisible(false)">Clear visible</button>
+                <span id="dc-sel-count" style="font-size:0.88rem;color:var(--text-3);">0 selected</span>
+              </div>
+              <div style="overflow:auto;max-height:340px;border:1px solid var(--border);border-radius:8px;">
+                <table id="dc-eq-table">
+                  <thead><tr><th style="width:40px;"></th><th>Equipment ID</th><th>Shaft</th><th>Type</th><th>Status events</th><th>Maintenance</th></tr></thead>
+                  <tbody id="dc-eq-tbody"><tr><td colspan="6">Loading…</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 style="margin:0 0 0.75rem;"><i class="fas fa-layer-group"></i> 2. Which data?</h2>
+            <div style="display:flex;gap:1.25rem;flex-wrap:wrap;">
+              <label style="cursor:pointer;"><input type="checkbox" id="dc-k-eq" checked onchange="dcOnChange()"> Equipment register</label>
+              <label style="cursor:pointer;"><input type="checkbox" id="dc-k-up" checked onchange="dcOnChange()"> Status / breakdown history</label>
+              <label style="cursor:pointer;"><input type="checkbox" id="dc-k-mt" checked onchange="dcOnChange()"> Maintenance tasks</label>
+            </div>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:0.85rem;align-items:flex-end;">
+              <div class="form-group" style="margin:0;"><label>History from <span style="color:var(--text-3);font-weight:400;">(optional)</span></label><input type="date" id="dc-from" onchange="dcOnChange()"></div>
+              <div class="form-group" style="margin:0;"><label>History to <span style="color:var(--text-3);font-weight:400;">(optional)</span></label><input type="date" id="dc-to" onchange="dcOnChange()"></div>
+            </div>
+            <p style="font-size:0.82rem;color:var(--text-3);margin:0.6rem 0 0;">Tip: untick “Equipment register” to clear only the history and keep the units. The date range applies to status / breakdown history only.</p>
+          </div>
+
+          <div class="card" style="border-left:4px solid var(--danger,#dc2626);">
+            <h2 style="margin:0 0 0.75rem;"><i class="fas fa-search"></i> 3. Preview &amp; confirm</h2>
+            <button type="button" class="btn btn-primary" id="dc-preview-btn" onclick="dcPreview()"><i class="fas fa-eye"></i> Preview what will be deleted</button>
+            <div id="dc-preview" style="margin-top:1rem;"></div>
+            <div id="dc-confirm-wrap" style="display:none;margin-top:1rem;max-width:560px;">
+              <label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin-bottom:0.6rem;"><input type="checkbox" id="dc-backup" checked> Download a JSON backup of the records before deleting</label>
+              <div class="form-group" style="margin:0 0 0.75rem;"><label id="dc-confirm-label">Type DELETE to confirm</label><input type="text" id="dc-confirm" autocomplete="off" placeholder="DELETE"></div>
+              <button type="button" class="btn btn-danger" id="dc-run-btn" onclick="dcExecute()"><i class="fas fa-trash"></i> Permanently delete</button>
+              <p id="dc-progress" style="margin-top:0.6rem;font-size:0.88rem;color:var(--text-2);"></p>
+            </div>
+          </div>
+        </section>
+
         <section id="user-admin" class="hidden">
           <div class="header-bar">
             <h1><i class="fas fa-users-cog"></i> User Management</h1>
@@ -3689,6 +3764,10 @@
       showToast('Audit Trail is restricted to admin / executive roles', 'error');
       return;
     }
+    if (section === 'data-cleanup' && currentUserRole !== 'admin') {
+      showToast('Data Cleanup is restricted to administrators', 'error');
+      return;
+    }
     if (section === 'user-admin' && currentUserRole !== 'admin') {
       showToast('User Management is restricted to administrators', 'error');
       return;
@@ -3727,6 +3806,7 @@
       else if (section === 'reliability-center') deferHeavy('reliability-center', populateReliabilityCenter);
       else if (section === 'audit-log') refreshAuditLog();
       else if (section === 'user-admin') refreshUserAdminList();
+      else if (section === 'data-cleanup') dcRefreshLists();
     } catch (e) { console.warn(e); }
     try { const _el = document.getElementById(section); if (_el && section !== 'reliability-center') { _el.dataset.rk = _viewKey(); _el.dataset.rkOk = '1'; } } catch (e) {}
   }
@@ -5878,6 +5958,235 @@
     if (status) status.style.display = 'none';
   }
   window.clearCalendarFind = clearCalendarFind;
+
+
+  /* ═══════════════════════════════════════════════════════════
+     Data Cleanup (admin only): delete by equipment type, by shaft, or by selected units
+     - always previews exact counts first, optional JSON backup, typed confirmation, audit-logged
+     ═══════════════════════════════════════════════════════════ */
+  const DC = { plan: null, sel: new Set(), busy: false };
+  const dcEl = (id) => document.getElementById(id);
+  const dcIsAdmin = () => (currentUserRole || '') === 'admin';
+  const dcMode = () => { const r = document.querySelector('input[name="dc-mode"]:checked'); return r ? r.value : 'type'; };
+  const dcMulti = (id) => { const el = dcEl(id); return el ? [].filter.call(el.options, o => o.selected).map(o => o.value) : []; };
+  const dcChk = (id) => !!(dcEl(id) && dcEl(id).checked);
+  const dcShaftLabel = (s) => s || '(no shaft)';
+
+  function dcMasters(list) {
+    const byKey = new Map(), byId = new Map();
+    (list || []).forEach(e => {
+      const id = normaliseEquipId(e.id); if (!id) return;
+      let sh = normaliseShaftName(e.shaft || '');
+      if (!sh) { const st = parseStructuredEquipId(id); if (st && st.shaft) sh = normaliseShaftName(st.shaft); }
+      const rec = { shaft: sh, type: inferEquipmentType({ id, equipmentType: e.equipmentType, locoSize: e.locoSize }) };
+      if (!byKey.has(id + '@' + sh)) byKey.set(id + '@' + sh, rec);
+      if (!byId.has(id)) byId.set(id, rec);
+    });
+    return { byKey, byId };
+  }
+  function dcMeta(idRaw, shaftRaw, M) {
+    const id = normaliseEquipId(idRaw);
+    let shaft = normaliseShaftName(shaftRaw || '');
+    const mst = (shaft && M.byKey.get(id + '@' + shaft)) || M.byId.get(id) || null;
+    if (!shaft && mst) shaft = mst.shaft;
+    if (!shaft) { const st = parseStructuredEquipId(id); if (st && st.shaft) shaft = normaliseShaftName(st.shaft); }
+    return { id, shaft: shaft || '', type: mst ? mst.type : inferEquipmentType(id), key: id + '@' + (shaft || '') };
+  }
+
+  function dcInventory() {
+    const M = dcMasters(equipment || []);
+    const inv = new Map();
+    const touch = (meta) => { let r = inv.get(meta.key); if (!r) inv.set(meta.key, r = { id: meta.id, shaft: meta.shaft, type: meta.type, ups: 0, mts: 0 }); return r; };
+    (equipment || []).forEach(e => { if (normaliseEquipId(e.id)) touch(dcMeta(e.id, e.shaft, M)); });
+    (updates || []).forEach(u => { const id = u.equipmentId || u.locoNumber; if (!normaliseEquipId(id)) return; touch(dcMeta(id, u.shaft, M)).ups++; });
+    (maintenance || []).forEach(m => { if (!normaliseEquipId(m.equipment)) return; touch(dcMeta(m.equipment, m.shaft, M)).mts++; });
+    return inv;
+  }
+
+  function dcFillSelect(id, values, labelFn) {
+    const el = dcEl(id); if (!el) return;
+    const keep = new Set(dcMulti(id));
+    el.innerHTML = values.map(v => '<option value="' + escapeHtml(v) + '"' + (keep.has(v) ? ' selected' : '') + '>' + escapeHtml(labelFn ? labelFn(v) : v) + '</option>').join('');
+  }
+
+  function dcRefreshLists() {
+    if (!dcEl('data-cleanup')) return;
+    const inv = dcInventory();
+    const types = [...new Set([...inv.values()].map(r => r.type).filter(Boolean))].sort();
+    const shafts = [...new Set([...inv.values()].map(r => r.shaft))].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+    dcFillSelect('dc-types', types);
+    dcFillSelect('dc-type-shafts', shafts, dcShaftLabel);
+    dcFillSelect('dc-shafts', shafts, dcShaftLabel);
+    // equipment picker
+    const rows = [...inv.entries()].sort((a, b) => String(a[1].shaft).localeCompare(String(b[1].shaft), undefined, { numeric: true }) || String(a[1].id).localeCompare(String(b[1].id), undefined, { numeric: true }));
+    const CAP = 2000;
+    const tb = dcEl('dc-eq-tbody');
+    if (tb) {
+      tb.innerHTML = rows.slice(0, CAP).map(([key, r]) =>
+        '<tr data-k="' + escapeHtml(key.toLowerCase() + ' ' + r.type.toLowerCase()) + '"><td><input type="checkbox" data-key="' + escapeHtml(key) + '"' + (DC.sel.has(key) ? ' checked' : '') + '></td>' +
+        '<td><strong>' + escapeHtml(r.id) + '</strong></td><td>' + escapeHtml(dcShaftLabel(r.shaft)) + '</td><td>' + escapeHtml(r.type) + '</td><td>' + r.ups + '</td><td>' + r.mts + '</td></tr>'
+      ).join('') + (rows.length > CAP ? '<tr><td colspan="6" style="color:var(--text-3);">Showing first ' + CAP + ' of ' + rows.length + ' – use By shaft / By type for the rest.</td></tr>' : '') || '<tr><td colspan="6">No equipment found.</td></tr>';
+      if (!tb._dcBound) {
+        tb._dcBound = true;
+        tb.addEventListener('change', e => {
+          const k = e.target && e.target.dataset && e.target.dataset.key; if (k == null) return;
+          if (e.target.checked) DC.sel.add(k); else DC.sel.delete(k);
+          dcOnChange();
+        });
+      }
+    }
+    dcSetModePanels();
+    dcUpdateSelCount();
+  }
+  function dcUpdateSelCount() { const el = dcEl('dc-sel-count'); if (el) el.textContent = DC.sel.size + ' selected'; }
+  function dcSetModePanels() {
+    const m = dcMode();
+    ['type', 'shaft', 'select'].forEach(k => { const p = dcEl('dc-panel-' + k); if (p) p.style.display = (k === m) ? (k === 'select' ? 'block' : 'grid') : 'none'; });
+  }
+  function dcClearPreview() {
+    DC.plan = null;
+    const p = dcEl('dc-preview'); if (p) p.innerHTML = '';
+    const w = dcEl('dc-confirm-wrap'); if (w) w.style.display = 'none';
+    const c = dcEl('dc-confirm'); if (c) c.value = '';
+    const pr = dcEl('dc-progress'); if (pr) pr.textContent = '';
+  }
+  function dcOnChange() { dcUpdateSelCount(); if (!DC.busy) dcClearPreview(); }
+  function dcSetMode() { dcSetModePanels(); dcOnChange(); }
+  function dcFilterRows() {
+    const q = (dcEl('dc-search').value || '').toLowerCase().trim();
+    document.querySelectorAll('#dc-eq-tbody tr[data-k]').forEach(tr => { tr.style.display = (!q || tr.dataset.k.indexOf(q) >= 0) ? '' : 'none'; });
+  }
+  function dcSelectVisible(on) {
+    document.querySelectorAll('#dc-eq-tbody tr[data-k]').forEach(tr => {
+      if (tr.style.display === 'none') return;
+      const cb = tr.querySelector('input[type=checkbox]'); if (!cb) return;
+      cb.checked = on; if (on) DC.sel.add(cb.dataset.key); else DC.sel.delete(cb.dataset.key);
+    });
+    dcOnChange();
+  }
+
+  async function dcBuildPlan() {
+    const [se, su, sm] = await Promise.all([getDocs(collection(db, 'equipment')), getDocs(collection(db, 'status_updates')), getDocs(collection(db, 'maintenance'))]);
+    const eqList = se.docs.map(d => ({ id: d.id, ...d.data() }));
+    const M = dcMasters(eqList);
+    const mode = dcMode();
+    const kinds = { eq: dcChk('dc-k-eq'), up: dcChk('dc-k-up'), mt: dcChk('dc-k-mt') };
+    const from = (dcEl('dc-from').value || '').trim(), to = (dcEl('dc-to').value || '').trim();
+    let pred = () => false, scopeText = '';
+    if (mode === 'type') {
+      const types = new Set(dcMulti('dc-types')), lim = new Set(dcMulti('dc-type-shafts'));
+      pred = (m) => types.has(m.type) && (!lim.size || lim.has(m.shaft));
+      scopeText = 'type ' + [...types].join(', ') + (lim.size ? ' on ' + [...lim].map(dcShaftLabel).join(', ') : ' (all shafts)');
+    } else if (mode === 'shaft') {
+      const all = dcChk('dc-all-shafts'), sh = new Set(dcMulti('dc-shafts'));
+      pred = (m) => all || sh.has(m.shaft);
+      scopeText = all ? 'ALL shafts' : 'shaft ' + [...sh].map(dcShaftLabel).join(', ');
+    } else {
+      const sel = DC.sel;
+      pred = (m) => sel.has(m.key);
+      scopeText = sel.size + ' selected unit(s)';
+    }
+    const inRange = (d) => { if (!from && !to) return true; const x = String(d || '').slice(0, 10); if (!x) return false; return (!from || x >= from) && (!to || x <= to); };
+    const out = { eq: [], up: [], mt: [] }, by = new Map(), ids = new Set();
+    const bump = (m, k) => { let r = by.get(m.shaft); if (!r) by.set(m.shaft, r = { eq: 0, up: 0, mt: 0 }); r[k]++; ids.add(m.id); };
+    if (kinds.eq) se.docs.forEach((d, i) => { const m = dcMeta(d.id, eqList[i].shaft, M); if (pred(m)) { out.eq.push(d); bump(m, 'eq'); } });
+    if (kinds.up) su.docs.forEach(d => { const u = d.data(); const m = dcMeta(u.equipmentId || u.locoNumber, u.shaft, M); if (pred(m) && inRange(u.date)) { out.up.push(d); bump(m, 'up'); } });
+    if (kinds.mt) sm.docs.forEach(d => { const x = d.data(); const m = dcMeta(x.equipment, x.shaft, M); if (pred(m)) { out.mt.push(d); bump(m, 'mt'); } });
+    const wipeAll = mode === 'shaft' && dcChk('dc-all-shafts') && kinds.eq && kinds.up && kinds.mt && !from && !to;
+    return { mode, scopeText, kinds, from, to, out, by, ids, wipeAll, sig: out.eq.length + '|' + out.up.length + '|' + out.mt.length };
+  }
+
+  function dcRenderPreview(p) {
+    const tot = p.out.eq.length + p.out.up.length + p.out.mt.length;
+    const box = dcEl('dc-preview'), wrap = dcEl('dc-confirm-wrap');
+    if (!box) return;
+    if (!tot) { box.innerHTML = '<div style="padding:0.8rem;color:var(--text-3);">Nothing matches this selection.</div>'; if (wrap) wrap.style.display = 'none'; return; }
+    const rows = [...p.by.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), undefined, { numeric: true }))
+      .map(([sh, r]) => '<tr><td>' + escapeHtml(dcShaftLabel(sh)) + '</td><td>' + r.eq + '</td><td>' + r.up + '</td><td>' + r.mt + '</td></tr>').join('');
+    const sample = [...p.ids].slice(0, 20).map(escapeHtml).join(', ') + (p.ids.size > 20 ? ' … +' + (p.ids.size - 20) + ' more' : '');
+    box.innerHTML =
+      '<div class="kpi-grid" style="margin-bottom:1rem;">' +
+      '<div class="kpi-card red"><i class="fas fa-cogs"></i><h2>' + p.out.eq.length + '</h2><p>Equipment records</p></div>' +
+      '<div class="kpi-card orange"><i class="fas fa-bolt"></i><h2>' + p.out.up.length + '</h2><p>Status / breakdown events</p></div>' +
+      '<div class="kpi-card purple"><i class="fas fa-wrench"></i><h2>' + p.out.mt.length + '</h2><p>Maintenance tasks</p></div></div>' +
+      '<p style="margin:0 0 0.6rem;"><strong>Scope:</strong> ' + escapeHtml(p.scopeText) + (p.from || p.to ? ' · history ' + escapeHtml(p.from || '…') + ' → ' + escapeHtml(p.to || '…') : '') + '</p>' +
+      '<div style="overflow-x:auto;"><table><thead><tr><th>Shaft</th><th>Equipment</th><th>Events</th><th>Maintenance</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<p style="margin:0.6rem 0 0;font-size:0.85rem;color:var(--text-3);"><strong>Units affected (' + p.ids.size + '):</strong> ' + sample + '</p>';
+    if (wrap) wrap.style.display = 'block';
+    const lbl = dcEl('dc-confirm-label'), inp = dcEl('dc-confirm');
+    const phrase = p.wipeAll ? 'DELETE ALL DATA' : 'DELETE';
+    if (lbl) lbl.textContent = 'Type ' + phrase + ' to confirm' + (p.wipeAll ? ' (this erases the whole system)' : '');
+    if (inp) inp.placeholder = phrase;
+  }
+
+  async function dcPreview() {
+    if (!dcIsAdmin()) return showToast('Administrators only', 'error');
+    const k = dcChk('dc-k-eq') || dcChk('dc-k-up') || dcChk('dc-k-mt');
+    if (!k) return showToast('Tick at least one kind of data', 'error');
+    const btn = dcEl('dc-preview-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning…'; }
+    try {
+      dcClearPreview();
+      DC.plan = await dcBuildPlan();
+      dcRenderPreview(DC.plan);
+    } catch (err) { showToast('Preview failed: ' + err.message, 'error'); }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-eye"></i> Preview what will be deleted'; }
+  }
+
+  async function dcExecute() {
+    if (DC.busy) return;
+    if (!dcIsAdmin() || !assertCan('delete_equipment', {}, 'Only admins can delete data')) return;
+    const prev = DC.plan; if (!prev) return showToast('Run the preview first', 'error');
+    const phrase = prev.wipeAll ? 'DELETE ALL DATA' : 'DELETE';
+    if ((dcEl('dc-confirm').value || '').trim() !== phrase) return showToast('Type ' + phrase + ' exactly to confirm', 'error');
+    DC.busy = true;
+    const runBtn = dcEl('dc-run-btn'), prog = dcEl('dc-progress');
+    if (runBtn) runBtn.disabled = true;
+    try {
+      if (prog) prog.textContent = 'Re-checking data…';
+      const plan = await dcBuildPlan();
+      if (plan.sig !== prev.sig) {
+        DC.plan = plan; dcRenderPreview(plan);
+        showToast('Data changed since the preview – review the new counts and confirm again', 'info');
+        return;
+      }
+      const all = [];
+      ['eq', 'up', 'mt'].forEach(k => plan.out[k].forEach(d => all.push({ k, ref: d.ref, del: true, snap: d })));
+      if (!all.length) return showToast('Nothing to delete', 'info');
+      if (dcChk('dc-backup')) {
+        const colName = { eq: 'equipment', up: 'status_updates', mt: 'maintenance' };
+        const backup = { exportedAt: new Date().toISOString(), scope: plan.scopeText, by: (getActor().email || ''), records: all.map(o => ({ collection: colName[o.k], id: o.snap.id, data: o.snap.data() })) };
+        const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+        const a = document.createElement('a'); const n = new Date();
+        a.href = URL.createObjectURL(blob);
+        a.download = 'rbe_backup_' + n.toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      }
+      const CH = 400; let done = 0;
+      for (let i = 0; i < all.length; i += CH) {
+        const b = writeBatch(db);
+        all.slice(i, i + CH).forEach(o => b.delete(o.ref));
+        await b.commit();
+        done = Math.min(all.length, i + CH);
+        if (prog) prog.textContent = 'Deleted ' + done + ' / ' + all.length + '…';
+      }
+      try { logAudit('data_cleanup', 'Deleted ' + plan.out.eq.length + ' equipment, ' + plan.out.up.length + ' status events, ' + plan.out.mt.length + ' maintenance tasks · scope: ' + plan.scopeText + (plan.from || plan.to ? ' · history ' + (plan.from || '…') + '→' + (plan.to || '…') : ''), '', { source: 'ui' }); } catch (e) {}
+      DC.sel.clear();
+      if (window._statusCache) window._statusCache.clear();
+      showToast('Deleted ' + done + ' record(s)', 'success');
+      dcClearPreview();
+      if (prog) prog.textContent = 'Done – ' + done + ' record(s) removed.';
+      refreshCurrentView();
+    } catch (err) {
+      showToast('Delete failed: ' + err.message, 'error');
+      if (prog) prog.textContent = 'Stopped: ' + err.message + ' (some records may already be deleted – run a new preview).';
+    } finally {
+      DC.busy = false;
+      if (runBtn) runBtn.disabled = false;
+    }
+  }
+  Object.assign(window, { dcRefreshLists, dcSetMode, dcOnChange, dcFilterRows, dcSelectVisible, dcPreview, dcExecute });
 
   async function _commitBatched(ops) {
     const CH = 400, jobs = [];
