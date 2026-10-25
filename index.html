@@ -3351,6 +3351,10 @@
     if (hasObservation && dataDays >= MIN_DAYS_FOR_AVAIL) {
       avail = Math.max(0, Math.min(100, ((windowHours - downtimeInWindow) / windowHours) * 100));
       availabilityLabel = avail.toFixed(1) + '%';
+    } else if (!hasObservation) {
+      // No failure / status reports in the period = never reported for failure = 100% available
+      avail = 100;
+      availabilityLabel = '100.0%';
     }
 
     const result = {
@@ -4469,9 +4473,29 @@
   }
   window.analyseFailureTiming = analyseFailureTiming;
 
+  /** MTTF (h) = uptime hours ÷ failures.  MTBR (h) = period hours ÷ completed repairs.  Uses the system Analysis period. */
+  function getMttfMtbr(id) {
+    const st = getEquipmentStatus(id);
+    const per = getSystemPeriod();
+    const fails = Math.max(0, st.failures || 0);
+    const down = Math.max(0, st.downtime || 0);
+    const periodH = Math.max(24, per.hours);
+    const upH = Math.max(0, periodH - down);
+    const open = (st.status === 'Down' || st.status === 'Restricted') ? 1 : 0;
+    const repairs = Math.max(0, fails - open);
+    const r = { mttf: null, mtbr: null, mttfLabel: '', mtbrLabel: '', fails, repairs, periodLabel: per.label };
+    if (fails > 0) { r.mttf = upH / fails; r.mttfLabel = r.mttf.toFixed(1); }
+    else r.mttfLabel = 'No failures (≥ ' + Math.round(upH) + ' h)';
+    if (repairs > 0) { r.mtbr = periodH / repairs; r.mtbrLabel = r.mtbr.toFixed(1); }
+    else r.mtbrLabel = fails > 0 ? 'No repair completed yet' : 'No repairs';
+    return r;
+  }
+  window.getMttfMtbr = getMttfMtbr;
+
   function showDowntimeBreakdown(id) {
     const timing = analyseFailureTiming(id);
     const st = getEquipmentStatus(id);
+    const mm = getMttfMtbr(id);
     const titleEl = document.getElementById('equip-detail-title');
     const body = document.getElementById('equip-detail-body');
     const actions = document.getElementById('equip-detail-actions');
@@ -4497,6 +4521,12 @@
               <div style="font-size:1.4rem;font-weight:800;">${sumHrs.toFixed(1)} h</div></div>
             <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Failure events</div>
               <div style="font-size:1.4rem;font-weight:800;">${timing.total}</div></div>
+            <div title="Uptime hours ÷ failures (${mm.periodLabel})"><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">MTTF (h)</div>
+              <div style="font-size:${mm.mttf != null ? '1.4rem' : '0.95rem'};font-weight:800;color:var(--primary);">${mm.mttfLabel}</div></div>
+            <div title="Period hours ÷ completed repairs (${mm.periodLabel})"><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">MTBR (h)</div>
+              <div style="font-size:${mm.mtbr != null ? '1.4rem' : '0.95rem'};font-weight:800;color:var(--primary);">${mm.mtbrLabel}</div></div>
+            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Availability</div>
+              <div style="font-size:1.4rem;font-weight:800;">${st.availabilityLabel || (st.availability != null ? Number(st.availability).toFixed(1) + '%' : '—')}</div></div>
           </div>
         </div>
         <div style="overflow-x:auto;">
@@ -4546,6 +4576,7 @@
     const actions = document.getElementById('equip-detail-actions');
     if (titleEl) titleEl.innerHTML = `<i class="fas fa-id-card"></i> ${String(displayId).replace(/</g,'&lt;')}` + (st.shaft && st.shaft !== '—' ? ` <span style="font-weight:500;font-size:0.9rem;opacity:0.85;">· ${String(st.shaft).replace(/</g,'&lt;')}</span>` : '');
     const timing = analyseFailureTiming(id);
+    const mm = getMttfMtbr(id);
     const fields = [
       ['Equipment ID', displayId],
       ['Type', eq ? inferEquipmentType(eq) : inferEquipmentType(displayId)],
@@ -4558,6 +4589,8 @@
       ['Availability', st.availabilityLabel || (st.availability != null ? Number(st.availability).toFixed(1) + '%' : 'Insufficient data')],
       ['Total Failures', String(st.failures || 0)],
       ['Total Downtime (h)', (st.downtime || 0).toFixed(1)],
+      ['MTTF (h)', mm.mttfLabel],
+      ['MTBR (h)', mm.mtbrLabel],
       ['Color Risk', st.color || '—'],
       ['Last Update', st.lastUpdate || '—'],
       ['Last Reason / Fault', st.lastReason || last?.reason || '—'],
@@ -4611,7 +4644,9 @@
       body.innerHTML = fields.map(([k, v]) => {
         const isDown = k === 'Total Downtime (h)';
         const click = isDown ? ` style="cursor:pointer;outline:1px dashed var(--primary);" title="Click for breakdown" onclick="showDowntimeBreakdown('${escIdForClick}')"` : '';
-        const hint = isDown ? '<div style="font-size:0.72rem;color:var(--primary);margin-top:0.2rem;">Click for breakdown →</div>' : '';
+        const defs = { 'MTTF (h)': 'Uptime ÷ failures · ' + mm.periodLabel, 'MTBR (h)': 'Period ÷ repairs · ' + mm.periodLabel };
+        const hint = isDown ? '<div style="font-size:0.72rem;color:var(--primary);margin-top:0.2rem;">Click for breakdown →</div>'
+          : (defs[k] ? '<div style="font-size:0.72rem;color:var(--text-3);margin-top:0.2rem;">' + defs[k] + '</div>' : '');
         return `<div${click} style="background:var(--surface-2);border-radius:8px;padding:0.65rem 0.85rem;border:1px solid var(--border);${isDown ? 'cursor:pointer;' : ''}">
         <div style="font-size:0.78rem;color:var(--text-3);font-weight:600;text-transform:uppercase;margin-bottom:0.25rem;">${k}</div>
         <div style="font-weight:600;word-break:break-word;">${String(v == null || v === '' ? '—' : v).replace(/</g,'&lt;')}</div>${hint}
