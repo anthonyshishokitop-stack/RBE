@@ -218,7 +218,7 @@
       font-weight: 700; color: #fff; flex-shrink: 0; font-size: 0.8rem;
     }
     .sidebar-user-info { overflow: hidden; min-width: 0; }
-    .sidebar-user strong { color: #e2e8f0; display: block; margin-bottom: 0.1rem; word-break: break-all; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user strong { color: #e2e8f0; display: block; margin-bottom: 0.1rem; word-break: break-word; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sidebar.collapsed .sidebar-user-info { display: none; }
     .sidebar.collapsed .sidebar-user { justify-content: center; padding: 0.8rem 0.5rem; }
 
@@ -463,6 +463,24 @@
       outline: none; border-color: var(--primary);
       box-shadow: 0 0 0 3px rgba(12,74,110,0.15);
     }
+    /* Radios / checkboxes must not inherit the full-width text-input style */
+    input[type="radio"], input[type="checkbox"] {
+      width: auto; padding: 0; margin: 0.2rem 0 0; flex: 0 0 auto; accent-color: var(--primary);
+    }
+    select[multiple] option { padding: 0.3rem 0.55rem; }
+    .dc-opt {
+      display: flex; gap: 12px; align-items: flex-start; padding: 0.75rem 1rem; margin: 0;
+      border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
+      cursor: pointer; font-weight: 400; color: var(--text-2); font-size: 0.92rem; line-height: 1.45;
+    }
+    .dc-opt strong { color: var(--text); }
+    .dc-opt:hover { border-color: var(--primary); }
+    .dc-opt:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(12,74,110,0.12); }
+    .dc-opt.dc-danger { border-color: #fecaca; background: #fef2f2; color: #b91c1c; font-weight: 700; align-items: center; }
+    .dc-opt.dc-danger input { margin: 0; }
+    .dc-opt.dc-danger:has(input:checked) { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,38,0.15); }
+    .sidebar-user-id { display: none; font-size: 0.72rem; color: #94a3b8; margin-bottom: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.85rem; }
 
     .summary-alert-bar {
       display: flex; align-items: center; justify-content: space-between;
@@ -728,6 +746,7 @@
         <div class="sidebar-user-avatar" id="sidebar-avatar">OP</div>
         <div class="sidebar-user-info">
           <strong id="sidebar-user-email">—</strong>
+          <span class="sidebar-user-id" id="sidebar-user-id"></span>
           <span class="role-badge" id="sidebar-role-badge">operations</span>
           <div id="sidebar-shafts-hint" style="font-size:0.68rem;color:#94a3b8;margin-top:0.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="">Shafts: —</div>
         </div>
@@ -965,7 +984,7 @@
                 <option>Loco</option><option>Caboose</option><option>Hopper</option>
                 <option>Winder</option><option>Winch</option><option>Compressor</option>
                 <option>Loader</option><option>Substation</option><option>Ventilation Fan</option><option>Pump</option>
-                <option>Conveyor</option><option>Drill</option><option>Transformer</option><option>Other</option>
+                <option>Conveyor</option><option>Drill</option><option>Transformer</option><option>Derailment</option><option>Other</option>
               </select>
             </div>
             <div class="form-group"><label>Equipment Size</label><input id="loco-size" type="text" placeholder="e.g. 10 Ton, 16T (optional)"></div>
@@ -1393,9 +1412,9 @@
           <div class="card">
             <h2 style="margin:0 0 0.75rem;"><i class="fas fa-bullseye"></i> 1. What do you want to delete?</h2>
             <div style="display:grid;gap:0.5rem;max-width:760px;">
-              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="radio" name="dc-mode" value="type" checked onchange="dcSetMode()"> <span><strong>By equipment type</strong> – e.g. all Winches, all Hoppers (optionally limited to chosen shafts)</span></label>
-              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="radio" name="dc-mode" value="shaft" onchange="dcSetMode()"> <span><strong>By shaft</strong> – clean everything for one or more shafts, or wipe the whole system</span></label>
-              <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="radio" name="dc-mode" value="select" onchange="dcSetMode()"> <span><strong>Select specific equipment</strong> – tick exactly the units whose data must go</span></label>
+              <label class="dc-opt"><input type="radio" name="dc-mode" value="type" checked onchange="dcSetMode()"> <span><strong>By equipment type</strong> – e.g. all Winches, all Hoppers (optionally limited to chosen shafts)</span></label>
+              <label class="dc-opt"><input type="radio" name="dc-mode" value="shaft" onchange="dcSetMode()"> <span><strong>By shaft</strong> – clean everything for one or more shafts, or wipe the whole system</span></label>
+              <label class="dc-opt"><input type="radio" name="dc-mode" value="select" onchange="dcSetMode()"> <span><strong>Select specific equipment</strong> – tick exactly the units whose data must go</span></label>
             </div>
 
             <div id="dc-panel-type" style="margin-top:1rem;display:grid;gap:0.75rem;max-width:760px;">
@@ -1404,7 +1423,7 @@
             </div>
 
             <div id="dc-panel-shaft" style="margin-top:1rem;display:none;gap:0.75rem;max-width:760px;">
-              <label style="display:flex;gap:8px;align-items:center;cursor:pointer;color:#b91c1c;font-weight:700;"><input type="checkbox" id="dc-all-shafts" onchange="dcOnChange()"> ALL shafts – wipe the entire system</label>
+              <label class="dc-opt dc-danger"><input type="checkbox" id="dc-all-shafts" onchange="dcOnChange()"> ALL shafts – wipe the entire system</label>
               <div class="form-group" style="margin:0;"><label>Shaft(s)</label><select id="dc-shafts" multiple size="8" style="min-height:140px;" onchange="dcOnChange()"></select></div>
             </div>
 
@@ -1464,7 +1483,11 @@
             <h2 style="margin:0 0 0.75rem;"><i class="fas fa-user-plus"></i> Invite / register user</h2>
             <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Creates user profile</p>
             <form id="invite-user-form" style="display:grid;gap:0.85rem;max-width:720px;">
-              <div class="form-group" style="margin:0;"><label>Email</label><input id="invite-email" type="email" required placeholder="user@company.com"></div>
+              <div class="form-group" style="margin:0;"><label>Email <span style="color:var(--text-3);font-weight:400;">(sign-in only – not displayed in the app)</span></label><input id="invite-email" type="email" required placeholder="user@company.com"></div>
+              <div class="user-form-grid">
+                <div class="form-group" style="margin:0;"><label>User name</label><input id="invite-name" type="text" placeholder="e.g. Anthony Shishoki"><div style="font-size:0.76rem;color:var(--text-3);margin-top:0.25rem;">Leave blank to build it from the email.</div></div>
+                <div class="form-group" style="margin:0;"><label>User ID (company / employee number)</label><input id="invite-company" type="text" placeholder="e.g. 12345678"><div style="font-size:0.76rem;color:var(--text-3);margin-top:0.25rem;">Shown instead of the email. If blank, only the name is shown.</div></div>
+              </div>
               <div class="form-group" style="margin:0;"><label>Role</label>
                 <select id="invite-role" required>
                   <option value="operations">operations</option>
@@ -1482,7 +1505,6 @@
                   <button type="button" class="btn btn-primary" style="padding:0.35rem 0.7rem;font-size:0.8rem;background:#64748b;" onclick="selectAllInviteShafts(false)">Clear</button>
                 </div>
               </div>
-              <div class="form-group" style="margin:0;"><label>Company / employee number</label><input id="invite-company" type="text" placeholder="e.g. payroll / company number"></div>
               <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Save invite / profile</button>
             </form>
             <p id="invite-status" style="margin-top:0.75rem;font-size:0.88rem;"></p>
@@ -1494,8 +1516,8 @@
             </div>
             <div style="overflow-x:auto;">
               <table id="user-admin-table">
-                <thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Allowed shafts</th><th>Actions</th></tr></thead>
-                <tbody id="user-admin-tbody"><tr><td colspan="5">Loading…</td></tr></tbody>
+                <thead><tr><th>User name</th><th>User ID</th><th>Role</th><th>Status</th><th>Allowed shafts</th><th>Actions</th></tr></thead>
+                <tbody id="user-admin-tbody"><tr><td colspan="6">Loading…</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -1585,7 +1607,7 @@
             <option value="">— Select —</option>
             <option>Loco</option><option>Winder</option><option>Winch</option><option>Compressor</option>
             <option>Loader</option><option>Substation</option><option>Ventilation Fan</option><option>Pump</option>
-            <option>Conveyor</option><option>Drill</option><option>Transformer</option><option>Other</option>
+            <option>Conveyor</option><option>Drill</option><option>Transformer</option><option>Derailment</option><option>Other</option>
           </select>
         </div>
         <div class="form-group"><label>Equipment Size</label><input id="edit-eq-size" type="text"></div>
@@ -2001,7 +2023,7 @@
 
   let equipment = [], updates = [], maintenance = [], delaysData = [];
   let currentShaftFilter = '', currentTypeFilter = '';
-  const EQUIPMENT_TYPES = ['Loco','Guard Car','Loader','Hopper','Carriage','Charger','Battery Charger','Winder','Winch','Compressor','Substation','Ventilation Fan','Pump','Conveyor','Drill','Transformer','Other'];
+  const EQUIPMENT_TYPES = ['Loco','Guard Car','Loader','Hopper','Carriage','Charger','Battery Charger','Winder','Winch','Compressor','Substation','Ventilation Fan','Pump','Conveyor','Drill','Transformer','Derailment','Other'];
   let unsubscribeFunctions = [], charts = {}, calendar = null;
   let excelData = [], selectedMapping = {}, availableColumns = [];
   let dismissedAlerts = new Set(JSON.parse(localStorage.getItem('rbe_dismissed') || '[]'));
@@ -2031,6 +2053,41 @@
   }
   window.showToast = showToast;
 
+  /** anthony.shishoki@implats.ac.za -> "Anthony Shishoki" (never exposes the full email) */
+  function nameFromEmail(email) {
+    const local = String(email || '').split('@')[0];
+    const parts = local.split(/[._\-+\s]+/).map(p => p.replace(/\d+$/, '')).filter(Boolean);
+    if (!parts.length) return 'User';
+    return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+  }
+  /** Any person label that may be an email -> readable name */
+  function safePersonLabel(v) {
+    const t = String(v == null ? '' : v).trim();
+    if (!t) return '';
+    return t.indexOf('@') > -1 ? nameFromEmail(t) : t;
+  }
+  /** Stored profile name; falls back to the name built from the email */
+  function profileUserName(d, email) {
+    d = d || {};
+    const explicit = String(d.userName || '').trim();
+    if (explicit) return explicit;
+    const dn = String(d.displayName || '').trim();
+    if (dn && /\s/.test(dn) && dn.indexOf('@') < 0) return dn;
+    return nameFromEmail(d.email || email || '');
+  }
+  function actorLabel(a) {
+    return a && a.companyNumber ? (a.name + ' (' + a.companyNumber + ')') : (a && a.name) || 'Unknown';
+  }
+  function auditByLabel(e) {
+    const by = String((e && e.by) || '').trim();
+    if (by.indexOf('@') > -1) {
+      const nm = nameFromEmail(by);
+      return e.companyNumber ? nm + ' (' + e.companyNumber + ')' : nm;
+    }
+    return by || '—';
+  }
+  window.nameFromEmail = nameFromEmail;
+
   function getActor() {
     const u = auth.currentUser;
     if (!u) return { uid: '', email: 'unknown', name: 'Unknown', companyNumber: '' };
@@ -2038,7 +2095,7 @@
     return {
       uid: u.uid || '',
       email: u.email || 'unknown',
-      name: (u.displayName || u.email || 'Unknown').split('@')[0],
+      name: (currentUser && currentUser.userName) || ((u.displayName && /\s/.test(u.displayName)) ? u.displayName : nameFromEmail(u.email)),
       companyNumber: profileCn || ''
     };
   }
@@ -2132,7 +2189,7 @@
       detail: String(detail || ''),
       equipmentId: equipmentId || '',
       shaft: shaft || '',
-      by: actor.email || actor.name || 'unknown',
+      by: actorLabel(actor),
       email: actor.email || '',
       role: currentUserRole || 'unknown',
       uid: actor.uid || '',
@@ -2156,7 +2213,13 @@
     const role = currentUserRole || 'viewer';
     const emailEl = document.getElementById('sidebar-user-email');
     const badge = document.getElementById('sidebar-role-badge');
-    if (emailEl) emailEl.textContent = currentUser?.email || '—';
+    if (emailEl) emailEl.textContent = currentUser ? (currentUser.userName || nameFromEmail(currentUser.email)) : '—';
+    const idEl = document.getElementById('sidebar-user-id');
+    if (idEl) {
+      const cn = currentUser && currentUser.companyNumber;
+      idEl.textContent = cn ? ('ID: ' + cn) : '';
+      idEl.style.display = cn ? 'block' : 'none';
+    }
     if (badge) {
       badge.textContent = role;
       badge.className = 'role-badge ' + role;
@@ -2218,7 +2281,8 @@
         const payload = {
           email: user.email || '',
           role: 'viewer',
-          displayName: (user.email || '').split('@')[0],
+          displayName: nameFromEmail(user.email),
+          userName: nameFromEmail(user.email),
           allowedShafts: [],
           status: DISABLE_PUBLIC_SIGNUP ? 'pending' : 'active',
           createdAt: new Date().toISOString(),
@@ -2282,13 +2346,15 @@
       role: currentUserRole,
       allowedShafts: currentAllowedShafts.slice(),
       status: currentUserStatus,
-      companyNumber: ''
+      companyNumber: '',
+      userName: nameFromEmail(user.email)
     };
     try {
       const snap = await getDoc(ref);
       if (snap.exists()) {
         const d = snap.data() || {};
         currentUser.companyNumber = d.companyNumber || d.companyNo || d.employeeNumber || '';
+        currentUser.userName = profileUserName(d, user.email);
       }
     } catch (e) {}
     applyRoleUI();
@@ -2610,6 +2676,7 @@
     if (/conveyor|\bbelt\b/.test(s)) return 'Conveyor';
     if (/\bdrill\b|jumbo/.test(s)) return 'Drill';
     if (/transform/.test(s)) return 'Transformer';
+    if (/derail/.test(s)) return 'Derailment';
     if (/trackless|crawl|workshop|feeder|door|magnet|siren|antenna|antena|display|pulse/.test(s)) return 'Other';
 
     // --- Loco ONLY if ID is clearly a loco number ---
@@ -2733,7 +2800,7 @@
   /** Prefer company number; only show a personal name when no company number is available. */
   function formatPersonDisplay(companyNo, nameOrFallback) {
     const cn = String(companyNo || '').trim();
-    const nm = String(nameOrFallback || '').trim();
+    const nm = safePersonLabel(nameOrFallback);
     if (cn && looksLikeCompanyNumber(cn)) return cn;
     if (nm && looksLikeCompanyNumber(nm)) return nm;
     if (cn && !nm) return cn;
@@ -2755,7 +2822,7 @@
       return formatPersonDisplay(cn, nm);
     }
     const cn = u.updatedByCompanyNumber || u.changedByCompanyNumber || u.companyNumber || '';
-    const nm = u.updatedByEmail || u.updatedBy || u.changedBy || u.operator || '';
+    const nm = u.updatedBy || u.changedBy || u.operator || u.updatedByEmail || '';
     return formatPersonDisplay(cn, nm);
   }
 
@@ -3686,7 +3753,7 @@
         </div>
         <div style="color:var(--text-2);margin-top:0.2rem;">${String(e.detail||'').replace(/</g,'&lt;')}</div>
         <div style="font-size:0.78rem;color:var(--text-3);margin-top:0.25rem;">
-          By: ${String(e.by||'—').replace(/</g,'&lt;')} · Role: ${e.role||'—'}
+          By: ${auditByLabel(e).replace(/</g,'&lt;')} · Role: ${e.role||'—'}
           ${e.equipmentId ? ' · Equip: ' + String(e.equipmentId).replace(/</g,'&lt;') : ''}
         </div>
       </div>`).join('');
@@ -3717,7 +3784,7 @@
     downloadXLSX('RBE_Audit_Trail.xlsx', [{
       name: 'Audit',
       headers: ['Timestamp', 'Action', 'Detail', 'Equipment', 'By', 'Role'],
-      rows: auditEvents.map(e => [e.ts, e.action, e.detail, e.equipmentId, e.by, e.role])
+      rows: auditEvents.map(e => [e.ts, e.action, e.detail, e.equipmentId, auditByLabel(e), e.role])
     }]);
   };
   window.exportAuditPDF = function() {
@@ -4621,8 +4688,8 @@
       ${eu.length ? eu.slice(0, 12).map(u => {
         const when = ((u.date || '') + ' ' + (u.time || '')).trim() || '—';
         const reported = personFromUpdate(u);
-        const signed = u.signedBy || u.signed || '';
-        const changed = u.updatedBy || u.changedBy || '';
+        const signed = safePersonLabel(u.signedBy || u.signed || '');
+        const changed = safePersonLabel(u.updatedBy || u.changedBy || '');
         const status = u.status || '—';
         const reason = String(u.reason || u.fault || '').slice(0, 120);
         const whoBits = [];
@@ -5749,7 +5816,7 @@
     if (!upcoming.length && Array.isArray(window._lastUpcomingMaint)) {
       upcoming = window._lastUpcomingMaint.slice(0, MAX_EQ_ROWS);
     }
-    sectionTitle('6. Predictive Inspections (≤15 days / overdue)');
+    sectionTitle('6. Predictive Inspections (15 days or less / overdue)');
     if (upcoming.length) {
       doc.autoTable({
         startY: y,
@@ -5769,7 +5836,7 @@
       });
       y = doc.lastAutoTable.finalY + 8;
     } else {
-      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(15, 23, 42);
       doc.text('No predictive inspection window data available.', 14, y);
       y += 8;
     }
@@ -5820,7 +5887,7 @@
       });
       y = doc.lastAutoTable.finalY + 8;
     } else {
-      doc.setFontSize(9); doc.text('No gated MTBF/MTTR available yet (need ≥3 failures & ≥' + MIN_DAYS_FOR_MTBF + '-day period).', 14, y); y += 8;
+      doc.setFontSize(9); doc.text('No gated MTBF/MTTR available yet (need at least 3 failures and a period of at least ' + MIN_DAYS_FOR_MTBF + ' days).', 14, y); y += 8;
     }
 
     // 10) Notes
@@ -6377,7 +6444,7 @@
             equipment: pureId, task: 'Predictive inspection (rescheduled)', interval: 'custom',
             lastDone: new Date().toISOString().slice(0, 10), dueDate: rescheduleDate,
             source: 'reschedule', createdAt: new Date().toISOString(),
-            updatedBy: actor.email || actor.name
+            updatedBy: actor.name
           }).catch(function () {});
         } catch (e) {}
       }
@@ -6407,7 +6474,7 @@
           equipment: pureId, task: 'Predictive inspection (rescheduled)', interval: 'custom',
           lastDone: new Date().toISOString().slice(0, 10), dueDate: rescheduleDate,
           source: 'reschedule', notes: notes || '', createdAt: new Date().toISOString(),
-          updatedBy: actor.email || actor.name
+          updatedBy: actor.name
         }).catch(function (e) { showToast('Reschedule failed: ' + e.message, 'error'); });
         showToast('Alert dismissed · inspection rescheduled', 'success');
       } catch (e) {
@@ -8202,11 +8269,11 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     const tbody = document.getElementById('user-admin-tbody');
     if (!tbody) return;
     if (currentUserRole !== 'admin') {
-      tbody.innerHTML = '<tr><td colspan="5">Admin only</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6">Admin only</td></tr>';
       return;
     }
     fillInviteShaftSelect();
-    tbody.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
     try {
       const snap = await getDocs(collection(db, 'users'));
       const rows = [];
@@ -8214,9 +8281,10 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
         const u = d.data() || {};
         rows.push({ id: d.id, ...u });
       });
-      rows.sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
+      rows.forEach(r => { r._name = profileUserName(r, r.email); r._cn = r.companyNumber || r.companyNo || r.employeeNumber || ''; });
+      rows.sort((a, b) => String(a._name).localeCompare(String(b._name)));
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5">No user profiles yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6">No user profiles yet.</td></tr>';
         return;
       }
       tbody.innerHTML = rows.map(u => {
@@ -8225,7 +8293,8 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
         const status = u.status || 'active';
         const escId = escJs(u.id);
         return `<tr>
-          <td>${String(u.email || u.id).replace(/</g,'&lt;')}</td>
+          <td><strong>${String(u._name).replace(/</g,'&lt;')}</strong></td>
+          <td>${u._cn ? String(u._cn).replace(/</g,'&lt;') : '<span style="color:var(--text-3);">—</span>'}</td>
           <td><span class="role-badge ${u.role || 'viewer'}">${u.role || '—'}</span></td>
           <td>${status}</td>
           <td style="max-width:220px;font-size:0.82rem;" title="${shafts.join(', ').replace(/"/g,'&quot;')}">${shaftLabel.replace(/</g,'&lt;')}</td>
@@ -8237,7 +8306,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
         </tr>`;
       }).join('');
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="5">Error: ${String(err.message || err).replace(/</g,'&lt;')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6">Error: ${String(err.message || err).replace(/</g,'&lt;')}</td></tr>`;
     }
   }
   window.refreshUserAdminList = refreshUserAdminList;
@@ -8248,6 +8317,10 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
       const snap = await getDoc(doc(db, 'users', uid));
       if (!snap.exists()) return showToast('User not found', 'error');
       const u = snap.data() || {};
+      const newName = prompt('User name', profileUserName(u, u.email));
+      if (newName == null) return;
+      const newCn = prompt('User ID (company / employee number; leave empty to show the name only)', u.companyNumber || u.companyNo || u.employeeNumber || '');
+      if (newCn == null) return;
       const role = prompt('Role (admin|reliability|operations|executive|viewer)', u.role || 'operations');
       if (role == null) return;
       const r = String(role).toLowerCase().trim();
@@ -8256,13 +8329,18 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
       const shaftsStr = prompt('Allowed shafts (comma-separated; leave empty for none)', currentShafts);
       if (shaftsStr == null) return;
       const allowedShafts = shaftsStr.split(',').map(s => s.trim()).filter(Boolean);
+      const finalName = String(newName).trim() || nameFromEmail(u.email);
+      const finalCn = String(newCn).trim();
       await setDoc(doc(db, 'users', uid), {
         role: r,
         allowedShafts,
+        userName: finalName,
+        displayName: finalName,
+        companyNumber: finalCn,
         updatedAt: new Date().toISOString(),
-        updatedBy: (auth.currentUser && auth.currentUser.email) || 'admin'
+        updatedBy: getActor().name
       }, { merge: true });
-      logAudit('role_scope_change', `Updated ${u.email || uid}: role=${r}, shafts=${allowedShafts.length}`, '', { source: 'ui' });
+      logAudit('role_scope_change', `Updated ${finalName}${finalCn ? ' (' + finalCn + ')' : ''}: role=${r}, shafts=${allowedShafts.length}`, '', { source: 'ui' });
       showToast('User updated', 'success');
       refreshUserAdminList();
     } catch (err) {
@@ -8288,6 +8366,8 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     const email = document.getElementById('invite-email').value.trim().toLowerCase();
     const role = document.getElementById('invite-role').value;
     const company = document.getElementById('invite-company').value.trim();
+    const userNameIn = (document.getElementById('invite-name').value || '').trim();
+    const userName = userNameIn || nameFromEmail(email);
     const sel = document.getElementById('invite-shafts');
     const allowedShafts = sel ? [...sel.selectedOptions].map(o => o.value) : [];
     const statusEl = document.getElementById('invite-status');
@@ -8307,9 +8387,9 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     try {
       const inviteId = email.replace(/[^a-z0-9]/g, '_');
       await setDoc(doc(db, 'user_invites', inviteId), {
-        email, role, allowedShafts, companyNumber: company,
+        email, role, allowedShafts, companyNumber: company, userName,
         status: 'pending',
-        invitedBy: (auth.currentUser && auth.currentUser.email) || '',
+        invitedBy: getActor().name,
         invitedByUid: (auth.currentUser && auth.currentUser.uid) || '',
         createdAt: new Date().toISOString()
       });
@@ -8321,12 +8401,13 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
         if (String(data.email || '').toLowerCase() === email) {
           await setDoc(d.ref, {
             role, allowedShafts, companyNumber: company || data.companyNumber || '',
+            userName: userNameIn || profileUserName(data, email), displayName: userNameIn || profileUserName(data, email),
             status: 'pending', updatedAt: new Date().toISOString()
           }, { merge: true });
           matched++;
         }
       }
-      logAudit('user_invite', `Invited ${email} role=${role} shafts=${allowedShafts.length}`, '', { source: 'ui' });
+      logAudit('user_invite', `Invited ${userName}${company ? ' (' + company + ')' : ''} role=${role} shafts=${allowedShafts.length}`, '', { source: 'ui' });
       if (statusEl) {
         statusEl.style.color = 'var(--success)';
         statusEl.innerHTML = matched
@@ -8514,7 +8595,7 @@ function deferHeavy(sectionId, fn) {
     const obs = new MutationObserver(function() {
       const email = (emailEl.textContent || '').trim();
       if (email && email !== '—') {
-        const parts = email.split('@')[0].split(/[._-]/);
+        const parts = email.split('@')[0].split(/[\s._-]+/);
         const initials = parts.slice(0, 2).map(function(p) { return (p[0] || '').toUpperCase(); }).join('') || 'OP';
         avatarEl.textContent = initials.slice(0, 2);
       }
