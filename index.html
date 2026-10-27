@@ -1712,15 +1712,27 @@
 
   <!-- Equipment / KPI list modal -->
   <div id="equip-list-modal" class="modal">
-    <div class="modal-content" style="max-width:820px;">
+    <div class="modal-content" style="max-width:920px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
         <h2 style="margin:0;color:var(--primary);" id="equip-list-title"><i class="fas fa-list"></i> Equipment List</h2>
         <button type="button" onclick="closeModal('equip-list-modal')" style="background:none;border:none;font-size:1.7rem;cursor:pointer;">×</button>
       </div>
       <div id="equip-list-summary" style="margin-bottom:0.75rem;font-size:0.9rem;color:var(--text-3);"></div>
+      <div id="equip-list-admin-bar" class="hidden" style="display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.55rem;margin-bottom:0.75rem;padding:0.65rem 0.85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;">
+        <div style="font-size:0.88rem;color:var(--text-2);font-weight:600;">
+          <i class="fas fa-user-shield" style="color:var(--primary);margin-right:4px;"></i>
+          Admin multi-select: tick units, then Mark Fixed (same notes / reason process).
+          <span id="equip-list-sel-count" style="margin-left:6px;color:var(--text-3);font-weight:500;">0 selected</span>
+        </div>
+        <div style="display:flex;gap:0.45rem;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" style="padding:0.4rem 0.8rem;font-size:0.82rem;" onclick="equipListSelectAll(true)">Select all</button>
+          <button type="button" class="btn" style="padding:0.4rem 0.8rem;font-size:0.82rem;background:var(--surface);border:1px solid var(--border);" onclick="equipListSelectAll(false)">Clear</button>
+          <button type="button" class="btn btn-success" style="padding:0.4rem 0.9rem;font-size:0.82rem;" id="equip-list-bulk-fixed-btn" onclick="markSelectedEquipmentFixed()"><i class="fas fa-check-double"></i> Mark Fixed selected</button>
+        </div>
+      </div>
       <div style="overflow-x:auto;max-height:60vh;">
         <table id="equip-list-table" style="margin:0;">
-          <thead><tr><th>Equipment ID</th><th>Type</th><th>Shaft</th><th>Status</th><th>Availability</th><th>Failures</th><th>Downtime (h)</th></tr></thead>
+          <thead id="equip-list-thead"><tr><th>Equipment ID</th><th>Type</th><th>Shaft</th><th>Status</th><th>Availability</th><th>Failures</th><th>Downtime (h)</th></tr></thead>
           <tbody id="equip-list-tbody"></tbody>
         </table>
       </div>
@@ -4426,6 +4438,7 @@
   window.displayEquipId = displayEquipId;
 
   function showKpiEquipmentList(mode) {
+    window._equipListMode = mode || 'all';
     const ids = collectFilteredIds(); // composite keys id@shaft
     let filtered = ids.map(key => {
       const st = getEquipmentStatus(key);
@@ -4456,23 +4469,46 @@
     }
     // Only equipment that exists on the system register (edit-safe)
     filtered = filtered.filter(x => !!x.eq);
+    window._equipListRows = filtered.slice();
+    const isAdmin = (currentUserRole || '') === 'admin';
+    const multiSelect = isAdmin && mode === 'down';
     const titleEl = document.getElementById('equip-list-title');
     const summaryEl = document.getElementById('equip-list-summary');
     const tbody = document.getElementById('equip-list-tbody');
+    const thead = document.getElementById('equip-list-thead');
+    const adminBar = document.getElementById('equip-list-admin-bar');
     if (titleEl) titleEl.innerHTML = `<i class="fas fa-list"></i> ${title}`;
     if (summaryEl) summaryEl.textContent = `${filtered.length} unit(s)` + (getActiveFilterLabel() ? ` · Filter: ${getActiveFilterLabel()}` : '');
+    if (adminBar) {
+      if (multiSelect) {
+        adminBar.classList.remove('hidden');
+        adminBar.style.display = 'flex';
+      } else {
+        adminBar.classList.add('hidden');
+        adminBar.style.display = 'none';
+      }
+    }
+    if (thead) {
+      thead.innerHTML = multiSelect
+        ? `<tr><th style="width:42px;"><input type="checkbox" id="equip-list-check-all" title="Select all" onclick="equipListSelectAll(this.checked)"></th><th>Equipment ID</th><th>Type</th><th>Shaft</th><th>Status</th><th>Availability</th><th>Failures</th><th>Downtime (h)</th></tr>`
+        : `<tr><th>Equipment ID</th><th>Type</th><th>Shaft</th><th>Status</th><th>Availability</th><th>Failures</th><th>Downtime (h)</th></tr>`;
+    }
+    const colSpan = multiSelect ? 8 : 7;
     if (tbody) {
       if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-3);">No equipment in this category.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;padding:1.5rem;color:var(--text-3);">No equipment in this category.</td></tr>`;
       } else {
-        tbody.innerHTML = filtered.map(x => {
+        tbody.innerHTML = filtered.map((x, idx) => {
           const type = x.eq ? inferEquipmentType(x.eq) : inferEquipmentType(x.id);
-          const escId = escJs(x.id);
           const availDisp = x.st.availabilityLabel || (x.st.availability != null ? Number(x.st.availability).toFixed(1) + '%' : 'Insufficient data');
           const sc = x.st.status;
           const statusColor = (sc === 'Down' || sc === 'Restricted') ? '#dc2626' : (sc === 'Up' || sc === 'Standby' ? '#16a34a' : '#64748b');
           const clickKey = escJs(x.key || x.id);
-          return `<tr class="row-clickable" onclick="showEquipmentDetail('${clickKey}')">
+          const checkCell = multiSelect
+            ? `<td onclick="event.stopPropagation();"><input type="checkbox" class="equip-list-cb" data-key="${String(x.key || x.id).replace(/"/g,'&quot;')}" data-id="${String(x.id).replace(/"/g,'&quot;')}" onchange="equipListUpdateSelCount()"></td>`
+            : '';
+          return `<tr class="row-clickable" data-equip-key="${String(x.key || x.id).replace(/"/g,'&quot;')}" onclick="showEquipmentDetail('${clickKey}')">
+            ${checkCell}
             <td><strong>${String(x.id).replace(/</g,'&lt;')}</strong></td>
             <td>${type}</td>
             <td>${String(x.shaft || x.eq?.shaft || '—').replace(/</g,'&lt;')}</td>
@@ -4484,8 +4520,42 @@
         }).join('');
       }
     }
-    openModal('equip-list-modal');
+    if (typeof equipListUpdateSelCount === 'function') equipListUpdateSelCount();
+    // Keep modal open if already open (live refresh after Mark Fixed); otherwise open it
+    const listModal = document.getElementById('equip-list-modal');
+    if (listModal && listModal.classList.contains('active')) {
+      // already open — just refreshed in place
+    } else {
+      openModal('equip-list-modal');
+    }
   }
+  window.showKpiEquipmentList = showKpiEquipmentList;
+
+  window.equipListSelectAll = function(on) {
+    document.querySelectorAll('#equip-list-tbody .equip-list-cb').forEach(cb => { cb.checked = !!on; });
+    const all = document.getElementById('equip-list-check-all');
+    if (all) all.checked = !!on;
+    equipListUpdateSelCount();
+  };
+  window.equipListUpdateSelCount = function() {
+    const n = document.querySelectorAll('#equip-list-tbody .equip-list-cb:checked').length;
+    const el = document.getElementById('equip-list-sel-count');
+    if (el) el.textContent = n + ' selected';
+  };
+  window.markSelectedEquipmentFixed = function() {
+    if ((currentUserRole || '') !== 'admin') {
+      showToast('Multi-select Mark Fixed is admin only', 'error');
+      return;
+    }
+    const keys = [...document.querySelectorAll('#equip-list-tbody .equip-list-cb:checked')].map(cb => cb.getAttribute('data-key') || cb.getAttribute('data-id')).filter(Boolean);
+    if (!keys.length) {
+      showToast('Select at least one equipment', 'error');
+      return;
+    }
+    // Same notes / reason process — confirm dialog supports multi ids (pipe-separated)
+    openActionConfirm('mark_fixed', keys.join('|'), '', '');
+  };
+
   window.showKpiEquipmentList = showKpiEquipmentList;
 
   /** Analyse when failures are most likely for one equipment (day-of-week + shift + hour band). */
@@ -6405,10 +6475,16 @@
       : (equipId || (alertKey ? String(alertKey).replace(/^(maint|fail|high)-/, '') : '') || '');
     if (type === 'mark_fixed') {
       if (titleEl) titleEl.innerHTML = '<i class="fas fa-check"></i> Mark Fixed';
-      if (descEl) descEl.textContent = 'Confirm marking ' + (label || 'equipment') + ' as Fixed. Notes are required. Optionally reschedule the next predicted inspection.';
+      const multiIds = String(equipId || '').split('|').map(s => s.trim()).filter(Boolean);
+      const multiLabel = multiIds.length > 1
+        ? (multiIds.length + ' selected equipment units')
+        : (label || 'equipment');
+      if (descEl) descEl.textContent = 'Confirm marking ' + multiLabel + ' as Fixed. Notes / reason are required (applied to all selected). Optionally reschedule the next predicted inspection.';
       if (submitBtn) {
         submitBtn.className = 'btn btn-success';
-        submitBtn.innerHTML = '<i class="fas fa-check"></i> Confirm Mark Fixed';
+        submitBtn.innerHTML = multiIds.length > 1
+          ? ('<i class="fas fa-check-double"></i> Confirm Mark Fixed (' + multiIds.length + ')')
+          : '<i class="fas fa-check"></i> Confirm Mark Fixed';
       }
     } else {
       if (titleEl) titleEl.innerHTML = '<i class="fas fa-eye-slash"></i> Dismiss Alert';
@@ -6433,48 +6509,98 @@
   window.markEquipmentFixed = markEquipmentFixed;
 
   async function executeMarkFixed(equipId, maintId, notes, rescheduleDate) {
-    if (!assertCan('mark_fixed', { equipmentId: equipId }, 'Not authorized to mark fixed for this equipment/shaft')) return;
+    // Support admin multi-select: equipId may be pipe-separated composite keys
+    const idList = String(equipId || '').split('|').map(s => s.trim()).filter(Boolean);
+    if (!idList.length) return;
+    if (idList.length > 1 && (currentUserRole || '') !== 'admin') {
+      showToast('Bulk Mark Fixed is admin only', 'error');
+      return;
+    }
     const actor = getActor();
+    let ok = 0, fail = 0;
     try {
-      const markShaft = resolveShaftForEquipment(equipId, '');
-      const pureId = (typeof parseEquipKey === 'function') ? parseEquipKey(equipId).id : normaliseEquipId(equipId);
-      const _fixP = addDoc(collection(db, "status_updates"), {
-        equipmentId: pureId || equipId, date: new Date().toISOString().slice(0, 10),
-        time: new Date().toTimeString().slice(0, 5), status: 'Up', statusCode: 'Up', shift: 'Morning',
-        reason: notes || 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
-        shaft: markShaft,
-        source: 'Mark Fixed', createdAt: serverTimestamp(),
-        updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
-        updatedByCompanyNumber: actor.companyNumber || '',
-        changedAt: new Date().toISOString()
-      });
-      _fixP.catch(err => showToast('Save failed: ' + err.message, 'error'));
-      if (maintId) {
+      for (const oneId of idList) {
+        if (!assertCan('mark_fixed', { equipmentId: oneId }, 'Not authorized to mark fixed for this equipment/shaft')) {
+          fail++;
+          continue;
+        }
         try {
-          const patch = { lastDone: new Date().toISOString().slice(0, 10) };
-          if (rescheduleDate) patch.dueDate = rescheduleDate;
-          updateDoc(doc(db, "maintenance", maintId), patch).catch(function () {});
-        } catch (e) {}
-      } else if (rescheduleDate && pureId) {
-        // Create / merge a predictive maintenance row with new due date
-        try {
-          addDoc(collection(db, "maintenance"), {
-            equipment: pureId, task: 'Predictive inspection (rescheduled)', interval: 'custom',
-            lastDone: new Date().toISOString().slice(0, 10), dueDate: rescheduleDate,
-            source: 'reschedule', createdAt: new Date().toISOString(),
-            updatedBy: actor.name
-          }).catch(function () {});
-        } catch (e) {}
+          const markShaft = resolveShaftForEquipment(oneId, '');
+          const pureId = (typeof parseEquipKey === 'function') ? parseEquipKey(oneId).id : normaliseEquipId(oneId);
+          const nowIso = new Date().toISOString();
+          const dateStr = nowIso.slice(0, 10);
+          const timeStr = new Date().toTimeString().slice(0, 5);
+          const statusPayload = {
+            equipmentId: pureId || oneId, date: dateStr,
+            time: timeStr, status: 'Up', statusCode: 'Up', shift: 'Morning',
+            reason: notes || 'Marked fixed from inspection / maintenance', downtimeHours: 0, isFailure: '0',
+            shaft: markShaft,
+            source: 'Mark Fixed', createdAt: serverTimestamp(),
+            updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
+            updatedByCompanyNumber: actor.companyNumber || '',
+            changedAt: nowIso
+          };
+          // Fire-and-forget server write
+          addDoc(collection(db, "status_updates"), statusPayload)
+            .catch(err => showToast('Save failed: ' + err.message, 'error'));
+          // Optimistic local update so Down list clears immediately without closing the card
+          try {
+            const localRow = Object.assign({}, statusPayload, {
+              createdAt: { toMillis: function() { return Date.now(); }, seconds: Math.floor(Date.now()/1000) },
+              _optimistic: true
+            });
+            if (Array.isArray(updates)) updates.push(localRow);
+            // Invalidate status / reliability caches so getEquipmentStatus reflects Up
+            if (window._statusCache && typeof window._statusCache.clear === 'function') window._statusCache.clear();
+            if (window._updByPlain) { window._updByPlain = null; window._updByPlainRef = null; }
+            if (typeof _pc !== 'undefined' && _pc && _pc.rm) _pc.rm.clear();
+            if (typeof _pcCheck === 'function') { try { _pc.key = ''; } catch(e) {} }
+          } catch (e) { console.warn('optimistic mark-fixed update failed', e); }
+
+          if (maintId && idList.length === 1) {
+            try {
+              const patch = { lastDone: dateStr };
+              if (rescheduleDate) patch.dueDate = rescheduleDate;
+              updateDoc(doc(db, "maintenance", maintId), patch).catch(function () {});
+            } catch (e) {}
+          } else if (rescheduleDate && pureId && idList.length === 1) {
+            try {
+              addDoc(collection(db, "maintenance"), {
+                equipment: pureId, task: 'Predictive inspection (rescheduled)', interval: 'custom',
+                lastDone: dateStr, dueDate: rescheduleDate,
+                source: 'reschedule', createdAt: nowIso,
+                updatedBy: actor.name
+              }).catch(function () {});
+            } catch (e) {}
+          }
+          if (typeof logAudit === 'function') logAudit('mark_fixed', notes || 'Equipment marked fixed', pureId || oneId);
+          ok++;
+        } catch (errOne) {
+          fail++;
+          console.warn('mark fixed failed for', oneId, errOne);
+        }
       }
-      showToast('Marked Fixed', 'success');
-      if (typeof logAudit === 'function') logAudit('mark_fixed', notes || 'Equipment marked fixed', pureId || equipId);
+      showToast(ok ? ('Marked Fixed' + (ok > 1 ? ' (' + ok + ')' : '') + (fail ? ' · ' + fail + ' failed' : '')) : 'Mark Fixed failed', ok ? 'success' : 'error');
       closeModal('action-confirm-modal');
       closeModal('inspection-task-modal');
       closeModal('equip-detail-modal');
       closeModal('row-actions-modal');
-      refreshCurrentView();
+      // Keep Down / Equipment list card open and refresh it in place so fixed units clear immediately
+      const listModal = document.getElementById('equip-list-modal');
+      const listOpen = listModal && listModal.classList.contains('active');
+      if (listOpen && typeof showKpiEquipmentList === 'function') {
+        showKpiEquipmentList(window._equipListMode || 'down');
+      }
+      // Refresh dashboard KPIs in background without forcing the list closed
+      try {
+        if (typeof populateDashboard === 'function') populateDashboard();
+        if (typeof updatePredictiveNotifications === 'function') updatePredictiveNotifications();
+      } catch (e) {}
+      // If list was not open, do a normal view refresh
+      if (!listOpen && typeof refreshCurrentView === 'function') refreshCurrentView();
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   }
+  window.executeMarkFixed = executeMarkFixed;
   window.executeMarkFixed = executeMarkFixed;
 
   async function executeDismissAlert(alertKey, equipId, notes, rescheduleDate) {
