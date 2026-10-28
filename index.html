@@ -5975,8 +5975,8 @@
         return hasSufficientData(m);
       } catch (_) { return (r.count || r.faults || 0) > 0; }
     }).slice(0, MAX_EQ_ROWS);
-    sectionTitle('4. Bad Actors (Top ' + MAX_EQ_ROWS + ' by fault entries)');
     if (badActors.length) {
+      sectionTitle('4. Bad Actors (Top ' + MAX_EQ_ROWS + ' by fault entries)');
       doc.autoTable({
         startY: y,
         head: [['#', 'Equipment ID', 'Fault entries', 'Down hrs', 'Top mode', 'Last fault']],
@@ -5992,16 +5992,12 @@
         headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }
       });
       y = doc.lastAutoTable.finalY + 8;
-    } else {
-      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-      doc.text('No bad-actor data with sufficient history.', 14, y);
-      y += 8;
     }
 
     // 5) Recurrence (max 10)
     const recur = (window._lastRecurrence || []).slice(0, MAX_EQ_ROWS);
-    sectionTitle('5. Recurrence Warnings (Top ' + MAX_EQ_ROWS + ')');
     if (recur.length) {
+      sectionTitle('5. Recurrence Warnings (Top ' + MAX_EQ_ROWS + ')');
       doc.autoTable({
         startY: y,
         head: [['Equipment ID', 'Mode', 'Times', 'Dates', 'Suggestion']],
@@ -6016,10 +6012,6 @@
         headStyles: { fillColor: [124, 58, 237], textColor: 255, fontStyle: 'bold' }
       });
       y = doc.lastAutoTable.finalY + 8;
-    } else {
-      doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-      doc.text('No recurrence warnings loaded.', 14, y);
-      y += 8;
     }
 
     // 6) Predictive inspections
@@ -6035,8 +6027,8 @@
     if (!upcoming.length && Array.isArray(window._lastUpcomingMaint)) {
       upcoming = window._lastUpcomingMaint.slice(0, MAX_EQ_ROWS);
     }
-    sectionTitle('6. Predictive Inspections (15 days or less / overdue)');
     if (upcoming.length) {
+      sectionTitle('6. Predictive Inspections (15 days or less / overdue)');
       doc.autoTable({
         startY: y,
         head: [['Equipment', 'Focus / Task', 'Days', 'Status']],
@@ -6054,18 +6046,16 @@
         headStyles: { fillColor: [194, 65, 12], textColor: 255, fontStyle: 'bold' }
       });
       y = doc.lastAutoTable.finalY + 8;
-    } else {
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(15, 23, 42);
-      doc.text('No predictive inspection window data available.', 14, y);
-      y += 8;
     }
 
-    // 7) Failure count chart + table (max 10, sufficient only)
+    // 7) Failure count chart + table (max 10, sufficient only) — omit when no data
     failChartItems.sort((a, b) => b.fails - a.fails);
-    drawBarChart('7. Failure Count by Equipment (Top ' + MAX_EQ_ROWS + ')', failChartItems, 'fails', 'id', [185, 28, 28], MAX_EQ_ROWS);
+    if (failChartItems.length) {
+      drawBarChart('7. Failure Count by Equipment (Top ' + MAX_EQ_ROWS + ')', failChartItems, 'fails', 'id', [185, 28, 28], MAX_EQ_ROWS);
+    }
     failCountRows.sort((a, b) => Number(b[1]) - Number(a[1]));
-    sectionTitle('Failure Count detail (sufficient data only)');
     if (failCountRows.length) {
+      sectionTitle('Failure Count detail (sufficient data only)');
       doc.autoTable({
         startY: y,
         head: [['Equipment ID', 'Failures', 'Down hrs', 'Availability %']],
@@ -6074,14 +6064,12 @@
         headStyles: { fillColor: [185, 28, 28], textColor: 255, fontStyle: 'bold' }
       });
       y = doc.lastAutoTable.finalY + 8;
-    } else {
-      doc.setFontSize(9); doc.text('No equipment with sufficient failure history.', 14, y); y += 8;
     }
 
-    // 8) Anomaly (max 10)
-    sectionTitle('8. Anomaly & Event-Risk by Equipment (Top ' + MAX_EQ_ROWS + ')');
+    // 8) Anomaly (max 10) — omit when no data
     anomalyRows.sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
     if (anomalyRows.length) {
+      sectionTitle('8. Anomaly & Event-Risk by Equipment (Top ' + MAX_EQ_ROWS + ')');
       doc.autoTable({
         startY: y,
         head: [['Equipment ID', 'Anomaly Score', 'Event-Risk']],
@@ -6089,14 +6077,12 @@
         ...tableOpts
       });
       y = doc.lastAutoTable.finalY + 8;
-    } else {
-      doc.setFontSize(9); doc.text('No sufficient-data assets for anomaly ranking.', 14, y); y += 8;
     }
 
-    // 9) MTBF / MTTR (max 10, only rows with real metrics)
+    // 9) MTBF / MTTR (max 10, only rows with real metrics) — omit when no gated data
     const mtbfSufficient = mtbfRows.filter(r => r[1] && r[1] !== '—' && !String(r[1]).includes('Insufficient'));
-    sectionTitle('9. Mean Time Metrics by Equipment (Top ' + MAX_EQ_ROWS + ')');
     if (mtbfSufficient.length) {
+      sectionTitle('9. Mean Time Metrics by Equipment (Top ' + MAX_EQ_ROWS + ')');
       doc.autoTable({
         startY: y,
         head: [['Equipment ID', 'MTBF', 'MTTR']],
@@ -6105,8 +6091,6 @@
         headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold' }
       });
       y = doc.lastAutoTable.finalY + 8;
-    } else {
-      doc.setFontSize(9); doc.text('No gated MTBF/MTTR available yet (need at least 3 failures and a period of at least ' + MIN_DAYS_FOR_MTBF + ' days).', 14, y); y += 8;
     }
 
     // 10) Notes
