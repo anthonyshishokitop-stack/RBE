@@ -3260,6 +3260,105 @@
   const MIN_FAILURES_FOR_MTBF = 3;
   const MIN_DAYS_FOR_MTBF = 14; // minimum length of the selected analysis period
   const MIN_DAYS_FOR_AVAIL = 7;
+  /** When a failure is logged with no duration, assume this many hours (matches trend chart). */
+  const DEFAULT_UNLOGGED_FAILURE_H = 4;
+
+  /**
+   * Canonical failure detector — single source of truth for status, MTTF, patterns, downtime UI.
+   * A failure is: explicit isFailure flag, Down-like status, or positive downtime on a non-Up event.
+   */
+  function isFailureEvent(u) {
+    if (!u) return false;
+    if (u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true) return true;
+    const sc = String(u.statusCode || u.status || u.fixedYn || '').trim().toLowerCase();
+    if (['down', 'offline', 'failed', 'broken', 'restricted', 'limited', 'derated', 'no', 'out of service', 'outofservice'].includes(sc)) return true;
+    const hrs = Number(u.downtimeHours != null ? u.downtimeHours : (u.downtime || 0)) || 0;
+    if (hrs > 0 && sc && !['up', 'fixed', 'yes', 'y', 'done', 'ok', 'operational', 'running', 'available', 'standby'].includes(sc)) return true;
+    // Blank/unknown status with positive downtime still counts as a failure event
+    if (hrs > 0 && !sc) return true;
+    return false;
+  }
+  window.isFailureEvent = isFailureEvent;
+
+  function isFixedLikeEvent(u) {
+    if (!u) return false;
+    const sc = String(u.statusCode || u.status || u.fixedYn || '').trim().toLowerCase();
+    if (['up', 'fixed', 'yes', 'y', 'done', 'ok', 'operational', 'running', 'available', 'repaired'].includes(sc)) return true;
+    if (u.isFailure === '0' || u.isFailure === 0) {
+      if (sc === 'up' || sc === 'fixed' || !sc) return true;
+    }
+    return typeof isAttendedOrFixed === 'function' && isAttendedOrFixed(u.reason || u.fault || '', u.status || u.statusCode);
+  }
+
+  function _eventTimeMs(u) {
+    if (!u) return 0;
+    try {
+      if (u.createdAt && typeof u.createdAt.toMillis === 'function') return u.createdAt.toMillis();
+      if (u.createdAt && typeof u.createdAt === 'object' && u.createdAt.seconds) return Number(u.createdAt.seconds) * 1000;
+      if (u.changedAt) {
+        const t = new Date(u.changedAt).getTime();
+        if (!isNaN(t)) return t;
+      }
+    } catch (e) {}
+    const d = String(u.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return 0;
+    const tm = String(u.time || '12:00').slice(0, 5);
+    const t = new Date(d + 'T' + (tm.length === 5 ? tm : '12:00') + ':00').getTime();
+    return isNaN(t) ? 0 : t;
+  }
+
+  /**
+   * Precise downtime for one event (hours). Order of preference:
+   * 1) startAt/endAt span  2) logged downtimeHours  3) open failure elapsed time
+   * 4) pair to next Fixed/Up event  5) DEFAULT_UNLOGGED_FAILURE_H for failure rows with zero duration
+   */
+  function eventDowntimeHours(u, sortedAsc, idx, opts) {
+    opts = opts || {};
+    const currentlyDown = !!opts.currentlyDown;
+    const isLastOpen = !!opts.isLastOpenFailure;
+    if (!u) return 0;
+
+    if (u.startAt && u.endAt) {
+      const hrs = Math.max(0, (new Date(u.endAt) - new Date(u.startAt)) / 3600000);
+      return Math.min(hrs, MAX_EVENT_HOURS);
+    }
+
+    let hrs = Number(u.downtimeHours != null ? u.downtimeHours : (u.downtime || 0)) || 0;
+    if (hrs > 0) return Math.min(hrs, MAX_EVENT_HOURS);
+
+    const isFail = isFailureEvent(u);
+    if (!isFail) return 0;
+
+    // Open failure still Down: elapsed since event (capped)
+    if ((u.startAt || _eventTimeMs(u)) && (currentlyDown && isLastOpen)) {
+      const t0 = u.startAt ? new Date(u.startAt).getTime() : _eventTimeMs(u);
+      if (t0) {
+        hrs = Math.max(0, (Date.now() - t0) / 3600000);
+        return Math.min(hrs, MAX_EVENT_HOURS);
+      }
+    }
+
+    // Pair Down → next Fixed/Up for duration
+    if (Array.isArray(sortedAsc) && idx != null && idx >= 0) {
+      const t0 = _eventTimeMs(u);
+      for (let j = idx + 1; j < sortedAsc.length; j++) {
+        const nxt = sortedAsc[j];
+        if (isFailureEvent(nxt)) break;
+        if (isFixedLikeEvent(nxt)) {
+          const t1 = _eventTimeMs(nxt);
+          if (t0 && t1 && t1 > t0) {
+            hrs = (t1 - t0) / 3600000;
+            return Math.min(Math.max(0.1, hrs), MAX_EVENT_HOURS);
+          }
+          break;
+        }
+      }
+    }
+
+    // Logged failure with no duration data — use site default (aligned with trend chart)
+    return DEFAULT_UNLOGGED_FAILURE_H;
+  }
+  window.eventDowntimeHours = eventDowntimeHours;
 
   function isAttendedOrFixed(reasonText, statusText) {
     // Soft hint only — never used to force status to Up. Kept for legacy display.
@@ -3393,38 +3492,32 @@
 
     // Current status above uses ALL events; failures / downtime / availability use the selected period only
     const euP = (eu || []).filter(u => updateInPeriod(u, per));
+    // Ascending time order for Down→Fixed pairing
+    const euPAsc = euP.slice().sort((a, b) => {
+      const da = _eventTimeMs(a), db = _eventTimeMs(b);
+      if (da !== db) return da - db;
+      return String((a.date||'')+' '+(a.time||'')).localeCompare(String((b.date||'')+' '+(b.time||'')));
+    });
+    const failIdxs = [];
+    euPAsc.forEach((u, i) => { if (isFailureEvent(u)) failIdxs.push(i); });
+    const lastOpenFailIdx = (currentlyDown && failIdxs.length) ? failIdxs[failIdxs.length - 1] : -1;
+
     let downtime = 0;
-    euP.forEach(u => {
-      let hrs = 0;
-      if (u.startAt && u.endAt) {
-        hrs = Math.max(0, (new Date(u.endAt) - new Date(u.startAt)) / 3600000);
-      } else if (u.startAt && !u.endAt && (statusCode === 'Down' || statusCode === 'Restricted')) {
-        hrs = Math.max(0, (Date.now() - new Date(u.startAt).getTime()) / 3600000);
-      } else {
-        hrs = Number(u.downtimeHours || u.downtime || 0) || 0;
-      }
-      if (hrs > MAX_EVENT_HOURS) hrs = MAX_EVENT_HOURS;
-      downtime += hrs;
+    euPAsc.forEach((u, i) => {
+      const hrs = eventDowntimeHours(u, euPAsc, i, {
+        currentlyDown,
+        isLastOpenFailure: i === lastOpenFailIdx
+      });
+      // Count duration for failure events always; also honour positive non-failure downtime fields
+      if (isFailureEvent(u) || hrs > 0) downtime += hrs;
     });
 
-    const failures = euP.filter(u => {
-      const sc = u.statusCode || normaliseStatusCode(u.status);
-      return (u.isFailure === '1' || u.isFailure === 1 || sc === 'Down');
-    }).length;
+    const failures = failIdxs.length;
 
     const windowDays = Math.ceil(per.days);
     const windowHours = per.hours;
-    let downtimeInWindow = 0;
-    let hasObservation = false;
-    euP.forEach(u => {
-      {
-        hasObservation = true;
-        let hrs = Number(u.downtimeHours || u.downtime || 0) || 0;
-        if (u.startAt && u.endAt) hrs = Math.max(0, (new Date(u.endAt) - new Date(u.startAt)) / 3600000);
-        if (hrs > MAX_EVENT_HOURS) hrs = MAX_EVENT_HOURS;
-        downtimeInWindow += hrs;
-      }
-    });
+    const downtimeInWindow = downtime; // same precise sum — aligned with Total downtime
+    const hasObservation = euP.length > 0;
     let avail = null;
     let availabilityLabel = 'Insufficient data';
     const dataDays = hasObservation ? windowDays : 0;
@@ -3432,9 +3525,13 @@
       avail = Math.max(0, Math.min(100, ((windowHours - downtimeInWindow) / windowHours) * 100));
       availabilityLabel = avail.toFixed(1) + '%';
     } else if (!hasObservation) {
-      // No failure / status reports in the period = never reported for failure = 100% available
+      // No status reports in the period = never reported for failure = 100% available
       avail = 100;
       availabilityLabel = '100.0%';
+    } else if (hasObservation && failures > 0) {
+      // Short window but known failures: still reflect lost time
+      avail = Math.max(0, Math.min(100, ((windowHours - downtimeInWindow) / windowHours) * 100));
+      availabilityLabel = avail.toFixed(1) + '%';
     }
 
     const result = {
@@ -3961,8 +4058,10 @@
   }
 
   function isDownLike(u) {
-    const s = String(u.status || '').toLowerCase();
-    return u.isFailure === '1' || u.isFailure === 1 || s === 'down' || s === 'offline' || s === 'failed' || s === 'broken' || s === 'restricted' || s === 'limited' || s === 'derated';
+    return typeof isFailureEvent === 'function' ? isFailureEvent(u) : (
+      u.isFailure === '1' || u.isFailure === 1 ||
+      ['down','offline','failed','broken','restricted','limited','derated'].includes(String(u.status || '').toLowerCase())
+    );
   }
 
   function isFixedLike(u) {
@@ -4567,14 +4666,29 @@
     const byShift = { Morning:0, Afternoon:0, Night:0, Unknown:0 };
     const byHourBand = { '00-06':0, '06-12':0, '12-18':0, '18-24':0 };
     let failureEvents = [];
-    const updates = (typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (updates || [])).filter(u => {
+    // Same universe as getEquipmentStatus: period-filtered updates for this equipment
+    const st = (typeof getEquipmentStatus === 'function') ? getEquipmentStatus(id) : { status: 'Up', shaft: parsed.shaft || '' };
+    const currentlyDown = (st.status === 'Down' || st.status === 'Restricted');
+    const allForEquip = (typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (updates || [])).filter(u => {
       if (normaliseEquipId(u.equipmentId || u.locoNumber || '') !== displayId) return false;
-      const isFail = (u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true)
-        || String(u.status || '').toLowerCase() === 'down'
-        || (Number(u.downtimeHours) > 0 && String(u.status || '').toLowerCase() !== 'up');
-      return isFail;
+      const wantShaft = parsed.shaft || st.shaft || '';
+      if (wantShaft && wantShaft !== '—') {
+        const us = normaliseShaftName(u.shaft || '');
+        if (us) return shaftsMatch(us, wantShaft);
+      }
+      return true;
     });
-    updates.forEach(u => {
+    const asc = allForEquip.slice().sort((a, b) => {
+      const da = _eventTimeMs(a), db = _eventTimeMs(b);
+      if (da !== db) return da - db;
+      return String((a.date||'')+' '+(a.time||'')).localeCompare(String((b.date||'')+' '+(b.time||'')));
+    });
+    const failIdxs = [];
+    asc.forEach((u, i) => { if (isFailureEvent(u)) failIdxs.push(i); });
+    const lastOpenFailIdx = (currentlyDown && failIdxs.length) ? failIdxs[failIdxs.length - 1] : -1;
+    const updates = failIdxs.map(i => asc[i]);
+    updates.forEach((u, k) => {
+      const i = failIdxs[k];
       const d = u.date ? new Date(u.date + (u.time ? 'T' + u.time : 'T12:00:00')) : null;
       if (d && !isNaN(d.getTime())) {
         byDay[dayNames[d.getDay()]]++;
@@ -4598,13 +4712,18 @@
         else if (!byShift.hasOwnProperty(sh)) sh = 'Unknown';
       }
       byShift[sh] = (byShift[sh] || 0) + 1;
+      const downH = eventDowntimeHours(u, asc, i, {
+        currentlyDown,
+        isLastOpenFailure: i === lastOpenFailIdx
+      });
       failureEvents.push({
         date: u.date || '—',
         time: u.time || '',
         shift: sh,
         reason: String(u.reason || u.fault || '').slice(0, 120),
-        downtime: Number(u.downtimeHours) || 0,
-        status: u.status || 'Down'
+        downtime: Number(downH.toFixed(2)),
+        status: u.status || u.statusCode || 'Down',
+        estimated: !(Number(u.downtimeHours || u.downtime || 0) > 0 || (u.startAt && u.endAt))
       });
     });
     const total = failureEvents.length || 1;
@@ -4632,17 +4751,32 @@
   function getMttfMtbr(id) {
     const st = getEquipmentStatus(id);
     const per = getSystemPeriod();
-    const fails = Math.max(0, st.failures || 0);
+    // Prefer status failure count; fall back to timing so UI never disagrees with Failure events
+    let fails = Math.max(0, st.failures || 0);
+    if (fails === 0 && typeof analyseFailureTiming === 'function') {
+      try {
+        const t = analyseFailureTiming(id);
+        if (t && t.total > 0) fails = t.total;
+      } catch (e) {}
+    }
     const down = Math.max(0, st.downtime || 0);
     const periodH = Math.max(24, per.hours);
     const upH = Math.max(0, periodH - down);
     const open = (st.status === 'Down' || st.status === 'Restricted') ? 1 : 0;
     const repairs = Math.max(0, fails - open);
-    const r = { mttf: null, mtbr: null, mttfLabel: '', mtbrLabel: '', fails, repairs, periodLabel: per.label };
-    if (fails > 0) { r.mttf = upH / fails; r.mttfLabel = r.mttf.toFixed(1); }
-    else r.mttfLabel = 'No failures (≥ ' + Math.round(upH) + ' h)';
-    if (repairs > 0) { r.mtbr = periodH / repairs; r.mtbrLabel = r.mtbr.toFixed(1); }
-    else r.mtbrLabel = fails > 0 ? 'No repair completed yet' : 'No repairs';
+    const r = { mttf: null, mtbr: null, mttfLabel: '', mtbrLabel: '', fails, repairs, periodLabel: per.label, downtime: down };
+    if (fails > 0) {
+      r.mttf = upH / fails;
+      r.mttfLabel = r.mttf.toFixed(1);
+    } else {
+      r.mttfLabel = 'No failures (≥ ' + Math.round(upH) + ' h)';
+    }
+    if (repairs > 0) {
+      r.mtbr = periodH / repairs;
+      r.mtbrLabel = r.mtbr.toFixed(1);
+    } else {
+      r.mtbrLabel = fails > 0 ? 'No repair completed yet' : 'No repairs';
+    }
     return r;
   }
   window.getMttfMtbr = getMttfMtbr;
@@ -4656,13 +4790,13 @@
     const actions = document.getElementById('equip-detail-actions');
     if (titleEl) titleEl.innerHTML = '<i class="fas fa-clock"></i> Downtime breakdown · ' + String(id).replace(/</g,'&lt;');
     const sumHrs = timing.failureEvents.reduce((s, e) => s + (e.downtime || 0), 0);
-    const rows = timing.failureEvents.length
+        const rows = timing.failureEvents.length
       ? timing.failureEvents.map((e, i) => `<tr>
           <td>${i + 1}</td>
-          <td>${String(e.date).replace(/</g,'&lt;')} ${String(e.time || '').replace(/</g,'&lt;')}</td>
-          <td>${String(e.shift).replace(/</g,'&lt;')}</td>
-          <td>${Number(e.downtime).toFixed(1)}</td>
-          <td style="max-width:220px;word-break:break-word;">${String(e.reason || '—').replace(/</g,'&lt;')}</td>
+          <td>${String(e.date || '—').replace(/</g,'&lt;')}${e.time ? ' ' + String(e.time).replace(/</g,'&lt;') : ''}</td>
+          <td>${String(e.shift || '—').replace(/</g,'&lt;')}</td>
+          <td>${Number(e.downtime).toFixed(1)}${e.estimated ? ' <span style="font-size:0.72rem;color:var(--text-3);">(est.)</span>' : ''}</td>
+          <td>${String(e.reason || '—').replace(/</g,'&lt;')}</td>
         </tr>`).join('')
       : '<tr><td colspan="5" style="color:var(--text-3);">No failure downtime events recorded.</td></tr>';
     if (body) {
@@ -4918,10 +5052,7 @@
     });
     const patterns = [];
     Object.entries(byEquip).forEach(([id, rows]) => {
-      const fails = rows.filter(u => {
-        const s = String(u.status || '').toLowerCase();
-        return u.isFailure === '1' || u.isFailure === 1 || s === 'down' || s === 'offline';
-      });
+      const fails = rows.filter(u => isFailureEvent(u));
       if (fails.length < 2) return;
       const dates = fails.map(u => u.date).filter(Boolean).sort();
       if (dates.length < 2) return;
