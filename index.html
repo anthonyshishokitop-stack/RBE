@@ -1034,9 +1034,18 @@
 
         <!-- SEARCH -->
         <section id="search-status" class="hidden">
-          <div class="header-bar"><h1>Search Equipment History</h1></div>
+          <div class="header-bar">
+            <h1>Search Equipment History</h1>
+            <div class="dash-filters" style="align-items:center;">
+              <span class="filter-chip" id="search-filter-chip">All Shafts · All Types</span>
+              <span style="font-size:0.78rem;opacity:0.9;">Uses dashboard shaft &amp; type filters</span>
+            </div>
+          </div>
+          <div id="search-scope-banner" class="summary-alert-bar info" style="margin-top:0.25rem;">
+            <div><i class="fas fa-filter" style="margin-right:6px;"></i><strong>System scope:</strong> <span id="search-scope-text">All Shafts · All Types</span> — results respect the main dashboard Shaft and Equipment type filters (plus your role shaft access).</div>
+          </div>
           <form id="search-form" style="max-width:640px;margin:0 auto;">
-            <p style="font-size:0.9rem;color:var(--text-3);margin-bottom:1.1rem;">Flexible search — Equipment ID, date range (From / To), and/or Reason / Fault.</p>
+            <p style="font-size:0.9rem;color:var(--text-3);margin-bottom:1.1rem;">Flexible search — Equipment ID, date range (From / To), and/or Reason / Fault. Results are limited by the dashboard shaft / equipment-type filters.</p>
             <div class="form-group"><label>Equipment ID (optional)</label><input id="s-loco" list="loco-list" placeholder="Leave blank for all"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
               <div class="form-group"><label>From date (optional)</label><input id="s-date-from" type="date" title="Start of date range"></div>
@@ -3151,11 +3160,25 @@
     if (currentTypeFilter) p.push(currentTypeFilter);
     return p.join(' · ') || '';
   }
+  function syncSearchFilterIndicators() {
+    const label = (currentShaftFilter || 'All Shafts') + ' · ' + (currentTypeFilter || 'All Types');
+    const chip = document.getElementById('search-filter-chip');
+    if (chip) chip.textContent = label;
+    const scopeText = document.getElementById('search-scope-text');
+    if (scopeText) scopeText.textContent = label;
+    const banner = document.getElementById('search-scope-banner');
+    if (banner) {
+      const active = !!(currentShaftFilter || currentTypeFilter);
+      banner.classList.toggle('info', !active);
+      banner.classList.toggle('purple', active);
+    }
+  }
   function applySystemFilters() {
     currentShaftFilter = document.getElementById('shaft-filter')?.value || '';
     currentTypeFilter = document.getElementById('type-filter')?.value || '';
     const chip = document.getElementById('filter-status-chip');
     if (chip) chip.textContent = (currentShaftFilter || 'All Shafts') + ' · ' + (currentTypeFilter || 'All Types');
+    syncSearchFilterIndicators();
     refreshCurrentView();
     if (typeof refreshTextMiningInsights === 'function') refreshTextMiningInsights();
   }
@@ -3988,6 +4011,9 @@
       else if (section === 'audit-log') refreshAuditLog();
       else if (section === 'user-admin') refreshUserAdminList();
       else if (section === 'data-cleanup') dcRefreshLists();
+      else if (section === 'search-status') {
+        if (typeof syncSearchFilterIndicators === 'function') syncSearchFilterIndicators();
+      }
     } catch (e) { console.warn(e); }
     try { const _el = document.getElementById(section); if (_el && section !== 'reliability-center') { _el.dataset.rk = _viewKey(); _el.dataset.rkOk = '1'; } } catch (e) {}
   }
@@ -7055,15 +7081,33 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     else if (dateFrom) parts.push('From: ' + dateFrom);
     else if (dateTo) parts.push('To: ' + dateTo);
     if (reasonFilter) parts.push('Fault: ' + reasonFilter);
+    if (currentShaftFilter) parts.push('Shaft: ' + currentShaftFilter);
+    if (currentTypeFilter) parts.push('Type: ' + currentTypeFilter);
     await addToSearchHistory(parts.join(' · '));
 
     const resultsContainer = document.getElementById('search-results');
     resultsContainer.innerHTML = '<p>Searching…</p>';
+    if (typeof syncSearchFilterIndicators === 'function') syncSearchFilterIndicators();
 
-    let filtered = (updates || []).slice();
+    // Honour main-dashboard shaft + equipment-type filters (and RBAC shaft scope)
+    // via the same scoped pipeline used by Dashboard / Reliability / Reports.
+    let filtered = (typeof getScopedUpdates === 'function')
+      ? getScopedUpdates().slice()
+      : (updates || []).slice();
     if (equipmentId) {
       const want = normaliseEquipId(equipmentId);
       filtered = filtered.filter(u => normaliseEquipId(u.equipmentId || u.locoNumber) === want);
+      // If a specific ID was requested but falls outside the active shaft/type scope, surface that clearly
+      if (!filtered.length && (currentShaftFilter || currentTypeFilter || (typeof ENFORCE_SHAFT_SCOPE !== 'undefined' && ENFORCE_SHAFT_SCOPE))) {
+        const anyMatch = (updates || []).some(u => normaliseEquipId(u.equipmentId || u.locoNumber) === want);
+        if (anyMatch) {
+          const scopeLabel = (currentShaftFilter || 'All Shafts') + ' · ' + (currentTypeFilter || 'All Types');
+          resultsContainer.innerHTML = '<div class="alert-banner alert-predictive">Equipment <strong>' + String(equipmentId).replace(/</g,'&lt;') + '</strong> has history, but it is outside the current system filter (<strong>' + scopeLabel.replace(/</g,'&lt;') + '</strong>). Clear or change the dashboard Shaft / Equipment type filter to include it.</div>';
+          const profileCard0 = document.getElementById('equipment-profile');
+          if (profileCard0) profileCard0.style.display = 'none';
+          return;
+        }
+      }
     }
     if ((dateFrom || dateTo) && !(showAll && equipmentId)) {
       filtered = filtered.filter(u => {
@@ -7100,11 +7144,17 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     } else if (profileCard) profileCard.style.display = 'none';
 
     if (!filtered.length) {
-      resultsContainer.innerHTML = '<div class="alert-banner alert-predictive">No history found.</div>';
+      const scopeNote = (currentShaftFilter || currentTypeFilter)
+        ? ' under system filter <strong>' + String((currentShaftFilter || 'All Shafts') + ' · ' + (currentTypeFilter || 'All Types')).replace(/</g,'&lt;') + '</strong>'
+        : '';
+      resultsContainer.innerHTML = '<div class="alert-banner alert-predictive">No history found' + scopeNote + '.</div>';
       return;
     }
     window._lastSearchHistory = filtered.slice();
-    let html = `<h2 style="margin:0 0 0.75rem;"><i class="fas fa-history"></i> History (${filtered.length} events)</h2>
+    const scopeSuffix = (currentShaftFilter || currentTypeFilter)
+      ? ` · scoped to ${String((currentShaftFilter || 'All Shafts') + ' · ' + (currentTypeFilter || 'All Types')).replace(/</g,'&lt;')}`
+      : '';
+    let html = `<h2 style="margin:0 0 0.75rem;"><i class="fas fa-history"></i> History (${filtered.length} events${scopeSuffix})</h2>
       <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
       <thead style="background:#0f172a;color:white;"><tr>
         <th style="padding:12px;text-align:left;">Date</th><th style="padding:12px;text-align:left;">Time</th>
