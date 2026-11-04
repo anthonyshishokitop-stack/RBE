@@ -9058,7 +9058,7 @@ window.RBE = {
   </div>
 </div>
 <script>
-/* Ask RBE v3 — grounded Q&A with interpretation, memory, app-aligned helpers */
+/* Ask RBE v3.1 — grounded Q&A: interpretation, memory, app-aligned helpers */
 (function () {
   var fab = document.getElementById('rbe-chat-fab');
   var panel = document.getElementById('rbe-chat-panel');
@@ -9071,6 +9071,7 @@ window.RBE = {
 
   /* one-turn context for follow-ups */
   var lastCtx = { equipId: null, shaft: null, type: null, topic: null, periodKey: null };
+  var welcomePoll = null;
 
   function api() { return window.RBE || null; }
   function esc(s) {
@@ -9105,18 +9106,38 @@ window.RBE = {
     var r = api();
     var nEq = r && r.equipment ? r.equipment.length : 0;
     var nUp = r && r.updates ? r.updates.length : 0;
+    var nMt = r && r.maintenance ? r.maintenance.length : 0;
     var ready = dataReady();
+    var chip = filterChip();
     addMsg(
       '<strong>Ask RBE</strong> — ask about equipment, faults, shafts, downtime, counts, or maintenance.<br><br>' +
       'Examples: <em>brake faults on 11 shaft this week</em> · <em>which loco has highest downtime</em> · ' +
       '<em>who reported antenna issues</em> · <em>overdue maintenance</em> · <em>is 511 safe to use?</em>' +
       '<div class="meta" style="margin-top:0.5rem">' +
       (ready
-        ? ('Live data linked: ' + nEq + ' equipment · ' + nUp + ' status events · answers follow your shaft scope')
+        ? ('Live data linked: ' + nEq + ' equipment · ' + nUp + ' status events · ' + nMt + ' maintenance · scope ' + esc(chip))
         : 'Waiting for data… Sign in and stay on the site until equipment loads, then ask again.') +
       '</div>',
       'bot'
     );
+  }
+
+  function refreshWelcomeIfNeeded() {
+    if (!panel.classList.contains('open')) return;
+    if (!dataReady()) return;
+    var first = msgs.querySelector('.rbe-msg.bot');
+    if (first && /Waiting for data/i.test(first.textContent || '')) welcome();
+  }
+
+  function startWelcomePoll() {
+    if (welcomePoll) return;
+    welcomePoll = setInterval(function () {
+      refreshWelcomeIfNeeded();
+      if (dataReady() && welcomePoll) {
+        clearInterval(welcomePoll);
+        welcomePoll = null;
+      }
+    }, 1200);
   }
 
   function openChat() {
@@ -9124,11 +9145,8 @@ window.RBE = {
     fab.classList.add('open');
     fab.innerHTML = '<i class="fas fa-times"></i>';
     if (!msgs.children.length) welcome();
-    else if (dataReady()) {
-      /* refresh stale welcome counts if first bot msg still says waiting */
-      var first = msgs.querySelector('.rbe-msg.bot');
-      if (first && /Waiting for data/i.test(first.textContent || '')) welcome();
-    }
+    else refreshWelcomeIfNeeded();
+    startWelcomePoll();
     setTimeout(function () { input.focus(); }, 80);
   }
   function closeChat() {
@@ -9137,9 +9155,12 @@ window.RBE = {
     fab.innerHTML = '<i class="fas fa-comments"></i>';
   }
   fab.onclick = function () { panel.classList.contains('open') ? closeChat() : openChat(); };
-  closeBtn.onclick = closeChat;
-  clearBtn.onclick = function () { lastCtx = { equipId: null, shaft: null, type: null, topic: null, periodKey: null }; welcome(); };
-  sendBtn.onclick = send;
+  if (closeBtn) closeBtn.onclick = closeChat;
+  if (clearBtn) clearBtn.onclick = function () {
+    lastCtx = { equipId: null, shaft: null, type: null, topic: null, periodKey: null };
+    welcome();
+  };
+  if (sendBtn) sendBtn.onclick = send;
   input.onkeydown = function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   };
@@ -9194,7 +9215,9 @@ window.RBE = {
   function filterChip() {
     var r = api();
     if (!r) return 'All Shafts · All Types';
-    return (r.currentShaftFilter || 'All Shafts') + ' · ' + (r.currentTypeFilter || 'All Types');
+    var sh = r.currentShaftFilter;
+    var ty = r.currentTypeFilter;
+    return (sh || 'All Shafts') + ' · ' + (ty || 'All Types');
   }
   function normId(id) {
     var r = api();
@@ -9217,16 +9240,17 @@ window.RBE = {
     equipment:1, equipments:1, asset:1, assets:1, unit:1, units:1, machine:1, machines:1, item:1, items:1,
     shaft:1, shafts:1, status:1, statuses:1, report:1, reports:1, data:1, system:1, need:1, needs:1,
     want:1, looking:1, see:1, check:1, info:1, information:1, details:1, detail:1, its:1, it:1, them:1,
-    their:1, also:1, just:1, only:1, still:1, very:1, more:1, less:1, than:1, then:1, vs:1, versus:1
+    also:1, just:1, only:1, still:1, very:1, more:1, less:1, than:1, then:1, vs:1, versus:1
   };
-  /* words that look like IDs but are type plurals / common words */
+  /* words that look like IDs but are type plurals / common words — never treat as equipment IDs */
   var NOT_ID = {
     loco:1, locos:1, locomotives:1, caboose:1, cabooses:1, hopper:1, hoppers:1,
     winch:1, winches:1, winder:1, winders:1, fan:1, fans:1, pump:1, pumps:1,
     safe:1, safety:1, down:1, downtime:1, fault:1, faults:1, failure:1, failures:1,
     breakdown:1, breakdowns:1, brake:1, brakes:1, week:1, month:1, year:1, today:1,
     yesterday:1, highest:1, lowest:1, worst:1, best:1, top:1, bottom:1, list:1,
-    most:1, least:1, reliable:1, availability:1, maintenance:1, overdue:1
+    most:1, least:1, reliable:1, availability:1, maintenance:1, overdue:1,
+    antenna:1, antennas:1, issue:1, issues:1, problem:1, problems:1
   };
 
   var STEM = {
@@ -9251,9 +9275,6 @@ window.RBE = {
     w = String(w || '').toLowerCase();
     if (STEM[w]) return STEM[w];
     if (w.length > 4 && w.slice(-3) === 'ies') return w.slice(0, -3) + 'y';
-    if (w.length > 3 && w.slice(-2) === 'es' && !/ses$|xes$|zes$|ches$|shes$/.test(w)) {
-      /* brakes → brake via STEM; generic es */
-    }
     if (w.length > 3 && w.slice(-1) === 's' && w.slice(-2) !== 'ss') return w.slice(0, -1);
     return w;
   }
@@ -9333,7 +9354,6 @@ window.RBE = {
     if (/\b(ef)\s*shaft\b/i.test(t)) return 'EF Shaft';
     if (/\bnorth\s*shaft\b/i.test(t)) return 'North Shaft';
     if (/\bsouth\s*shaft\b/i.test(t)) return 'South Shaft';
-    /* match known shafts from data */
     var shafts = {};
     filteredEq().forEach(function (e) {
       var sh = String(e.shaft || '').trim();
@@ -9343,7 +9363,7 @@ window.RBE = {
     for (var k in shafts) {
       if (low.indexOf(k) !== -1) return shafts[k];
       var bare = k.replace(/\s*shaft$/, '');
-      if (bare && low.indexOf(bare) !== -1 && new RegExp('\\b' + bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(low))
+      if (bare && new RegExp('\\b' + bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(low))
         return shafts[k];
     }
     return null;
@@ -9363,15 +9383,16 @@ window.RBE = {
     return null;
   }
 
-  /* Strict ID extraction — never treat type plurals as IDs */
+  /* Strict ID extraction — never treat type plurals as IDs; short tokens force clarify */
   function extractEquipToken(text) {
     var t = String(text || '');
     var m = t.match(/\b(?:loco|caboose|hopper|winch|winder|unit|equipment|eq|asset|machine)\s*[#:]?\s*([A-Za-z0-9\-_\/]+)\b/i);
     if (m) {
       var cand = m[1];
-      if (!NOT_ID[cand.toLowerCase()] && !STOP[cand.toLowerCase()] && !/^[a-z]+s$/i.test(cand)) return cand;
+      var low = cand.toLowerCase();
+      if (!NOT_ID[low] && !STOP[low] && !/^[a-z]+s$/i.test(cand)) return cand;
     }
-    /* explicit patterns only — pure number length >= 3, or alnum mining IDs */
+    /* pure number only if 3+ digits; alnum mining IDs */
     m = t.match(/\b(\d{1,3}[A-Za-z]{1,8}\d{2,8}|\d{2,3}[A-Za-z]{1,6}\d{2,8}|[A-Za-z]{2,8}\d{3,10}|\d{3,10})\b/);
     if (m) {
       var c = m[1];
@@ -9390,21 +9411,22 @@ window.RBE = {
       var id = normId(e.id);
       if (id === n) exact.push(e);
       else if (dig.length >= 3 && (String(e.id) === dig || String(e.id).endsWith(dig) || id.endsWith(dig))) partial.push(e);
-      else if (id.indexOf(n) !== -1 && n.length >= 3) partial.push(e);
+      else if (n.length >= 3 && id.indexOf(n) !== -1) partial.push(e);
     });
     if (exact.length) return exact;
     return partial;
   }
 
-  function resolveEquip(token, forceClarify) {
+  function resolveEquip(token) {
     if (!token) return { status: 'none' };
     var hits = findEquipMatches(token);
     if (!hits.length) return { status: 'none', token: token };
-    if (hits.length === 1 && !forceClarify) return { status: 'ok', equip: hits[0] };
-    if (hits.length === 1 && forceClarify && String(token).replace(/\D/g, '').length <= 2)
+    /* short pure-digit tokens always clarify even on a single hit (avoid "1" → silent pick) */
+    var digitsOnly = /^\d+$/.test(String(token));
+    if (hits.length === 1 && digitsOnly && String(token).length <= 2)
       return { status: 'ambiguous', token: token, options: hits };
-    if (hits.length > 1) return { status: 'ambiguous', token: token, options: hits };
-    return { status: 'ok', equip: hits[0] };
+    if (hits.length === 1) return { status: 'ok', equip: hits[0] };
+    return { status: 'ambiguous', token: token, options: hits };
   }
 
   function clarifyEquip(token, options) {
@@ -9412,9 +9434,9 @@ window.RBE = {
       return [esc(e.id), esc(e.shaft || '—'), esc(inferType(e))];
     });
     return interp(['ambiguous ID: ' + token], null) +
-      'I found <strong>' + options.length + '</strong> matches for <strong>' + esc(token) + '</strong>. Which one did you mean?' +
+      'I found <strong>' + options.length + '</strong> match(es) for <strong>' + esc(token) + '</strong>. Which one did you mean?' +
       table(['ID', 'Shaft', 'Type'], rows, 12) +
-      '<div class="meta">Reply with the full Equipment ID (e.g. ' + esc(options[0].id) + ').</div>';
+      '<div class="meta">Reply with the full Equipment ID (e.g. ' + esc(options[0].id) + '). Short numbers are never auto-matched.</div>';
   }
 
   function riskScore(e) {
@@ -9481,7 +9503,6 @@ window.RBE = {
     list.forEach(function (u) {
       if (failuresOnly && !isFail(u)) return;
       if (shaft && !matchShaft(u.shaft, shaft)) {
-        /* also try via equipment register */
         var eq = filteredEq().find(function (e) { return normId(e.id) === normId(u.equipmentId || u.locoNumber); });
         if (!eq || !matchShaft(eq.shaft, shaft)) return;
       }
@@ -9505,12 +9526,12 @@ window.RBE = {
   function answerEquipProfile(eq, range, understood) {
     lastCtx.equipId = eq.id;
     lastCtx.topic = 'equipment';
+    lastCtx.shaft = eq.shaft || lastCtx.shaft;
     var st = eqStatus(eq.id) || {};
     var rs = riskScore(eq);
     var ups = filterEvents({ words: [], range: range }).map(function (h) { return h.u; }).filter(function (u) {
       return normId(u.equipmentId || u.locoNumber) === normId(eq.id);
     });
-    /* if range filtered empty, fall back to period-filtered */
     if (!ups.length) {
       ups = filteredUp().filter(function (u) { return normId(u.equipmentId || u.locoNumber) === normId(eq.id); })
         .sort(function (a, b) { return String((b.date || '')).localeCompare(String((a.date || ''))); });
@@ -9535,6 +9556,7 @@ window.RBE = {
   function answerIsSafe(eq, range, understood) {
     lastCtx.equipId = eq.id;
     lastCtx.topic = 'safety';
+    lastCtx.shaft = eq.shaft || lastCtx.shaft;
     var st = eqStatus(eq.id) || {};
     var rs = riskScore(eq);
     var entries = filterEvents({ failuresOnly: true, range: range }).map(function (h) { return h.u; })
@@ -9581,7 +9603,7 @@ window.RBE = {
     }
     var html = interp(understood, range) +
       '<strong style="color:' + colour + '">' + esc(verdict) + '</strong>' +
-      '<div class="meta">Based on status logs only — <strong>not</strong> a formal pre-use clearance. Follow site checklist and procedures.</div>' +
+      '<div class="meta">Based on status logs only — <strong>not</strong> a formal pre-use clearance. Follow site checklist and procedures. Never treat this as “cleared to run”.</div>' +
       '<br><strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') +
       '<br>Failures in view: <strong>' + failCount + '</strong> · Downtime metrics: <strong>' + rs.downtime.toFixed(1) + ' h</strong>';
     html += '<ul style="margin:0.4rem 0 0 1.1rem">' + reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>';
@@ -9601,7 +9623,9 @@ window.RBE = {
     }).map(function (e) {
       var rs = riskScore(e);
       return { id: e.id, shaft: e.shaft || '—', type: inferType(e), downtime: rs.downtime, fails: rs.fails, status: rs.status };
-    }).filter(function (r) { return r.downtime > 0 || !highest; });
+    });
+    /* highest: only assets with downtime > 0; lowest: include zeros so true lowest is visible */
+    if (highest) rows = rows.filter(function (r) { return r.downtime > 0; });
     rows.sort(function (a, b) {
       return highest ? (b.downtime - a.downtime) : (a.downtime - b.downtime);
     });
@@ -9611,15 +9635,15 @@ window.RBE = {
     html += table(['#', 'ID', 'Shaft', 'Type', 'Downtime hrs', 'Fails'], rows.slice(0, 12).map(function (r, i) {
       return [String(i + 1), esc(r.id), esc(r.shaft), esc(r.type), r.downtime.toFixed(1), String(r.fails)];
     }), 12);
-    html += '<div class="meta">Downtime from period metrics (' + esc(periodLabel()) + '). Thresholds are not normalised by calendar length.</div>';
+    html += '<div class="meta">Ranked by downtime only (period metrics from getEquipmentStatus · ' + esc(periodLabel()) + '). Not a reliability ranking.</div>';
     return html;
   }
 
-  function answerFaultRank(shaft, type, range, words, understood) {
+  function answerFaultRank(shaft, type, range, words, understood, limit) {
     lastCtx.topic = 'faults';
     lastCtx.shaft = shaft;
+    limit = limit || 10;
     var hits = filterEvents({ words: words, shaft: shaft, range: range, failuresOnly: !words.length });
-    /* aggregate by reason keyword / equipment */
     var byReason = {};
     hits.forEach(function (h) {
       var key = String(h.u.reason || h.u.notes || '(no reason)').trim().slice(0, 80) || '(no reason)';
@@ -9634,9 +9658,9 @@ window.RBE = {
       return interp(understood, range) + 'No matching fault / failure events for that filter.';
     }
     var html = interp(understood, range) + '<strong>Top fault reasons</strong> — ' + hits.length + ' event(s)';
-    html += table(['Count', 'Reason', 'Assets'], list.slice(0, 10).map(function (r) {
+    html += table(['Count', 'Reason', 'Assets'], list.slice(0, limit).map(function (r) {
       return [String(r.n), esc(r.reason), String(Object.keys(r.equip).length)];
-    }), 10);
+    }), limit);
     html += table(['Date', 'Equipment', 'Reporter', 'Reason'], hits.slice(0, 12).map(function (h) {
       var u = h.u;
       return [esc(u.date || ''), esc(u.equipmentId || u.locoNumber || ''), esc(u.reportedBy || u.operator || '—'),
@@ -9670,6 +9694,7 @@ window.RBE = {
       return [String(i + 1), esc(r.id), esc(r.shaft), String(r.fails),
         r.avail != null ? r.avail.toFixed(1) + '%' : '—', esc(r.status)];
     }), 12);
+    html += '<div class="meta">Uses period metrics from getEquipmentStatus / getReliabilityMetrics (' + esc(periodLabel()) + ').</div>';
     return html;
   }
 
@@ -9697,7 +9722,8 @@ window.RBE = {
       return [esc(b.shaft), String(b.n), String(b.fails),
         b.avgAvail != null ? b.avgAvail.toFixed(1) + '%' : '—', String(b.downNow)];
     }));
-    if (list.length) html += '<br><strong>Worst in this view:</strong> ' + esc(list[0].shaft);
+    if (list.length) html += '<br><strong>Highest risk in this view:</strong> ' + esc(list[0].shaft);
+    html += '<div class="meta">Rankings use period metrics from getEquipmentStatus / getReliabilityMetrics.</div>';
     return html;
   }
 
@@ -9714,12 +9740,13 @@ window.RBE = {
       if (failed[normId(e.id)]) return false;
       return true;
     });
-    if (!clean.length) return interp(understood, range) + 'Every asset in scope has at least one failure/down entry in the window.';
+    if (!clean.length) return interp(understood, range) + 'Every asset in scope has at least one failure/down entry in the window (isFailureEvent-aligned).';
     var html = interp(understood, range) + '<strong>No breakdown / failure entries</strong> — ' + clean.length + ' asset(s)';
     html += table(['ID', 'Shaft', 'Type', 'Status'], clean.slice(0, 25).map(function (e) {
       var st = eqStatus(e.id) || {};
       return [esc(e.id), esc(e.shaft || '—'), esc(inferType(e)), esc(st.status || '—')];
     }), 25);
+    html += '<div class="meta">Uses isFailureEvent consistently with the dashboard.</div>';
     return html;
   }
 
@@ -9743,7 +9770,7 @@ window.RBE = {
     }
     var html = interp(understood, range) +
       '<strong>Replacement / overhaul candidates</strong>' +
-      '<div class="meta">Heuristic for ' + esc(periodLabel()) + ' (≥' + failThresh + ' fails / &lt;70% avail / ≥' + downThresh + ' h). Confirm with engineering.</div>';
+      '<div class="meta">Heuristic for ' + esc(periodLabel()) + ' (≥' + failThresh + ' fails / &lt;70% avail / ≥' + downThresh + ' h). Confirm with engineering — not an automatic write-off list.</div>';
     html += table(['ID', 'Shaft', 'Fails', 'Avail', 'Down hrs'], rows.slice(0, 15).map(function (r) {
       return [esc(r.id), esc(r.shaft), String(r.fails), r.avail != null ? r.avail.toFixed(1) : '—', r.downtime.toFixed(0)];
     }), 15);
@@ -9757,7 +9784,7 @@ window.RBE = {
     var interval = m.interval || m.frequency || m.pmInterval || 'monthly';
     if (last) {
       var derived = nextDue(last, interval);
-      if (derived) return derived;
+      if (derived) return String(derived).slice(0, 10);
     }
     return '';
   }
@@ -9801,6 +9828,7 @@ window.RBE = {
         }), 15);
       } else html += '<br>None overdue in scope.';
       if (soon.length) html += '<div class="meta">Also due within 14 days: ' + soon.length + '</div>';
+      html += '<div class="meta">Due dates use due/nextDue/dueDate, or calculateNextDue(lastDone, interval) when only last service is known.</div>';
       return html;
     }
     var html2 = interp(understood, range) + '<strong>Maintenance tasks</strong> — ' + all.length +
@@ -9837,7 +9865,6 @@ window.RBE = {
       return String(st.status || '').toLowerCase() === 'down';
     }).length;
     var ev = filterEvents({ words: words, shaft: shaft, range: range, failuresOnly: failuresOnly || !!words.length });
-    /* if words empty and failuresOnly, count all failures in shaft/range */
     if (!words.length && failuresOnly) {
       ev = filterEvents({ words: [], shaft: shaft, range: range, failuresOnly: true });
     }
@@ -9917,10 +9944,11 @@ window.RBE = {
     html += table(['ID', 'Shaft', 'MTBF', 'MTTR', 'Fails'], rows.slice(0, 12).map(function (r) {
       return [esc(r.id), esc(r.shaft), esc(r.label), esc(r.mttr), String(r.fails)];
     }), 12);
+    html += '<div class="meta">From getReliabilityMetrics for ' + esc(periodLabel()) + '.</div>';
     return html;
   }
 
-  /* ── Main router ── */
+  /* ── Main router — intent priority: specific before generic ── */
   function searchEverything(q) {
     var raw = String(q || '').trim();
     var t = raw.toLowerCase();
@@ -9938,13 +9966,14 @@ window.RBE = {
       if (shaft && shaft.toLowerCase().indexOf(w) !== -1) return false;
       if (type && type.toLowerCase().indexOf(w) !== -1) return false;
       if (equipToken && String(equipToken).toLowerCase().indexOf(w) !== -1) return false;
-      /* drop pure date words */
       if (/^(today|yesterday|week|month|year|last|days?|this)$/.test(w)) return false;
+      /* drop ranking / intent words from keyword bag */
+      if (/^(highest|lowest|worst|best|top|bottom|most|least|reliable|downtime|safe|safety|overdue|maint|maintenance|count|number)$/.test(w)) return false;
       return true;
     });
 
     var wantDown = /\b(down|offline|broken)\b/i.test(t);
-    var wantUp = /\b\bup\b\b|\boperational\b/.test(t) && !wantDown;
+    var wantUp = (/\bup\b/.test(t) || /\boperational\b/.test(t)) && !wantDown;
     var wantFail = /\b(fail|fault|breakdown|incident)s?\b/i.test(t);
     var wantMaint = /\b(maint|pm\b|service|overdue|schedule)\b/i.test(t);
     var wantCount = /\b(how many|count|number of|total)\b/i.test(t);
@@ -9961,6 +9990,9 @@ window.RBE = {
     var wantMtbf = /\b(mtbf|mttr|mean time)\b/i.test(t);
     var wantWho = /\b(who reported|reported by|reporter|operator)\b/i.test(t);
     var wantShaftPerf = /\bshafts?\b/.test(t) && (wantWorst || wantBest || /\b(perform|rank|compar)\b/.test(t));
+    var topN = null;
+    var topM = t.match(/\btop\s+(\d+)\b/);
+    if (topM) topN = Math.min(20, Math.max(1, parseInt(topM[1], 10)));
 
     var understood = [];
     if (equipToken) understood.push('equipment ' + equipToken);
@@ -9992,7 +10024,8 @@ window.RBE = {
         lastCtx.equipId = res.equip.id;
         var m = relMetrics(res.equip.id) || {};
         return interp(understood, range) + '<strong>' + esc(res.equip.id) + '</strong><br>MTBF: <strong>' +
-          esc(m.mtbfLabel || '—') + '</strong> · MTTR: <strong>' + esc(m.mttrLabel || '—') + '</strong>';
+          esc(m.mtbfLabel || '—') + '</strong> · MTTR: <strong>' + esc(m.mttrLabel || '—') + '</strong>' +
+          '<div class="meta">From getReliabilityMetrics · ' + esc(periodLabel()) + '</div>';
       }
       return answerEquipProfile(res.equip, range, understood);
     }
@@ -10006,10 +10039,10 @@ window.RBE = {
     if (wantMtbf) return answerMtbf(shaft, type, range, understood);
     if (wantShaftPerf) return answerShaftRank(range, understood);
 
-    /* Fault / failure search & top faults */
-    if (wantFail || (words.length && !wantCount && !wantList && !wantBest && !wantWorst)) {
+    /* Fault / failure search & top faults — before generic rankings */
+    if (wantFail || (words.length && !wantCount && !wantList && !wantBest && !wantWorst && !wantAvail)) {
       if (/\btop\b|\bmost common\b|\bcommon(est)?\b/i.test(t) || wantFail) {
-        return answerFaultRank(shaft, type, range, words, understood);
+        return answerFaultRank(shaft, type, range, words, understood, topN || 10);
       }
     }
 
@@ -10068,12 +10101,13 @@ window.RBE = {
         '• Counts: <em>how many brake faults on 11 shaft</em> · <em>list down locos</em><br>' +
         '• Maintenance: <em>overdue PM</em><br>' +
         '• Follow-ups: after an asset answer, ask <em>and its MTBF?</em><br>' +
-        '<div class="meta">Uses live shaft-scoped data. Safety answers are advisory only.</div>';
+        '<div class="meta">Uses live shaft-scoped data. Safety answers are advisory only — never “cleared to run”.</div>';
     }
     if (!api()) return 'Live data API is not linked yet. Sign in, wait for the app to load, then open Ask RBE again.';
     if (!dataReady()) {
+      startWelcomePoll();
       return 'No equipment or status records in memory yet. Stay signed in until the dashboard finishes loading, then ask again. ' +
-        '<div class="meta">Tip: open Dashboard once so KPIs populate.</div>';
+        '<div class="meta">Tip: open Dashboard once so KPIs populate. Welcome counts refresh when data arrives.</div>';
     }
     try {
       return searchEverything(q);
@@ -10088,7 +10122,7 @@ window.RBE = {
     if (!q) return;
     input.value = '';
     addMsg(esc(q), 'user');
-    sendBtn.disabled = true;
+    if (sendBtn) sendBtn.disabled = true;
     showTyping();
     setTimeout(function () {
       removeTyping();
@@ -10099,7 +10133,7 @@ window.RBE = {
         reply = 'Something went wrong. Wait for data to load, then try again.';
       }
       addMsg(reply, 'bot');
-      sendBtn.disabled = false;
+      if (sendBtn) sendBtn.disabled = false;
       input.focus();
       try {
         var r = api();
@@ -10112,5 +10146,6 @@ window.RBE = {
   window.closeAskRBE = closeChat;
 })();
 </script>
+
 
 </html>
