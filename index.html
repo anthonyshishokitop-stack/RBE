@@ -8877,6 +8877,7 @@ function _relIndex() {
   return (_pc.idx = m);
 }
 let _deferTok = 0;
+let _deferTok = 0;
 function deferHeavy(sectionId, fn) {
   const tok = ++_deferTok;
   const sec = document.getElementById(sectionId);
@@ -8889,10 +8890,31 @@ function deferHeavy(sectionId, fn) {
     const cur = document.querySelector('section:not(.hidden)');
     if (!cur || cur.id !== sectionId) return;
     const t0 = performance.now();
-    try { fn(); if (sec) { sec.dataset.painted = '1'; sec.dataset.rk = _viewKey(); sec.dataset.rkOk = '1'; } } catch (e) { console.warn(e); }
+    try { fn(); if (sec) { sec.dataset.painted = '1'; sec.dataset.rk = _viewKey(); sec.dataset.rkOk = '1'; } catch (e) { console.warn(e); }
     console.debug('[RBE] ' + sectionId + ' rendered in ' + Math.round(performance.now() - t0) + ' ms');
   }, 0));
 }
+
+/* ── Expose live data API for Ask RBE chatbot (classic script cannot see module scope) ── */
+window.RBE = {
+  get equipment() { return equipment || []; },
+  get updates() { return updates || []; },
+  get maintenance() { return maintenance || []; },
+  getFilteredEquipment: () => (typeof getFilteredEquipment === 'function' ? getFilteredEquipment() : (equipment || [])),
+  getFilteredUpdates: () => (typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (updates || [])),
+  getScopedUpdates: () => (typeof getScopedUpdates === 'function' ? getScopedUpdates() : (updates || [])),
+  getFilteredMaintenance: () => (typeof getFilteredMaintenance === 'function' ? getFilteredMaintenance() : (maintenance || [])),
+  getEquipmentStatus: (id) => (typeof getEquipmentStatus === 'function' ? getEquipmentStatus(id) : null),
+  getReliabilityMetrics: (id) => (typeof getReliabilityMetrics === 'function' ? getReliabilityMetrics(id) : null),
+  getSystemPeriod: () => (typeof getSystemPeriod === 'function' ? getSystemPeriod() : { key: 'weekly', label: 'selected period' }),
+  normaliseEquipId: (id) => (typeof normaliseEquipId === 'function' ? normaliseEquipId(id) : String(id || '').trim().toUpperCase()),
+  inferEquipmentType: (e) => (typeof inferEquipmentType === 'function' ? inferEquipmentType(e) : (e && e.equipmentType) || '—'),
+  get currentShaftFilter() { return (typeof currentShaftFilter !== 'undefined' ? currentShaftFilter : '') || ''; },
+  get currentTypeFilter() { return (typeof currentTypeFilter !== 'undefined' ? currentTypeFilter : '') || ''; },
+  get currentUserRole() { return (typeof currentUserRole !== 'undefined' ? currentUserRole : '') || ''; },
+  get currentAllowedShafts() { return (typeof currentAllowedShafts !== 'undefined' ? currentAllowedShafts : []) || []; },
+  logAudit: (a, d, e) => { try { if (typeof logAudit === 'function') logAudit(a, d, e); } catch (err) {} }
+};
 </script>
 
 <script>
@@ -9062,7 +9084,7 @@ function deferHeavy(sectionId, fn) {
 
 
 <script>
-/* ═══ Ask RBE — data-aware chatbot (client-side, RBAC-aware) ═══ */
+/* ═══ Ask RBE — data-aware chatbot (uses window.RBE from app module) ═══ */
 (function () {
   const fab = document.getElementById('rbe-chat-fab');
   const panel = document.getElementById('rbe-chat-panel');
@@ -9073,7 +9095,7 @@ function deferHeavy(sectionId, fn) {
   const clearBtn = document.getElementById('rbe-chat-clear');
   if (!fab || !panel || !msgs || !input) return;
 
-  let history = [];
+  function api() { return window.RBE || null; }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -9094,25 +9116,26 @@ function deferHeavy(sectionId, fn) {
     d.dataset.typing = '1';
     return d;
   }
-
   function removeTyping() {
     msgs.querySelectorAll('[data-typing]').forEach(el => el.remove());
   }
 
-  function suggestions(items) {
-    if (!items || !items.length) return '';
-    return '<div class="rbe-suggest">' + items.map(t =>
-      '<button type="button" data-q="' + esc(t) + '">' + esc(t) + '</button>').join('') + '</div>';
-  }
-
   function welcome() {
     msgs.innerHTML = '';
+    const r = api();
+    const nEq = r ? (r.equipment || []).length : 0;
+    const nUp = r ? (r.updates || []).length : 0;
+    const ready = !!(r && (nEq || nUp));
     addMsg(
       '<strong>Ask RBE</strong> — ask in plain language about the data you can see.<br><br>' +
       'Examples: <em>Is loco 511 safe to use?</em> · <em>Which equipment is the worst?</em> · ' +
       '<em>Which shaft is underperforming?</em> · <em>Most reliable assets</em> · ' +
       '<em>Equipment with no breakdowns</em> · <em>What needs replacement?</em>' +
-      '<div class="meta" style="margin-top:0.5rem">Answers use live shaft-scoped data and the current period/filters. Not a formal certification — use with site procedures.</div>',
+      '<div class="meta" style="margin-top:0.5rem">' +
+      (ready
+        ? ('Data linked: ' + nEq + ' equipment, ' + nUp + ' status events. Shaft-scoped · not a formal clearance.')
+        : 'Waiting for live data… Sign in and open the dashboard, then ask again.') +
+      '</div>',
       'bot'
     );
   }
@@ -9124,7 +9147,6 @@ function deferHeavy(sectionId, fn) {
     if (!msgs.children.length) welcome();
     setTimeout(() => input.focus(), 100);
   }
-
   function closeChat() {
     panel.classList.remove('open');
     fab.classList.remove('open');
@@ -9133,70 +9155,75 @@ function deferHeavy(sectionId, fn) {
 
   fab.addEventListener('click', () => panel.classList.contains('open') ? closeChat() : openChat());
   closeBtn.addEventListener('click', closeChat);
-  clearBtn.addEventListener('click', () => { history = []; welcome(); });
-
-  msgs.addEventListener('click', e => {
-    const b = e.target.closest('button[data-q]');
-    if (b) {
-      input.value = b.getAttribute('data-q');
-      send();
-    }
-  });
+  clearBtn.addEventListener('click', () => { welcome(); });
 
   sendBtn.addEventListener('click', send);
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
 
-  // ── Safe access to app data ──
   function safe(fn, fallback) {
     try { return fn(); } catch (e) { console.warn('[AskRBE]', e); return fallback; }
   }
+
   function filteredEq() {
-    return safe(() => (typeof getFilteredEquipment === 'function' ? getFilteredEquipment() : (window.equipment || [])), []);
+    const r = api();
+    if (!r) return [];
+    let list = safe(() => r.getFilteredEquipment(), []);
+    if (!list || !list.length) {
+      // Fallback: all equipment (still better than empty); RBAC may have filtered to zero
+      list = r.equipment || [];
+    }
+    return list || [];
   }
   function filteredUp() {
-    return safe(() => (typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (window.updates || [])), []);
-  }
-  function filteredMt() {
-    return safe(() => (typeof getFilteredMaintenance === 'function' ? getFilteredMaintenance() : (window.maintenance || [])), []);
+    const r = api();
+    if (!r) return [];
+    let list = safe(() => r.getFilteredUpdates(), []);
+    if (!list || !list.length) list = safe(() => r.getScopedUpdates(), r.updates || []);
+    return list || [];
   }
   function allScopedUp() {
-    // Prefer period-filtered; fall back to shaft-scoped all-time if period empty
-    return safe(() => {
-      if (typeof getFilteredUpdates === 'function') {
-        const p = getFilteredUpdates();
-        if (p && p.length) return p;
-      }
-      if (typeof getScopedUpdates === 'function') return getScopedUpdates();
-      return window.updates || [];
-    }, []);
+    const r = api();
+    if (!r) return [];
+    return safe(() => r.getScopedUpdates(), r.updates || []) || [];
   }
-  function relMetrics(id) {
-    return safe(() => (typeof getReliabilityMetrics === 'function' ? getReliabilityMetrics(id) : null), null);
+  function filteredMt() {
+    const r = api();
+    if (!r) return [];
+    return safe(() => r.getFilteredMaintenance(), r.maintenance || []) || [];
   }
   function eqStatus(id) {
-    return safe(() => (typeof getEquipmentStatus === 'function' ? getEquipmentStatus(id) : null), null);
+    const r = api();
+    return r ? safe(() => r.getEquipmentStatus(id), null) : null;
+  }
+  function relMetrics(id) {
+    const r = api();
+    return r ? safe(() => r.getReliabilityMetrics(id), null) : null;
   }
   function periodLabel() {
-    return safe(() => {
-      const p = typeof getSystemPeriod === 'function' ? getSystemPeriod() : null;
-      return (p && (p.label || p.key)) || 'selected period';
-    }, 'selected period');
+    const r = api();
+    const p = r ? safe(() => r.getSystemPeriod(), null) : null;
+    return (p && (p.label || p.key)) || 'selected period';
   }
   function filterChip() {
-    const s = (typeof currentShaftFilter !== 'undefined' && currentShaftFilter) || 'All Shafts';
-    const t = (typeof currentTypeFilter !== 'undefined' && currentTypeFilter) || 'All Types';
+    const r = api();
+    if (!r) return 'All Shafts · All Types';
+    const s = r.currentShaftFilter || 'All Shafts';
+    const t = r.currentTypeFilter || 'All Types';
     return s + ' · ' + t;
   }
   function normId(id) {
-    return safe(() => (typeof normaliseEquipId === 'function' ? normaliseEquipId(id) : String(id || '').trim().toUpperCase()), String(id || '').toUpperCase());
+    const r = api();
+    if (r && r.normaliseEquipId) return r.normaliseEquipId(id);
+    return String(id || '').trim().toUpperCase();
   }
   function inferType(e) {
-    return safe(() => (typeof inferEquipmentType === 'function' ? inferEquipmentType(e) : (e && e.equipmentType) || '—'), '—');
+    const r = api();
+    if (r && r.inferEquipmentType) return r.inferEquipmentType(e);
+    return (e && e.equipmentType) || '—';
   }
 
-  /** Score one asset for "badness" (higher = worse). */
   function riskScore(e) {
     const st = eqStatus(e.id) || {};
     const m = relMetrics(e.id) || {};
@@ -9218,34 +9245,35 @@ function deferHeavy(sectionId, fn) {
   function buildAssetRows() {
     return filteredEq().map(e => {
       const r = riskScore(e);
-      return {
-        id: e.id,
-        shaft: e.shaft || '—',
-        type: inferType(e),
-        ...r
-      };
+      return { id: e.id, shaft: e.shaft || '—', type: inferType(e), ...r };
     });
   }
 
+  /** Only real equipment IDs — never stop-words like "with", "no", "the" */
+  const STOP = new Set(('a an the is are was were be been being to of in on for with without from by at as and or not no yes which what who when where how shaft shafts equipment equipments loco locos asset assets unit units machine machines breakdown breakdowns failure failures report reports performing underperforming worst best most more less safe use needs need replacement reliable reliability status').split(' '));
+
   function extractEquipToken(text) {
     const t = String(text || '');
-    // Explicit patterns: loco 511, equipment 16L10T026, unit 56wn0340, #511
+    // loco 511 / equipment 16L10T026 — but reject stop-words as the captured ID
     let m = t.match(/\b(?:loco|caboose|hopper|winch|winder|unit|equipment|eq|asset|machine)\s*[#:]?\s*([A-Za-z0-9\-_\/]+)\b/i);
-    if (m) return m[1];
-    m = t.match(/\b(\d{1,3}[A-Za-z]{1,8}\d{2,8}|\d{2,3}[LlTtHhPpWwNnGg]\d{2,8}|[A-Za-z]{2,8}\d{3,10}|\d{3,10})\b/);
-    return m ? m[1] : null;
+    if (m && !STOP.has(m[1].toLowerCase()) && !/^(with|no|the|a|an|for|from|that|this|which)$/i.test(m[1])) {
+      return m[1];
+    }
+    // Structured mining IDs or pure numbers (3+ digits)
+    m = t.match(/\b(\d{1,3}[A-Za-z]{1,8}\d{2,8}|\d{2,3}[A-Za-z]{1,6}\d{2,8}|[A-Za-z]{2,8}\d{3,10}|\d{3,10})\b/);
+    if (m && !STOP.has(m[1].toLowerCase())) return m[1];
+    return null;
   }
 
   function findEquip(token) {
+    const r = api();
     const eq = filteredEq();
-    const all = safe(() => window.equipment || [], []);
+    const all = (r && r.equipment) || [];
     const n = normId(token);
     const dig = String(token).replace(/\D/g, '');
-    const pools = [eq, all];
-    for (const pool of pools) {
+    for (const pool of [eq, all]) {
       let hit = pool.find(e => normId(e.id) === n);
       if (hit) return hit;
-      // trailing number match e.g. 511 → …511 or LOCO511
       if (dig.length >= 2) {
         hit = pool.find(e => {
           const id = String(e.id || '');
@@ -9264,34 +9292,43 @@ function deferHeavy(sectionId, fn) {
     const nid = normId(id);
     const list = allScopedUp().filter(u => {
       if (normId(u.equipmentId || u.locoNumber) !== nid) return false;
-      const fail = u.isFailure === '1' || u.isFailure === 1 ||
-        String(u.status || '').toLowerCase() === 'down';
-      return fail;
+      return u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down';
     });
-    // sort newest first
     list.sort((a, b) => String((b.date || '') + (b.time || '')).localeCompare(String((a.date || '') + (a.time || ''))));
     return list;
   }
 
+  function dataGuard() {
+    const r = api();
+    if (!r) {
+      return 'Live data is not linked yet. Sign in, wait for the dashboard to load, then open Ask RBE again.';
+    }
+    const n = (r.equipment || []).length;
+    if (!n) {
+      return 'No equipment records are loaded yet (still syncing, or none in the database). Open the <strong>Dashboard</strong> or <strong>Equipment Register</strong>, wait for data, then ask again.';
+    }
+    return null;
+  }
+
   // ── Answers ──
 
-  function answerIsSafe(token, originalQ) {
+  function answerIsSafe(token) {
+    const g = dataGuard(); if (g) return g;
     const eq = findEquip(token);
     if (!eq) {
-      return 'I couldn\'t find equipment matching <strong>' + esc(token) + '</strong> in your current scope (' +
+      return 'I couldn\'t find equipment matching <strong>' + esc(token) + '</strong> in scope (' +
         esc(filterChip()) + '). Try the full Equipment ID from the register.';
     }
     const st = eqStatus(eq.id) || {};
     const m = relMetrics(eq.id) || {};
-    const failsPeriod = Number(st.failures) || 0;
     const entries = failureEntriesFor(eq.id);
+    const failsPeriod = Number(st.failures) || 0;
     const failCount = Math.max(failsPeriod, entries.length);
     const downtime = Number(st.downtime) || 0;
     const avail = st.availability != null ? Number(st.availability) : null;
     const status = String(st.status || '').toLowerCase();
     const health = m.health != null ? Number(m.health) : null;
 
-    // Decision heuristic (transparent, not a legal clearance)
     let verdict = 'Caution';
     let colour = 'var(--warning)';
     let reasons = [];
@@ -9313,7 +9350,6 @@ function deferHeavy(sectionId, fn) {
     } else {
       reasons.push('No failure / down entries in the selected period.');
     }
-
     if (avail != null && avail < 70) {
       verdict = 'Not recommended without investigation';
       colour = 'var(--danger)';
@@ -9323,7 +9359,6 @@ function deferHeavy(sectionId, fn) {
     } else if (avail != null) {
       reasons.push('Availability <strong>' + avail.toFixed(1) + '%</strong>.');
     }
-
     if (health != null && health < 45) {
       verdict = 'Not recommended without investigation';
       colour = 'var(--danger)';
@@ -9331,7 +9366,6 @@ function deferHeavy(sectionId, fn) {
     } else if (health != null && health < 70) {
       reasons.push('Health score <strong>' + health + '</strong>.');
     }
-
     if (downtime > 48) reasons.push('Downtime in period: <strong>' + downtime.toFixed(1) + ' h</strong>.');
 
     if (status === 'up' && failCount === 0 && (avail == null || avail >= 90) && (health == null || health >= 75)) {
@@ -9346,8 +9380,7 @@ function deferHeavy(sectionId, fn) {
       '<br>Status: <strong>' + esc(st.status || '—') + '</strong> · Period: ' + esc(periodLabel()) +
       '<br>Failure / down entries: <strong>' + failCount + '</strong> · Downtime: <strong>' + downtime.toFixed(1) + ' h</strong>';
     if (m.mtbfLabel) html += '<br>MTBF: ' + esc(m.mtbfLabel) + ' · MTTR: ' + esc(m.mttrLabel || '—');
-    html += '<ul style="margin:0.5rem 0 0 1.1rem;padding:0">' + reasons.map(r => '<li>' + r + '</li>').join('') + '</ul>';
-
+    html += '<ul style="margin:0.5rem 0 0 1.1rem;padding:0">' + reasons.map(x => '<li>' + x + '</li>').join('') + '</ul>';
     if (entries.length) {
       html += '<br><strong>Recent failure / down entries</strong><table><tr><th>Date</th><th>Shift</th><th>Reason</th></tr>';
       entries.slice(0, 8).forEach(u => {
@@ -9355,22 +9388,22 @@ function deferHeavy(sectionId, fn) {
           esc(String(u.reason || '').slice(0, 70)) + '</td></tr>';
       });
       html += '</table>';
-      if (entries.length > 8) html += '<div class="meta">' + entries.length + ' total entries</div>';
     }
     return html;
   }
 
   function answerWorst(n) {
-    n = n || 10;
-    const rows = buildAssetRows().filter(r => r.fails > 0 || (r.avail != null && r.avail < 95) || r.status === 'Down' || (r.health != null && r.health < 80));
+    const g = dataGuard(); if (g) return g;
+    n = n || 12;
+    const rows = buildAssetRows().filter(r => r.fails > 0 || (r.avail != null && r.avail < 95) || String(r.status).toLowerCase() === 'down' || (r.health != null && r.health < 80));
     rows.sort((a, b) => b.score - a.score);
     if (!rows.length) {
       const all = buildAssetRows();
       if (!all.length) return 'No equipment in scope (' + esc(filterChip()) + ').';
-      return 'No clearly underperforming assets in the current period — data looks relatively clean. Scope: ' + esc(filterChip()) + '.';
+      return 'No clearly underperforming assets in the current period. Scope: ' + esc(filterChip()) + ' · ' + all.length + ' assets loaded.';
     }
     let html = '<strong>Worst-performing equipment</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">Ranked by failures, downtime, availability, health &amp; current Down status</div>' +
+      '<div class="meta">Ranked by failures, downtime, availability, health &amp; Down status · ' + esc(filterChip()) + '</div>' +
       '<table><tr><th>#</th><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Status</th></tr>';
     rows.slice(0, n).forEach((r, i) => {
       html += '<tr><td>' + (i + 1) + '</td><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' +
@@ -9381,26 +9414,23 @@ function deferHeavy(sectionId, fn) {
   }
 
   function answerMostReliable(n) {
-    n = n || 10;
-    const rows = buildAssetRows().filter(r => {
-      // Prefer assets with some observation or high avail / zero fails
-      return r.fails === 0 || (r.avail != null && r.avail >= 90) || (r.health != null && r.health >= 80);
-    });
-    // Lower risk score = more reliable; require not Down
+    const g = dataGuard(); if (g) return g;
+    n = n || 12;
+    const rows = buildAssetRows().slice();
     rows.sort((a, b) => {
-      if (a.status === 'Down' && b.status !== 'Down') return 1;
-      if (b.status === 'Down' && a.status !== 'Down') return -1;
-      // prefer more fails inverse, higher avail
+      const ad = String(a.status).toLowerCase() === 'down' ? 1 : 0;
+      const bd = String(b.status).toLowerCase() === 'down' ? 1 : 0;
+      if (ad !== bd) return ad - bd;
+      if (a.fails !== b.fails) return a.fails - b.fails;
       const aa = a.avail != null ? a.avail : 50;
       const ba = b.avail != null ? b.avail : 50;
-      if (a.fails !== b.fails) return a.fails - b.fails;
       return ba - aa;
     });
-    if (!rows.length) return 'Not enough clean reliability data in scope to rank “most reliable”.';
-    let html = '<strong>Most reliable (in logged data)</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">Low failure count, higher availability, not currently Down</div>' +
+    const clean = rows.filter(r => String(r.status).toLowerCase() !== 'down');
+    if (!clean.length) return 'Not enough data to rank most reliable assets.';
+    let html = '<strong>Most reliable (logged data)</strong> · ' + esc(periodLabel()) +
       '<table><tr><th>#</th><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Status</th></tr>';
-    rows.filter(r => String(r.status).toLowerCase() !== 'down').slice(0, n).forEach((r, i) => {
+    clean.slice(0, n).forEach((r, i) => {
       html += '<tr><td>' + (i + 1) + '</td><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' +
         r.fails + '</td><td>' + (r.avail != null ? r.avail.toFixed(1) + '%' : '—') + '</td><td>' + esc(r.status) + '</td></tr>';
     });
@@ -9409,21 +9439,16 @@ function deferHeavy(sectionId, fn) {
   }
 
   function answerNeedsReplacement() {
-    const rows = buildAssetRows().filter(r => {
-      const chronic = r.fails >= 4;
-      const veryLowAvail = r.avail != null && r.avail < 70;
-      const criticalHealth = r.health != null && r.health < 45;
-      const heavyDown = r.downtime >= 72;
-      return chronic || veryLowAvail || criticalHealth || heavyDown;
-    });
+    const g = dataGuard(); if (g) return g;
+    const rows = buildAssetRows().filter(r =>
+      r.fails >= 4 || (r.avail != null && r.avail < 70) || (r.health != null && r.health < 45) || r.downtime >= 72
+    );
     rows.sort((a, b) => b.score - a.score);
     if (!rows.length) {
-      return 'No assets currently meet the <strong>replacement-review</strong> flags in this period ' +
-        '(criteria: ≥4 failures, availability &lt;70%, health &lt;45, or ≥72 h downtime). ' +
-        'That does not mean nothing needs work — check overdue PM and inspections.';
+      return 'No assets meet replacement-review flags this period (≥4 failures, avail &lt;70%, health &lt;45, or ≥72 h downtime). Still check overdue PM.';
     }
     let html = '<strong>Candidates for replacement / major overhaul review</strong>' +
-      '<div class="meta">Heuristic only — based on repeated failures, low availability, poor health, heavy downtime. Confirm with engineering.</div>' +
+      '<div class="meta">Heuristic only — confirm with engineering</div>' +
       '<table><tr><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Down hrs</th><th>Why</th></tr>';
     rows.slice(0, 15).forEach(r => {
       const why = [];
@@ -9432,25 +9457,26 @@ function deferHeavy(sectionId, fn) {
       if (r.health != null && r.health < 45) why.push('health ' + r.health);
       if (r.downtime >= 72) why.push(r.downtime.toFixed(0) + 'h down');
       html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails + '</td><td>' +
-        (r.avail != null ? r.avail.toFixed(1) : '—') + '</td><td>' + r.downtime.toFixed(0) + '</td><td>' +
-        esc(why.join(', ')) + '</td></tr>';
+        (r.avail != null ? r.avail.toFixed(1) : '—') + '</td><td>' + r.downtime.toFixed(0) + '</td><td>' + esc(why.join(', ')) + '</td></tr>';
     });
     html += '</table>';
     return html;
   }
 
   function answerWorstShaft() {
+    const g = dataGuard(); if (g) return g;
     const rows = buildAssetRows();
-    if (!rows.length) return 'No equipment in scope.';
+    if (!rows.length) {
+      const r = api();
+      return 'No equipment rows available to compare shafts. Loaded equipment: ' + ((r && r.equipment) || []).length +
+        '. Scope filter: ' + esc(filterChip()) + '.';
+    }
     const by = {};
     rows.forEach(r => {
-      const s = r.shaft || 'Unassigned';
+      const s = r.shaft && r.shaft !== '—' ? r.shaft : 'Unassigned';
       if (!by[s]) by[s] = { shaft: s, n: 0, fails: 0, downtime: 0, availSum: 0, availN: 0, downNow: 0, score: 0 };
       const b = by[s];
-      b.n++;
-      b.fails += r.fails;
-      b.downtime += r.downtime;
-      b.score += r.score;
+      b.n++; b.fails += r.fails; b.downtime += r.downtime; b.score += r.score;
       if (r.avail != null) { b.availSum += r.avail; b.availN++; }
       if (String(r.status).toLowerCase() === 'down') b.downNow++;
     });
@@ -9461,7 +9487,7 @@ function deferHeavy(sectionId, fn) {
     }));
     list.sort((a, b) => b.avgScore - a.avgScore || b.fails - a.fails);
     let html = '<strong>Shaft performance</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">Worst first — average risk score, failures, availability</div>' +
+      '<div class="meta">Worst first · ' + rows.length + ' assets · ' + esc(filterChip()) + '</div>' +
       '<table><tr><th>Shaft</th><th>Assets</th><th>Fails</th><th>Avg avail</th><th>Down now</th></tr>';
     list.forEach(b => {
       html += '<tr><td>' + esc(b.shaft) + '</td><td>' + b.n + '</td><td>' + b.fails + '</td><td>' +
@@ -9478,34 +9504,25 @@ function deferHeavy(sectionId, fn) {
   }
 
   function answerNoBreakdowns() {
-    const ups = allScopedUp();
+    const g = dataGuard(); if (g) return g;
     const failedIds = new Set();
-    ups.forEach(u => {
-      const isFail = u.isFailure === '1' || u.isFailure === 1 ||
-        String(u.status || '').toLowerCase() === 'down';
+    allScopedUp().forEach(u => {
+      const isFail = u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down';
       if (isFail) failedIds.add(normId(u.equipmentId || u.locoNumber));
     });
-    // Also use status.failures when available
     const clean = [];
     filteredEq().forEach(e => {
       const st = eqStatus(e.id) || {};
-      const fails = Number(st.failures) || 0;
-      if (fails > 0) return;
+      if ((Number(st.failures) || 0) > 0) return;
       if (failedIds.has(normId(e.id))) return;
-      clean.push({
-        id: e.id,
-        shaft: e.shaft || '—',
-        type: inferType(e),
-        status: st.status || '—',
-        avail: st.availability
-      });
+      clean.push({ id: e.id, shaft: e.shaft || '—', type: inferType(e), status: st.status || '—', avail: st.availability });
     });
     clean.sort((a, b) => String(a.shaft).localeCompare(String(b.shaft)) || String(a.id).localeCompare(String(b.id)));
     if (!clean.length) {
-      return 'Every asset in scope has at least one failure/down entry in the current window, or there is no equipment loaded.';
+      return 'Every asset in scope has at least one failure/down entry in the current window (or status metrics show failures).';
     }
     let html = '<strong>Equipment with no breakdown / failure entries</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">' + clean.length + ' of ' + filteredEq().length + ' assets in scope — no isFailure/Down events in the analysis data</div>' +
+      '<div class="meta">' + clean.length + ' of ' + filteredEq().length + ' assets in scope</div>' +
       '<table><tr><th>ID</th><th>Shaft</th><th>Type</th><th>Status</th><th>Avail</th></tr>';
     clean.slice(0, 25).forEach(r => {
       html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + esc(r.type) +
@@ -9517,10 +9534,9 @@ function deferHeavy(sectionId, fn) {
   }
 
   function answerEquipDetail(token) {
+    const g = dataGuard(); if (g) return g;
     const eq = findEquip(token);
-    if (!eq) {
-      return 'No equipment matching <strong>' + esc(token) + '</strong> in scope (' + esc(filterChip()) + ').';
-    }
+    if (!eq) return 'No equipment matching <strong>' + esc(token) + '</strong> in scope (' + esc(filterChip()) + ').';
     const st = eqStatus(eq.id) || {};
     const m = relMetrics(eq.id) || {};
     const entries = failureEntriesFor(eq.id);
@@ -9541,58 +9557,6 @@ function deferHeavy(sectionId, fn) {
     return html;
   }
 
-  function answerAvailabilitySummary() {
-    const rows = buildAssetRows();
-    if (!rows.length) return 'No equipment in scope (' + esc(filterChip()) + ').';
-    let withA = 0, sum = 0, down = 0, up = 0;
-    rows.forEach(r => {
-      if (r.avail != null) { withA++; sum += r.avail; }
-      if (String(r.status).toLowerCase() === 'down') down++;
-      else if (String(r.status).toLowerCase() === 'up') up++;
-    });
-    const avg = withA ? (sum / withA).toFixed(1) : '—';
-    const worst = rows.slice().sort((a, b) => (a.avail != null ? a.avail : 999) - (b.avail != null ? b.avail : 999));
-    let html = '<strong>Fleet snapshot</strong> · ' + esc(periodLabel()) + ' · ' + esc(filterChip()) +
-      '<br>Assets: <strong>' + rows.length + '</strong> · Avg availability: <strong>' + avg + '%</strong>' +
-      '<br>Up: <strong>' + up + '</strong> · Down: <strong>' + down + '</strong>';
-    if (worst.length && worst[0].avail != null) {
-      html += '<br><br>Lowest availability<table><tr><th>ID</th><th>Avail</th><th>Fails</th></tr>';
-      worst.filter(r => r.avail != null).slice(0, 5).forEach(r => {
-        html += '<tr><td>' + esc(r.id) + '</td><td>' + r.avail.toFixed(1) + '%</td><td>' + r.fails + '</td></tr>';
-      });
-      html += '</table>';
-    }
-    return html;
-  }
-
-  function answerOverdueMaint() {
-    const list = filteredMt();
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const overdue = [], soon = [];
-    list.forEach(m => {
-      const due = m.due || m.nextDue || m.dueDate;
-      if (!due) return;
-      const d = new Date(due);
-      if (isNaN(d.getTime())) return;
-      d.setHours(0, 0, 0, 0);
-      const days = Math.ceil((d - today) / 86400000);
-      const row = { id: m.equipment || m.equipmentId || '—', task: m.task || m.description || '—', due: String(due).slice(0, 10), days };
-      if (days < 0) overdue.push(row);
-      else if (days <= 14) soon.push(row);
-    });
-    overdue.sort((a, b) => a.days - b.days);
-    let html = '<strong>Maintenance</strong> — Overdue: <strong>' + overdue.length + '</strong> · Due ≤14 days: <strong>' + soon.length + '</strong>';
-    if (overdue.length) {
-      html += '<table><tr><th>Equipment</th><th>Task</th><th>Due</th><th>Days</th></tr>';
-      overdue.slice(0, 12).forEach(r => {
-        html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.task) + '</td><td>' + esc(r.due) + '</td><td style="color:var(--danger)">' + r.days + '</td></tr>';
-      });
-      html += '</table>';
-    }
-    if (!overdue.length && !soon.length) html += '<br>No overdue or near-due tasks in scope.';
-    return html;
-  }
-
   function answerHelp() {
     return 'Ask naturally, for example:' +
       '<ul style="margin:0.4rem 0 0 1.1rem;padding:0">' +
@@ -9602,9 +9566,8 @@ function deferHeavy(sectionId, fn) {
       '<li>Most reliable equipment</li>' +
       '<li>What needs replacement?</li>' +
       '<li>Which equipment has no breakdowns?</li>' +
-      '<li>Status of 16L10T026</li>' +
       '</ul>' +
-      '<div class="meta">I only use data in your shaft scope and current dashboard filters/period.</div>';
+      '<div class="meta">Uses live shaft-scoped data and current dashboard filters/period.</div>';
   }
 
   function route(q) {
@@ -9612,77 +9575,68 @@ function deferHeavy(sectionId, fn) {
     const t = raw.toLowerCase();
     if (!t) return 'Ask something about reliability, a loco ID, shafts, or breakdowns.';
 
-    const token = extractEquipToken(raw);
-
-    // Safety / fit for use
-    if (/\b(safe|safety|fit to use|ok to use|can i use|should we use|clear to run|serviceable|roadworthy)\b/.test(t)) {
-      if (token) return answerIsSafe(token, raw);
-      return 'Tell me which equipment — e.g. <em>Is loco 511 safe to use?</em>';
+    // Intent first — before ID extraction (avoids "equipment with…" → token "with")
+    if (/\b(no breakdown|no failure|no fault|without (any )?breakdown|never failed|zero failure|no report|not report|haven'?t reported|without failures?|clean record|no down|equipment with no)\b/.test(t) ||
+        /\bno breakdowns?\b/.test(t)) {
+      return answerNoBreakdowns();
     }
-
-    // Replacement / write-off style
     if (/\b(replac|write[- ]?off|scrap|beyond repair|overhaul|retire|end of life|eol)\b/.test(t)) {
       return answerNeedsReplacement();
     }
-
-    // Worst / underperforming equipment
-    if (/\b(worst|bad(dest)?|poor(est)?|underperform|problematic|trouble|chronic)\b/.test(t) &&
-        !/\bshafts?\b/.test(t)) {
-      return answerWorst(12);
-    }
-
-    // Worst shaft
-    if (/\bshafts?\b/.test(t) && /\b(worst|bad|poor|underperform|perform|rank|compar)\b/.test(t)) {
+    if (/\bshafts?\b/.test(t) && /\b(worst|bad|poor|underperform|perform|rank|compar|worse)\b/.test(t)) {
       return answerWorstShaft();
     }
     if (/\b(which|what)\s+shaft\b/.test(t)) return answerWorstShaft();
-
-    // Most reliable / best
-    if (/\b(most reliable|best|healthiest|top perform|most available|least fail)\b/.test(t) ||
+    if (/\b(most reliable|best perform|healthiest|top perform|most available|least fail)\b/.test(t) ||
         (/\breliable\b/.test(t) && !/\bunreliable\b/.test(t))) {
       return answerMostReliable(12);
     }
-
-    // No breakdowns / never failed / clean
-    if (/\b(no breakdown|no failure|no fault|without (any )?breakdown|never failed|zero failure|no report|not report|haven'?t reported|without failures?|clean record|no down)\b/.test(t)) {
-      return answerNoBreakdowns();
+    if (/\b(worst|bad(dest)?|poor(est)?|underperform|problematic|trouble|chronic|worse)\b/.test(t)) {
+      return answerWorst(12);
     }
-
-    // Maintenance
-    if (/\b(overdue|due soon|maintenance|pm\b|service due)\b/.test(t)) return answerOverdueMaint();
-
-    // Fleet / summary
-    if (/\b(summary|overview|fleet|how are we|dashboard|availability)\b/.test(t)) return answerAvailabilitySummary();
-
-    // Down count
-    if (/\b(how many|count).*\bdown\b|\bdown\b.*(how many|count|list)|currently down\b/.test(t)) {
-      const rows = buildAssetRows().filter(r => String(r.status).toLowerCase() === 'down');
-      let html = '<strong>Currently Down:</strong> ' + rows.length;
-      if (rows.length) {
-        html += '<table><tr><th>ID</th><th>Shaft</th><th>Fails (period)</th></tr>';
-        rows.slice(0, 20).forEach(r => {
-          html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails + '</td></tr>';
+    if (/\b(overdue|due soon|maintenance|pm\b|service due)\b/.test(t)) {
+      const g = dataGuard(); if (g) return g;
+      const list = filteredMt();
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const overdue = [];
+      list.forEach(m => {
+        const due = m.due || m.nextDue || m.dueDate;
+        if (!due) return;
+        const d = new Date(due);
+        if (isNaN(d.getTime())) return;
+        d.setHours(0, 0, 0, 0);
+        const days = Math.ceil((d - today) / 86400000);
+        if (days < 0) overdue.push({ id: m.equipment || m.equipmentId || '—', task: m.task || m.description || '—', due: String(due).slice(0, 10), days });
+      });
+      overdue.sort((a, b) => a.days - b.days);
+      let html = '<strong>Overdue maintenance:</strong> ' + overdue.length;
+      if (overdue.length) {
+        html += '<table><tr><th>Equipment</th><th>Task</th><th>Due</th><th>Days</th></tr>';
+        overdue.slice(0, 12).forEach(r => {
+          html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.task) + '</td><td>' + esc(r.due) + '</td><td style="color:var(--danger)">' + r.days + '</td></tr>';
         });
         html += '</table>';
       }
       return html;
     }
-
-    // Help
     if (/\b(help|what can|examples|how to ask)\b/.test(t)) return answerHelp();
 
-    // Bare equipment token → detail + light safety cue
-    if (token) {
-      const detail = answerEquipDetail(token);
-      if (/\b(fail|breakdown|fault|history|mtbf|mttr|status|detail)\b/.test(t)) return detail;
-      // If they only typed an ID, give detail; if question-like, also nudge safety
-      if (/\?/.test(raw) || /\b(about|tell me|info|check)\b/.test(t)) return detail;
-      return detail + '<br><br><span class="meta">Ask “is ' + esc(token) + ' safe to use?” for a failure-based advisory.</span>';
+    const token = extractEquipToken(raw);
+
+    if (/\b(safe|safety|fit to use|ok to use|can i use|should we use|clear to run|serviceable|roadworthy)\b/.test(t)) {
+      if (token) return answerIsSafe(token);
+      return 'Tell me which equipment — e.g. <em>Is loco 511 safe to use?</em>';
     }
 
-    // Generic worst without "equipment" word
-    if (/\b(worst|bad actors?|problem equipment)\b/.test(t)) return answerWorst(12);
-    if (/\b(no breakdowns?|zero failures?)\b/.test(t)) return answerNoBreakdowns();
+    if (token) return answerEquipDetail(token);
+
+    if (/\b(summary|overview|fleet|availability)\b/.test(t)) {
+      const g = dataGuard(); if (g) return g;
+      const rows = buildAssetRows();
+      let down = rows.filter(r => String(r.status).toLowerCase() === 'down').length;
+      return '<strong>Fleet snapshot</strong> · ' + esc(filterChip()) + '<br>Assets: <strong>' + rows.length +
+        '</strong> · Currently Down: <strong>' + down + '</strong> · Period: ' + esc(periodLabel());
+    }
 
     return 'I\'m not sure how to read that. ' + answerHelp();
   }
@@ -9692,7 +9646,6 @@ function deferHeavy(sectionId, fn) {
     if (!q) return;
     input.value = '';
     addMsg(esc(q), 'user');
-    history.push({ role: 'user', text: q });
     sendBtn.disabled = true;
     showTyping();
     setTimeout(() => {
@@ -9701,16 +9654,16 @@ function deferHeavy(sectionId, fn) {
       try { reply = route(q); }
       catch (err) {
         console.error(err);
-        reply = 'Something went wrong answering that. Try naming an Equipment ID or asking which assets are worst / most reliable.';
+        reply = 'Something went wrong. Open the Dashboard so data can load, then try again.';
       }
       addMsg(reply, 'bot');
-      history.push({ role: 'bot', text: reply });
       sendBtn.disabled = false;
       input.focus();
       try {
-        if (typeof logAudit === 'function') logAudit('chat_query', q.slice(0, 200), extractEquipToken(q) || '');
+        const r = api();
+        if (r && r.logAudit) r.logAudit('chat_query', q.slice(0, 200), extractEquipToken(q) || '');
       } catch (e) {}
-    }, 260);
+    }, 200);
   }
 
   window.openAskRBE = openChat;
