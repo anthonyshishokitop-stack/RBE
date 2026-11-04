@@ -8890,7 +8890,7 @@ function deferHeavy(sectionId, fn) {
     const cur = document.querySelector('section:not(.hidden)');
     if (!cur || cur.id !== sectionId) return;
     const t0 = performance.now();
-    try { fn(); if (sec) { sec.dataset.painted = '1'; sec.dataset.rk = _viewKey(); sec.dataset.rkOk = '1'; } catch (e) { console.warn(e); }
+    try { fn(); if (sec) { sec.dataset.painted = '1'; sec.dataset.rk = _viewKey(); sec.dataset.rkOk = '1'; } } catch (e) { console.warn(e); }
     console.debug('[RBE] ' + sectionId + ' rendered in ' + Math.round(performance.now() - t0) + ' ms');
   }, 0));
 }
