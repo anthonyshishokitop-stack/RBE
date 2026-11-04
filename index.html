@@ -704,7 +704,101 @@
     #v23-pal ul{list-style:none;margin:0;padding:.3rem;max-height:50vh;overflow:auto}
     #v23-pal li{padding:.6rem .8rem;border-radius:8px;cursor:pointer;font-size:.9rem}
     #v23-pal li.sel,#v23-pal li:hover{background:var(--primary-soft)}
-    @media print{.sidebar,#v23-fab,#v23-net,#v23-pal,.toast{display:none!important}.main{margin:0!important}body{background:#fff!important}}
+
+    /* ===== Ask RBE Chatbot ===== */
+    #rbe-chat-fab {
+      position: fixed; right: 14px; bottom: 62px; z-index: 1501;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: linear-gradient(135deg, #0c4a6e, #0369a1);
+      color: #fff; border: none; cursor: pointer;
+      box-shadow: 0 6px 20px rgba(12,74,110,0.45);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.25rem; transition: transform 0.2s, box-shadow 0.2s;
+    }
+    #rbe-chat-fab:hover { transform: scale(1.06); box-shadow: 0 8px 28px rgba(12,74,110,0.55); }
+    #rbe-chat-fab.open { background: linear-gradient(135deg, #b91c1c, #dc2626); }
+    #rbe-chat-panel {
+      position: fixed; right: 14px; bottom: 124px; z-index: 1502;
+      width: min(400px, calc(100vw - 28px)); height: min(560px, calc(100vh - 160px));
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; box-shadow: 0 16px 48px rgba(15,23,42,0.22);
+      display: none; flex-direction: column; overflow: hidden;
+    }
+    #rbe-chat-panel.open { display: flex; animation: modalSlideIn 0.2s ease-out; }
+    #rbe-chat-header {
+      background: linear-gradient(135deg, #0c4a6e, #0369a1);
+      color: #fff; padding: 0.85rem 1rem; display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0;
+    }
+    #rbe-chat-header .title { flex: 1; font-weight: 700; font-size: 0.95rem; }
+    #rbe-chat-header .sub { font-size: 0.72rem; opacity: 0.85; font-weight: 500; }
+    #rbe-chat-header button {
+      background: rgba(255,255,255,0.15); border: none; color: #fff;
+      width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #rbe-chat-header button:hover { background: rgba(255,255,255,0.28); }
+    #rbe-chat-messages {
+      flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;
+      background: var(--surface-2);
+    }
+    .rbe-msg {
+      max-width: 92%; padding: 0.7rem 0.9rem; border-radius: 12px; font-size: 0.88rem; line-height: 1.45;
+      word-break: break-word;
+    }
+    .rbe-msg.bot {
+      align-self: flex-start; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-bottom-left-radius: 4px;
+    }
+    .rbe-msg.user {
+      align-self: flex-end; background: var(--primary); color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .rbe-msg .meta { font-size: 0.7rem; opacity: 0.7; margin-top: 0.35rem; }
+    .rbe-msg table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 0.4rem; }
+    .rbe-msg th, .rbe-msg td { padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--border-light); text-align: left; }
+    .rbe-msg th { font-weight: 700; color: var(--primary); }
+    .rbe-suggest {
+      display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem;
+    }
+    .rbe-suggest button {
+      background: var(--primary-soft); color: var(--primary); border: 1px solid rgba(12,74,110,0.25);
+      border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+    }
+    .rbe-suggest button:hover { background: var(--primary); color: #fff; }
+    #rbe-chat-input-wrap {
+      padding: 0.75rem; border-top: 1px solid var(--border); background: var(--surface);
+      display: flex; gap: 0.5rem; flex-shrink: 0;
+    }
+    #rbe-chat-input {
+      flex: 1; padding: 0.6rem 0.85rem; border: 1px solid var(--border); border-radius: 10px;
+      font-size: 0.9rem; background: var(--surface-2); color: var(--text); outline: none;
+    }
+    #rbe-chat-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(12,74,110,0.12); }
+    #rbe-chat-send {
+      background: var(--primary); color: #fff; border: none; border-radius: 10px;
+      padding: 0 1rem; font-weight: 700; cursor: pointer;
+    }
+    #rbe-chat-send:hover { background: var(--primary-600); }
+    #rbe-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+    .rbe-typing { display: inline-flex; gap: 4px; padding: 0.5rem 0.75rem; }
+    .rbe-typing span {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--text-3);
+      animation: rbe-bounce 1.2s infinite ease-in-out;
+    }
+    .rbe-typing span:nth-child(2) { animation-delay: 0.15s; }
+    .rbe-typing span:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes rbe-bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40% { transform: translateY(-5px); opacity: 1; }
+    }
+    @media (max-width: 640px) {
+      #rbe-chat-panel { right: 8px; left: 8px; width: auto; bottom: 80px; height: min(70vh, 520px); }
+      #rbe-chat-fab { right: 12px; bottom: 70px; }
+    }
+    @media print { #rbe-chat-fab, #rbe-chat-panel { display: none !important; } }
+
+    @media print{.sidebar,#v23-fab,#v23-net,#v23-pal,.toast,#rbe-chat-fab,#rbe-chat-panel{display:none!important}.main{margin:0!important}body{background:#fff!important}}
   </style>
 </head>
 <body>
@@ -8945,5 +9039,468 @@ function deferHeavy(sectionId, fn) {
   addEventListener('unhandledrejection',function(e){console.error('Unhandled:',e.reason)});
 })();
 </script>
+
+<!-- Ask RBE Chatbot -->
+<button type="button" id="rbe-chat-fab" title="Ask RBE about your data" aria-label="Open Ask RBE chatbot">
+  <i class="fas fa-comments"></i>
+</button>
+<div id="rbe-chat-panel" role="dialog" aria-label="Ask RBE chatbot" aria-modal="true">
+  <div id="rbe-chat-header">
+    <div>
+      <div class="title"><i class="fas fa-robot"></i> Ask RBE</div>
+      <div class="sub">Answers from live, shaft-scoped data</div>
+    </div>
+    <button type="button" id="rbe-chat-clear" title="Clear conversation"><i class="fas fa-eraser"></i></button>
+    <button type="button" id="rbe-chat-close" title="Close"><i class="fas fa-times"></i></button>
+  </div>
+  <div id="rbe-chat-messages"></div>
+  <div id="rbe-chat-input-wrap">
+    <input type="text" id="rbe-chat-input" placeholder="e.g. lowest availability, overdue PM, MTBF for 16L…" autocomplete="off">
+    <button type="button" id="rbe-chat-send"><i class="fas fa-paper-plane"></i></button>
+  </div>
+</div>
+
+
+<script>
+/* ═══ Ask RBE — data-aware chatbot (client-side, RBAC-aware) ═══ */
+(function () {
+  const fab = document.getElementById('rbe-chat-fab');
+  const panel = document.getElementById('rbe-chat-panel');
+  const msgs = document.getElementById('rbe-chat-messages');
+  const input = document.getElementById('rbe-chat-input');
+  const sendBtn = document.getElementById('rbe-chat-send');
+  const closeBtn = document.getElementById('rbe-chat-close');
+  const clearBtn = document.getElementById('rbe-chat-clear');
+  if (!fab || !panel || !msgs || !input) return;
+
+  let history = [];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function addMsg(html, role) {
+    const div = document.createElement('div');
+    div.className = 'rbe-msg ' + role;
+    div.innerHTML = html;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    return div;
+  }
+
+  function showTyping() {
+    const d = addMsg('<div class="rbe-typing"><span></span><span></span><span></span></div>', 'bot');
+    d.dataset.typing = '1';
+    return d;
+  }
+
+  function removeTyping() {
+    msgs.querySelectorAll('[data-typing]').forEach(el => el.remove());
+  }
+
+  function suggestions(items) {
+    if (!items || !items.length) return '';
+    return '<div class="rbe-suggest">' + items.map(t =>
+      '<button type="button" data-q="' + esc(t) + '">' + esc(t) + '</button>').join('') + '</div>';
+  }
+
+  function welcome() {
+    msgs.innerHTML = '';
+    addMsg(
+      '<strong>Hi — I\'m Ask RBE.</strong><br>I answer from the <em>live data you are allowed to see</em> (shaft scope + current dashboard filters).<br><br>' +
+      'Try asking about availability, failures, MTBF/MTTR, overdue maintenance, high-risk assets, or a specific Equipment ID.' +
+      suggestions([
+        'Fleet availability summary',
+        'Lowest availability equipment',
+        'Overdue maintenance',
+        'High-risk assets',
+        'How many assets are Down?'
+      ]),
+      'bot'
+    );
+  }
+
+  function openChat() {
+    panel.classList.add('open');
+    fab.classList.add('open');
+    fab.innerHTML = '<i class="fas fa-times"></i>';
+    if (!msgs.children.length) welcome();
+    setTimeout(() => input.focus(), 100);
+  }
+
+  function closeChat() {
+    panel.classList.remove('open');
+    fab.classList.remove('open');
+    fab.innerHTML = '<i class="fas fa-comments"></i>';
+  }
+
+  fab.addEventListener('click', () => panel.classList.contains('open') ? closeChat() : openChat());
+  closeBtn.addEventListener('click', closeChat);
+  clearBtn.addEventListener('click', () => { history = []; welcome(); });
+
+  msgs.addEventListener('click', e => {
+    const b = e.target.closest('button[data-q]');
+    if (b) {
+      input.value = b.getAttribute('data-q');
+      send();
+    }
+  });
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  // ── Data helpers (reuse app globals safely) ──
+  function safe(fn, fallback) {
+    try { return fn(); } catch (e) { console.warn('[AskRBE]', e); return fallback; }
+  }
+
+  function filteredEq() {
+    return safe(() => (typeof getFilteredEquipment === 'function' ? getFilteredEquipment() : (window.equipment || [])), []);
+  }
+  function filteredUp() {
+    return safe(() => (typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (window.updates || [])), []);
+  }
+  function filteredMt() {
+    return safe(() => (typeof getFilteredMaintenance === 'function' ? getFilteredMaintenance() : (window.maintenance || [])), []);
+  }
+  function relMetrics(id) {
+    return safe(() => (typeof getReliabilityMetrics === 'function' ? getReliabilityMetrics(id) : null), null);
+  }
+  function eqStatus(id) {
+    return safe(() => (typeof getEquipmentStatus === 'function' ? getEquipmentStatus(id) : null), null);
+  }
+  function periodLabel() {
+    return safe(() => {
+      const p = typeof getSystemPeriod === 'function' ? getSystemPeriod() : null;
+      return (p && (p.label || p.key)) || 'selected period';
+    }, 'selected period');
+  }
+  function filterChip() {
+    const s = (typeof currentShaftFilter !== 'undefined' && currentShaftFilter) || 'All Shafts';
+    const t = (typeof currentTypeFilter !== 'undefined' && currentTypeFilter) || 'All Types';
+    return s + ' · ' + t;
+  }
+  function normId(id) {
+    return safe(() => (typeof normaliseEquipId === 'function' ? normaliseEquipId(id) : String(id || '').trim().toUpperCase()), String(id || '').toUpperCase());
+  }
+
+  function findEquip(q) {
+    const eq = filteredEq();
+    const raw = String(q || '').trim();
+    if (!raw) return null;
+    const n = normId(raw);
+    let hit = eq.find(e => normId(e.id) === n);
+    if (hit) return hit;
+    // partial match
+    hit = eq.find(e => normId(e.id).includes(n) || String(e.id).toLowerCase().includes(raw.toLowerCase()));
+    return hit || null;
+  }
+
+  function extractEquipId(text) {
+    // Common mining IDs: 16L10T026, 56wn0340, pure numbers, etc.
+    const m = text.match(/\b(\d{1,3}[A-Za-z]{1,6}\d{2,8}|\d{2,3}[LlTtHhPpWwNnGg]\d{2,8}|[A-Za-z]{2,6}\d{3,8}|\d{4,10})\b/);
+    return m ? m[1] : null;
+  }
+
+  // ── Intent handlers ──
+  function answerAvailabilitySummary() {
+    const eq = filteredEq();
+    if (!eq.length) return 'No equipment in your current scope (' + esc(filterChip()) + ').';
+    let withAvail = 0, sum = 0, down = 0, up = 0;
+    const rows = [];
+    eq.forEach(e => {
+      const st = eqStatus(e.id) || {};
+      const a = st.availability;
+      if (a != null && Number.isFinite(Number(a))) {
+        withAvail++;
+        sum += Number(a);
+        rows.push({ id: e.id, a: Number(a), status: st.status || '—' });
+      }
+      const s = String(st.status || '').toLowerCase();
+      if (s === 'down') down++;
+      else if (s === 'up' || s === 'fixed') up++;
+    });
+    rows.sort((x, y) => x.a - y.a);
+    const avg = withAvail ? (sum / withAvail).toFixed(1) : '—';
+    let html = '<strong>Fleet availability</strong> (' + esc(periodLabel()) + ')<br>' +
+      'Scope: <em>' + esc(filterChip()) + '</em><br>' +
+      'Assets in scope: <strong>' + eq.length + '</strong> · With availability data: <strong>' + withAvail + '</strong><br>' +
+      'Average availability: <strong>' + avg + '%</strong><br>' +
+      'Currently Up: <strong>' + up + '</strong> · Down: <strong>' + down + '</strong>';
+    if (rows.length) {
+      html += '<br><br><strong>Lowest 5</strong><table><tr><th>ID</th><th>Avail %</th><th>Status</th></tr>';
+      rows.slice(0, 5).forEach(r => {
+        html += '<tr><td>' + esc(r.id) + '</td><td>' + r.a.toFixed(1) + '</td><td>' + esc(r.status) + '</td></tr>';
+      });
+      html += '</table>';
+    }
+    return html + suggestions(['Lowest availability equipment', 'How many assets are Down?', 'High-risk assets']);
+  }
+
+  function answerLowestAvail(n) {
+    n = n || 8;
+    const eq = filteredEq();
+    const rows = [];
+    eq.forEach(e => {
+      const st = eqStatus(e.id) || {};
+      if (st.availability != null && Number.isFinite(Number(st.availability))) {
+        rows.push({ id: e.id, shaft: e.shaft || '—', a: Number(st.availability), status: st.status || '—', fails: st.failures || 0 });
+      }
+    });
+    rows.sort((x, y) => x.a - y.a);
+    if (!rows.length) return 'No availability figures in the current scope/period (' + esc(filterChip()) + ').';
+    let html = '<strong>Lowest availability</strong> (top ' + Math.min(n, rows.length) + ') · ' + esc(periodLabel()) +
+      '<table><tr><th>ID</th><th>Shaft</th><th>Avail %</th><th>Status</th><th>Fails</th></tr>';
+    rows.slice(0, n).forEach(r => {
+      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.a.toFixed(1) + '</td><td>' + esc(r.status) + '</td><td>' + r.fails + '</td></tr>';
+    });
+    html += '</table>';
+    return html;
+  }
+
+  function answerDownCount() {
+    const eq = filteredEq();
+    const down = [];
+    eq.forEach(e => {
+      const st = eqStatus(e.id) || {};
+      if (String(st.status || '').toLowerCase() === 'down') {
+        down.push({ id: e.id, shaft: e.shaft || '—', reason: st.lastReason || st.lastUpdate || '—' });
+      }
+    });
+    let html = '<strong>Down assets:</strong> ' + down.length + ' of ' + eq.length + ' in scope (' + esc(filterChip()) + ').';
+    if (down.length) {
+      html += '<table><tr><th>ID</th><th>Shaft</th></tr>';
+      down.slice(0, 15).forEach(r => {
+        html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td></tr>';
+      });
+      html += '</table>';
+      if (down.length > 15) html += '<div class="meta">Showing 15 of ' + down.length + '</div>';
+    }
+    return html;
+  }
+
+  function answerOverdueMaint() {
+    const list = filteredMt();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const overdue = [];
+    const soon = [];
+    list.forEach(m => {
+      const due = m.due || m.nextDue || m.dueDate;
+      if (!due) return;
+      const d = new Date(due);
+      if (isNaN(d.getTime())) return;
+      d.setHours(0, 0, 0, 0);
+      const days = Math.ceil((d - today) / 86400000);
+      const row = { id: m.equipment || m.equipmentId || '—', task: m.task || m.description || '—', due: String(due).slice(0, 10), days };
+      if (days < 0) overdue.push(row);
+      else if (days <= 14) soon.push(row);
+    });
+    overdue.sort((a, b) => a.days - b.days);
+    soon.sort((a, b) => a.days - b.days);
+    let html = '<strong>Maintenance (scoped)</strong><br>Overdue: <strong>' + overdue.length + '</strong> · Due within 14 days: <strong>' + soon.length + '</strong>';
+    if (overdue.length) {
+      html += '<br><br><strong>Overdue</strong><table><tr><th>Equipment</th><th>Task</th><th>Due</th><th>Days</th></tr>';
+      overdue.slice(0, 12).forEach(r => {
+        html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.task) + '</td><td>' + esc(r.due) + '</td><td style="color:var(--danger)">' + r.days + '</td></tr>';
+      });
+      html += '</table>';
+    }
+    if (soon.length) {
+      html += '<br><strong>Due soon</strong><table><tr><th>Equipment</th><th>Task</th><th>Due</th><th>Days</th></tr>';
+      soon.slice(0, 8).forEach(r => {
+        html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.task) + '</td><td>' + esc(r.due) + '</td><td>' + r.days + '</td></tr>';
+      });
+      html += '</table>';
+    }
+    if (!overdue.length && !soon.length) html += '<br>No overdue or near-due tasks in the current filter.';
+    return html + suggestions(['High-risk assets', 'Fleet availability summary']);
+  }
+
+  function answerHighRisk() {
+    const eq = filteredEq();
+    const rows = [];
+    eq.forEach(e => {
+      const m = relMetrics(e.id);
+      const st = eqStatus(e.id) || {};
+      if (!m && st.availability == null) return;
+      const anomaly = (m && m.anomaly != null) ? m.anomaly : 0;
+      const health = (m && m.health != null) ? m.health : null;
+      const avail = st.availability;
+      const fails = st.failures || 0;
+      let score = anomaly;
+      if (avail != null && avail < 80) score += 20;
+      if (fails >= 3) score += 15;
+      if (health != null && health < 55) score += 15;
+      if (score < 25 && !(avail != null && avail < 85) && fails < 2) return;
+      rows.push({
+        id: e.id, shaft: e.shaft || '—',
+        avail: avail != null ? Number(avail).toFixed(1) : '—',
+        fails, health: health != null ? health : '—',
+        anomaly: Math.round(anomaly), score
+      });
+    });
+    rows.sort((a, b) => b.score - a.score);
+    if (!rows.length) return 'No high-risk assets detected in the current scope/period. (Risk uses failures, availability, health & anomaly heuristics.)';
+    let html = '<strong>High-risk / attention list</strong> · ' + esc(periodLabel()) +
+      '<table><tr><th>ID</th><th>Shaft</th><th>Avail</th><th>Fails</th><th>Health</th></tr>';
+    rows.slice(0, 12).forEach(r => {
+      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.avail + '</td><td>' + r.fails + '</td><td>' + r.health + '</td></tr>';
+    });
+    html += '</table>';
+    return html;
+  }
+
+  function answerEquipDetail(idOrText) {
+    const raw = extractEquipId(idOrText) || idOrText;
+    const eq = findEquip(raw);
+    if (!eq) {
+      // try raw id against full list if filtered miss
+      return 'No equipment matching <strong>' + esc(raw) + '</strong> in your current scope (' + esc(filterChip()) + '). Check the ID or clear shaft/type filters.';
+    }
+    const st = eqStatus(eq.id) || {};
+    const m = relMetrics(eq.id) || {};
+    let html = '<strong>Equipment ' + esc(eq.id) + '</strong><br>' +
+      'Shaft: ' + esc(eq.shaft || '—') + ' · Type: ' + esc((typeof inferEquipmentType === 'function' ? inferEquipmentType(eq) : eq.equipmentType) || '—') + '<br>' +
+      'Workplace: ' + esc(eq.level || '—') + ' · Size: ' + esc(eq.locoSize || '—') + '<br>' +
+      'Status: <strong>' + esc(st.status || '—') + '</strong><br>' +
+      'Availability: <strong>' + (st.availability != null ? Number(st.availability).toFixed(1) + '%' : (st.availabilityLabel || 'Insufficient data')) + '</strong><br>' +
+      'Failures (period): <strong>' + (st.failures != null ? st.failures : '—') + '</strong> · Downtime hrs: <strong>' + (st.downtime != null ? Number(st.downtime).toFixed(1) : '—') + '</strong><br>';
+    if (m.mtbfLabel || m.mttrLabel) {
+      html += 'MTBF: <strong>' + esc(m.mtbfLabel || '—') + '</strong> · MTTR: <strong>' + esc(m.mttrLabel || '—') + '</strong><br>';
+    }
+    if (m.health != null) html += 'Health score: <strong>' + m.health + '</strong> (' + esc(m.band || '') + ')<br>';
+    if (st.lastUpdate) html += 'Last update: ' + esc(st.lastUpdate);
+    // recent events
+    const ups = filteredUp().filter(u => normId(u.equipmentId || u.locoNumber) === normId(eq.id))
+      .sort((a, b) => String((b.date || '') + (b.time || '')).localeCompare(String((a.date || '') + (a.time || ''))));
+    if (ups.length) {
+      html += '<br><br><strong>Recent events</strong> (' + ups.length + ' in period)<table><tr><th>Date</th><th>Status</th><th>Reason</th></tr>';
+      ups.slice(0, 6).forEach(u => {
+        html += '<tr><td>' + esc(u.date || '') + '</td><td>' + esc(u.status || '') + '</td><td>' + esc(String(u.reason || '').slice(0, 60)) + '</td></tr>';
+      });
+      html += '</table>';
+    }
+    return html + suggestions(['Lowest availability equipment', 'Overdue maintenance']);
+  }
+
+  function answerMtbfQuery(text) {
+    const id = extractEquipId(text);
+    if (id) return answerEquipDetail(id);
+    // top MTBF / worst MTBF list
+    const eq = filteredEq();
+    const rows = [];
+    eq.forEach(e => {
+      const m = relMetrics(e.id);
+      if (m && m.mtbf != null && Number.isFinite(m.mtbf)) {
+        rows.push({ id: e.id, mtbf: m.mtbf, mttr: m.mttr, label: m.mtbfLabel, fails: (eqStatus(e.id) || {}).failures || 0 });
+      }
+    });
+    if (!rows.length) return 'Insufficient data for MTBF in the current period (needs enough failures + observation window). Scope: ' + esc(filterChip()) + '.';
+    rows.sort((a, b) => a.mtbf - b.mtbf);
+    let html = '<strong>MTBF (lowest first)</strong> · ' + esc(periodLabel()) +
+      '<table><tr><th>ID</th><th>MTBF</th><th>Fails</th></tr>';
+    rows.slice(0, 10).forEach(r => {
+      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.label || r.mtbf.toFixed(0) + ' h') + '</td><td>' + r.fails + '</td></tr>';
+    });
+    html += '</table>';
+    return html;
+  }
+
+  function answerCounts() {
+    const eq = filteredEq();
+    const up = filteredUp();
+    const mt = filteredMt();
+    return '<strong>Scope snapshot</strong><br>' +
+      'Filter: <em>' + esc(filterChip()) + '</em><br>' +
+      'Period: <em>' + esc(periodLabel()) + '</em><br>' +
+      'Equipment: <strong>' + eq.length + '</strong><br>' +
+      'Status events in period: <strong>' + up.length + '</strong><br>' +
+      'Maintenance tasks (scoped): <strong>' + mt.length + '</strong>' +
+      suggestions(['Fleet availability summary', 'How many assets are Down?', 'Overdue maintenance']);
+  }
+
+  function answerHelp() {
+    return 'I can answer from <strong>your live RBE data</strong> (respecting shaft RBAC and dashboard filters):' +
+      '<ul style="margin:0.4rem 0 0 1.1rem;padding:0">' +
+      '<li>Fleet / availability summary &amp; trends context</li>' +
+      '<li>Lowest availability or high-risk assets</li>' +
+      '<li>Down count and lists</li>' +
+      '<li>Overdue / due-soon maintenance</li>' +
+      '<li>MTBF, MTTR, health for a specific Equipment ID</li>' +
+      '<li>Counts of assets and events in the selected period</li>' +
+      '</ul>' +
+      'Examples: <em>“MTBF for 16L10T026”</em>, <em>“overdue PM”</em>, <em>“worst availability”</em>.' +
+      suggestions(['Fleet availability summary', 'Overdue maintenance', 'High-risk assets']);
+  }
+
+  function route(q) {
+    const t = String(q || '').trim().toLowerCase();
+    if (!t) return 'Type a question about availability, failures, maintenance, or an Equipment ID.';
+
+    // specific equipment
+    const maybeId = extractEquipId(q);
+    if (maybeId && /(mtbf|mttr|health|status|detail|history|profile|about|for)\b/i.test(q)) {
+      return answerEquipDetail(maybeId);
+    }
+    if (maybeId && t.split(/\s+/).length <= 3) {
+      return answerEquipDetail(maybeId);
+    }
+
+    if (/\b(help|what can you|how do i|commands?)\b/.test(t)) return answerHelp();
+    if (/\b(how many|count|snapshot|scope)\b/.test(t) && /\b(asset|equip|event|down|up)\b/.test(t)) return answerCounts();
+    if (/\b(how many).*(down)|assets? (are )?down|currently down\b/.test(t)) return answerDownCount();
+    if (/\b(overdue|due soon|maintenance|pm schedule|preventive)\b/.test(t)) return answerOverdueMaint();
+    if (/\b(high[- ]?risk|bad actor|attention|critical|anomaly)\b/.test(t)) return answerHighRisk();
+    if (/\b(lowest|worst|bottom).*(avail)|avail.*(lowest|worst)\b/.test(t)) return answerLowestAvail(10);
+    if (/\b(mtbf|mttr|mean time)\b/.test(t)) return answerMtbfQuery(q);
+    if (/\b(avail|fleet|summary|kpi|dashboard)\b/.test(t)) return answerAvailabilitySummary();
+    if (/\b(down)\b/.test(t)) return answerDownCount();
+    if (/\b(count|how many|total)\b/.test(t)) return answerCounts();
+
+    // fallback: try equipment id anywhere
+    if (maybeId) return answerEquipDetail(maybeId);
+
+    return 'I couldn\'t map that to a data query. ' + answerHelp();
+  }
+
+  function send() {
+    const q = (input.value || '').trim();
+    if (!q) return;
+    input.value = '';
+    addMsg(esc(q), 'user');
+    history.push({ role: 'user', text: q });
+    sendBtn.disabled = true;
+    const typing = showTyping();
+    // slight delay for UX
+    setTimeout(() => {
+      removeTyping();
+      let reply;
+      try {
+        reply = route(q);
+      } catch (err) {
+        console.error(err);
+        reply = 'Something went wrong answering that. Try a simpler question or refresh the dashboard data.';
+      }
+      addMsg(reply, 'bot');
+      history.push({ role: 'bot', text: reply });
+      sendBtn.disabled = false;
+      input.focus();
+      // optional audit
+      try {
+        if (typeof logAudit === 'function') logAudit('chat_query', q.slice(0, 200), extractEquipId(q) || '');
+      } catch (e) {}
+    }, 280);
+  }
+
+  // Expose for command palette / external
+  window.openAskRBE = openChat;
+  window.closeAskRBE = closeChat;
+})();
+</script>
+
 </body>
 </html>
