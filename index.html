@@ -9049,12 +9049,12 @@ window.RBE = {
   </div>
   <div id="rbe-chat-messages"></div>
   <div id="rbe-chat-input-wrap">
-    <input type="text" id="rbe-chat-input" placeholder="e.g. is loco 511 safe? worst shaft? no breakdowns?" autocomplete="off">
+    <input type="text" id="rbe-chat-input" placeholder="Ask anything — equipment, faults, shafts, downtime, counts…" autocomplete="off">
     <button type="button" id="rbe-chat-send"><i class="fas fa-paper-plane"></i></button>
   </div>
 </div>
 <script>
-/* Ask RBE — uses window.RBE from app module */
+/* Ask RBE — flexible live-data Q&A over equipment, status, faults, maintenance */
 (function () {
   var fab = document.getElementById('rbe-chat-fab');
   var panel = document.getElementById('rbe-chat-panel');
@@ -9092,16 +9092,15 @@ window.RBE = {
     var r = api();
     var nEq = r ? (r.equipment || []).length : 0;
     var nUp = r ? (r.updates || []).length : 0;
-    var ready = !!(r && (nEq || nUp));
     addMsg(
-      '<strong>Ask RBE</strong> — ask in plain language.<br><br>' +
-      'Examples: <em>Is loco 511 safe to use?</em> · <em>Which equipment is the worst?</em> · ' +
-      '<em>Which shaft is underperforming?</em> · <em>Most reliable assets</em> · ' +
-      '<em>Equipment with no breakdowns</em> · <em>What needs replacement?</em>' +
+      '<strong>Ask RBE</strong> — ask anything about the data already on this system.<br><br>' +
+      'You can ask about any equipment, shaft, fault text, downtime, status, maintenance, counts, lists, or comparisons. ' +
+      'Examples: <em>brake faults this week</em>, <em>how many locos on 11 shaft</em>, <em>status of 511</em>, ' +
+      '<em>who reported antenna issues</em>, <em>longest downtime</em>, <em>list down equipment</em>.' +
       '<div class="meta" style="margin-top:0.5rem">' +
-      (ready
-        ? ('Data linked: ' + nEq + ' equipment, ' + nUp + ' status events. Not a formal clearance.')
-        : 'Waiting for live data… Sign in, open Dashboard, then ask again.') +
+      (nEq || nUp
+        ? ('Linked: ' + nEq + ' equipment · ' + nUp + ' status events · shaft-scoped · advisory only')
+        : 'Waiting for data — open Dashboard first.') +
       '</div>',
       'bot'
     );
@@ -9118,15 +9117,13 @@ window.RBE = {
     fab.classList.remove('open');
     fab.innerHTML = '<i class="fas fa-comments"></i>';
   }
-  fab.addEventListener('click', function () {
-    if (panel.classList.contains('open')) closeChat(); else openChat();
-  });
-  closeBtn.addEventListener('click', closeChat);
-  clearBtn.addEventListener('click', welcome);
-  sendBtn.addEventListener('click', send);
-  input.addEventListener('keydown', function (e) {
+  fab.onclick = function () { panel.classList.contains('open') ? closeChat() : openChat(); };
+  closeBtn.onclick = closeChat;
+  clearBtn.onclick = welcome;
+  sendBtn.onclick = send;
+  input.onkeydown = function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  });
+  };
 
   function safe(fn, fb) {
     try { return fn(); } catch (e) { console.warn('[AskRBE]', e); return fb; }
@@ -9135,6 +9132,12 @@ window.RBE = {
     var r = api(); if (!r) return [];
     var list = safe(function () { return r.getFilteredEquipment(); }, []);
     if (!list || !list.length) list = r.equipment || [];
+    return list || [];
+  }
+  function filteredUp() {
+    var r = api(); if (!r) return [];
+    var list = safe(function () { return r.getFilteredUpdates(); }, []);
+    if (!list || !list.length) list = safe(function () { return r.getScopedUpdates(); }, r.updates || []);
     return list || [];
   }
   function allScopedUp() {
@@ -9169,38 +9172,80 @@ window.RBE = {
   function inferType(e) {
     var r = api();
     if (r && r.inferEquipmentType) return r.inferEquipmentType(e);
-    return (e && e.equipmentType) || '—';
+    return (e && (e.equipmentType || e.type)) || '—';
   }
-  function riskScore(e) {
-    var st = eqStatus(e.id) || {};
-    var m = relMetrics(e.id) || {};
-    var fails = Number(st.failures) || 0;
-    var downtime = Number(st.downtime) || 0;
-    var avail = st.availability != null ? Number(st.availability) : null;
-    var health = m.health != null ? Number(m.health) : null;
-    var anomaly = m.anomaly != null ? Number(m.anomaly) : 0;
-    var score = fails * 12 + Math.min(40, downtime / 4);
-    if (avail != null) score += Math.max(0, 100 - avail) * 0.55;
-    if (health != null) score += Math.max(0, 100 - health) * 0.35;
-    score += anomaly * 0.4;
-    if (String(st.status || '').toLowerCase() === 'down') score += 25;
-    return { score: score, fails: fails, downtime: downtime, avail: avail, health: health, status: st.status || '—' };
+  function dataGuard() {
+    var r = api();
+    if (!r) return 'Data not linked yet. Sign in and open the Dashboard, then try again.';
+    if (!(r.equipment || []).length && !(r.updates || []).length) {
+      return 'No records loaded yet. Open <strong>Dashboard</strong> or <strong>Equipment Register</strong>, wait for data, then ask.';
+    }
+    return null;
   }
-  function buildAssetRows() {
-    return filteredEq().map(function (e) {
-      var r = riskScore(e);
-      return { id: e.id, shaft: e.shaft || '—', type: inferType(e), score: r.score, fails: r.fails, downtime: r.downtime, avail: r.avail, health: r.health, status: r.status };
+
+  /* ── Flexible NLP helpers ── */
+  var STOP = {
+    a:1, an:1, the:1, is:1, are:1, was:1, were:1, be:1, been:1, being:1, to:1, of:1, in:1, on:1, for:1,
+    with:1, without:1, from:1, by:1, at:1, as:1, and:1, or:1, not:1, no:1, yes:1, which:1, what:1, who:1,
+    when:1, where:1, how:1, many:1, much:1, any:1, all:1, some:1, please:1, show:1, list:1, tell:1, me:1,
+    about:1, give:1, find:1, get:1, can:1, you:1, we:1, i:1, do:1, does:1, did:1, has:1, have:1, had:1,
+    there:1, their:1, this:1, that:1, these:1, those:1, our:1, your:1, my:1, currently:1, current:1,
+    equipment:1, equipments:1, asset:1, assets:1, unit:1, units:1, machine:1, machines:1, item:1, items:1,
+    shaft:1, shafts:1, loco:1, locos:1, status:1, statuses:1, report:1, reports:1, data:1, system:1,
+    need:1, needs:1, want:1, looking:1, see:1, check:1, info:1, information:1, details:1, detail:1
+  };
+
+  function tokens(q) {
+    return String(q || '').toLowerCase().replace(/[^\w\s\-./]/g, ' ').split(/\s+/).filter(function (w) {
+      return w.length > 1 && !STOP[w];
     });
   }
-  var STOP = { a:1, an:1, the:1, is:1, are:1, to:1, of:1, in:1, on:1, for:1, with:1, without:1, from:1, by:1, as:1, and:1, or:1, not:1, no:1, which:1, what:1, shaft:1, shafts:1, equipment:1, loco:1, asset:1, unit:1, breakdown:1, breakdowns:1, failure:1, failures:1, performing:1, underperforming:1, worst:1, best:1, most:1, safe:1, use:1, needs:1, replacement:1, reliable:1 };
+
   function extractEquipToken(text) {
     var t = String(text || '');
     var m = t.match(/\b(?:loco|caboose|hopper|winch|winder|unit|equipment|eq|asset|machine)\s*[#:]?\s*([A-Za-z0-9\-_\/]+)\b/i);
     if (m && !STOP[m[1].toLowerCase()]) return m[1];
     m = t.match(/\b(\d{1,3}[A-Za-z]{1,8}\d{2,8}|\d{2,3}[A-Za-z]{1,6}\d{2,8}|[A-Za-z]{2,8}\d{3,10}|\d{3,10})\b/);
-    if (m && !STOP[m[1].toLowerCase()]) return m[1];
+    if (m && !STOP[String(m[1]).toLowerCase()]) return m[1];
     return null;
   }
+
+  function extractShaft(text) {
+    var t = String(text || '');
+    var m = t.match(/\b(\d{1,2}c?)\s*shaft\b/i) || t.match(/\bshaft\s*[#:]?\s*(\d{1,2}c?)\b/i) ||
+      t.match(/\b(ef)\s*shaft\b/i) || t.match(/\b(north|south)\s*shaft\b/i);
+    if (m) {
+      var s = m[1];
+      if (/^\d/i.test(s)) return s.replace(/c$/i, 'C') + ' Shaft';
+      return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() + ' Shaft';
+    }
+    // bare "11 shaft" already handled; try known from data
+    var eq = filteredEq();
+    var shafts = {};
+    eq.forEach(function (e) {
+      var sh = String(e.shaft || '').trim();
+      if (sh) shafts[sh.toLowerCase()] = sh;
+    });
+    var low = t.toLowerCase();
+    for (var k in shafts) {
+      if (low.indexOf(k) !== -1 || low.indexOf(k.replace(/\s*shaft$/, '')) !== -1) return shafts[k];
+    }
+    return null;
+  }
+
+  function extractType(text) {
+    var types = ['loco', 'caboose', 'hopper', 'winder', 'winch', 'compressor', 'loader', 'substation',
+      'ventilation', 'fan', 'pump', 'conveyor', 'drill', 'transformer', 'derailment'];
+    var low = String(text || '').toLowerCase();
+    for (var i = 0; i < types.length; i++) {
+      if (new RegExp('\\b' + types[i] + 's?\\b').test(low)) {
+        if (types[i] === 'ventilation' || types[i] === 'fan') return 'Ventilation Fan';
+        return types[i].charAt(0).toUpperCase() + types[i].slice(1);
+      }
+    }
+    return null;
+  }
+
   function findEquip(token) {
     var r = api();
     var pools = [filteredEq(), (r && r.equipment) || []];
@@ -9217,136 +9262,353 @@ window.RBE = {
         });
         if (hit) return hit;
       }
-    }
-    return null;
-  }
-  function failureEntriesFor(id) {
-    var nid = normId(id);
-    var list = allScopedUp().filter(function (u) {
-      if (normId(u.equipmentId || u.locoNumber) !== nid) return false;
-      return u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down';
-    });
-    list.sort(function (a, b) {
-      return String((b.date || '') + (b.time || '')).localeCompare(String((a.date || '') + (a.time || '')));
-    });
-    return list;
-  }
-  function dataGuard() {
-    var r = api();
-    if (!r) return 'Live data is not linked yet. Sign in, wait for the dashboard, then open Ask RBE again.';
-    if (!(r.equipment || []).length) {
-      return 'No equipment records loaded yet. Open the <strong>Dashboard</strong>, wait for KPIs, then ask again.';
+      hit = pool.find(function (e) {
+        return normId(e.id).indexOf(n) !== -1 || String(e.id).toLowerCase().indexOf(String(token).toLowerCase()) !== -1;
+      });
+      if (hit) return hit;
     }
     return null;
   }
 
-  function answerIsSafe(token) {
-    var g = dataGuard(); if (g) return g;
-    var eq = findEquip(token);
-    if (!eq) return 'Could not find <strong>' + esc(token) + '</strong> in scope (' + esc(filterChip()) + ').';
-    var st = eqStatus(eq.id) || {};
-    var m = relMetrics(eq.id) || {};
-    var entries = failureEntriesFor(eq.id);
-    var failCount = Math.max(Number(st.failures) || 0, entries.length);
+  function riskScore(e) {
+    var st = eqStatus(e.id) || {};
+    var m = relMetrics(e.id) || {};
+    var fails = Number(st.failures) || 0;
     var downtime = Number(st.downtime) || 0;
     var avail = st.availability != null ? Number(st.availability) : null;
-    var status = String(st.status || '').toLowerCase();
     var health = m.health != null ? Number(m.health) : null;
-    var verdict = 'Caution';
-    var colour = 'var(--warning)';
-    var reasons = [];
-    if (status === 'down') { verdict = 'Not safe to use right now'; colour = 'var(--danger)'; reasons.push('Current status is <strong>Down</strong>.'); }
-    if (failCount >= 5) { verdict = 'Not recommended without investigation'; colour = 'var(--danger)'; reasons.push('<strong>' + failCount + '</strong> failure / down entries.'); }
-    else if (failCount >= 3) { if (verdict === 'Caution') verdict = 'Use with caution'; reasons.push('<strong>' + failCount + '</strong> failure entries.'); }
-    else if (failCount >= 1) reasons.push('<strong>' + failCount + '</strong> failure entry — review last fault.');
-    else reasons.push('No failure / down entries in the selected period.');
-    if (avail != null && avail < 70) { verdict = 'Not recommended without investigation'; colour = 'var(--danger)'; reasons.push('Availability <strong>' + avail.toFixed(1) + '%</strong>.'); }
-    else if (avail != null) reasons.push('Availability <strong>' + avail.toFixed(1) + '%</strong>.');
-    if (health != null && health < 45) { verdict = 'Not recommended without investigation'; colour = 'var(--danger)'; reasons.push('Health <strong>' + health + '</strong>.'); }
-    if (status === 'up' && failCount === 0 && (avail == null || avail >= 90) && (health == null || health >= 75)) {
-      verdict = 'No reliability flags in current data'; colour = 'var(--success)';
-      reasons = ['Status <strong>Up</strong>, no failure entries, metrics look healthy in logged data.'];
-    }
-    var html = '<strong style="color:' + colour + '">' + esc(verdict) + '</strong>' +
-      '<div class="meta">Advisory only — not a formal pre-use clearance.</div>' +
-      '<br><strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') +
-      '<br>Status: <strong>' + esc(st.status || '—') + '</strong> · Failures: <strong>' + failCount + '</strong> · Downtime: <strong>' + downtime.toFixed(1) + ' h</strong>';
-    html += '<ul style="margin:0.5rem 0 0 1.1rem;padding:0">' + reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>';
-    if (entries.length) {
-      html += '<br><strong>Recent faults</strong><table><tr><th>Date</th><th>Reason</th></tr>';
-      entries.slice(0, 6).forEach(function (u) {
-        html += '<tr><td>' + esc(u.date || '') + '</td><td>' + esc(String(u.reason || '').slice(0, 70)) + '</td></tr>';
-      });
-      html += '</table>';
+    var score = fails * 12 + Math.min(40, downtime / 4);
+    if (avail != null) score += Math.max(0, 100 - avail) * 0.55;
+    if (health != null) score += Math.max(0, 100 - health) * 0.35;
+    if (String(st.status || '').toLowerCase() === 'down') score += 25;
+    return { score: score, fails: fails, downtime: downtime, avail: avail, health: health, status: st.status || '—', mtbfLabel: m.mtbfLabel, mttrLabel: m.mttrLabel };
+  }
+
+  function table(headers, rows, limit) {
+    limit = limit || 20;
+    if (!rows.length) return '<em>No matching rows.</em>';
+    var html = '<table><tr>' + headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
+    rows.slice(0, limit).forEach(function (row) {
+      html += '<tr>' + row.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>';
+    });
+    html += '</table>';
+    if (rows.length > limit) html += '<div class="meta">Showing ' + limit + ' of ' + rows.length + '</div>';
+    return html;
+  }
+
+  /* ── Specific answer builders ── */
+  function answerEquipProfile(token) {
+    var eq = findEquip(token);
+    if (!eq) return null;
+    var st = eqStatus(eq.id) || {};
+    var rs = riskScore(eq);
+    var ups = filteredUp().filter(function (u) {
+      return normId(u.equipmentId || u.locoNumber) === normId(eq.id);
+    }).sort(function (a, b) {
+      return String((b.date || '') + (b.time || '')).localeCompare(String((a.date || '') + (a.time || '')));
+    });
+    var html = '<strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') + ' · ' + esc(inferType(eq)) +
+      '<br>Workplace: ' + esc(eq.level || '—') + ' · Size: ' + esc(eq.locoSize || '—') + ' · OEM: ' + esc(eq.oem || eq.OEM || '—') +
+      '<br>Status: <strong>' + esc(st.status || rs.status || '—') + '</strong>' +
+      '<br>Availability: <strong>' + (rs.avail != null ? rs.avail.toFixed(1) + '%' : '—') + '</strong>' +
+      ' · Failures: <strong>' + rs.fails + '</strong> · Downtime: <strong>' + rs.downtime.toFixed(1) + ' h</strong>';
+    if (rs.mtbfLabel) html += '<br>MTBF: ' + esc(rs.mtbfLabel) + ' · MTTR: ' + esc(rs.mttrLabel || '—');
+    if (rs.health != null) html += '<br>Health: <strong>' + rs.health + '</strong>';
+    if (ups.length) {
+      html += '<br><br><strong>Recent events</strong> (' + ups.length + ' in period)';
+      html += table(['Date', 'Status', 'Shift', 'Reason'], ups.slice(0, 8).map(function (u) {
+        return [esc(u.date || ''), esc(u.status || ''), esc(u.shift || ''), esc(String(u.reason || '').slice(0, 60))];
+      }), 8);
     }
     return html;
   }
-  function answerWorst(n) {
-    var g = dataGuard(); if (g) return g;
-    n = n || 12;
-    var rows = buildAssetRows().filter(function (r) {
-      return r.fails > 0 || (r.avail != null && r.avail < 95) || String(r.status).toLowerCase() === 'down';
+
+  function answerIsSafe(token) {
+    var eq = findEquip(token);
+    if (!eq) return 'Could not find equipment matching <strong>' + esc(token) + '</strong>.';
+    var st = eqStatus(eq.id) || {};
+    var rs = riskScore(eq);
+    var entries = allScopedUp().filter(function (u) {
+      if (normId(u.equipmentId || u.locoNumber) !== normId(eq.id)) return false;
+      return u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down';
     });
-    rows.sort(function (a, b) { return b.score - a.score; });
-    if (!rows.length) return 'No clearly underperforming assets. Scope: ' + esc(filterChip()) + ' · ' + buildAssetRows().length + ' assets.';
-    var html = '<strong>Worst-performing equipment</strong> · ' + esc(periodLabel()) +
-      '<table><tr><th>#</th><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Status</th></tr>';
-    rows.slice(0, n).forEach(function (r, i) {
-      html += '<tr><td>' + (i + 1) + '</td><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails +
-        '</td><td>' + (r.avail != null ? r.avail.toFixed(1) + '%' : '—') + '</td><td>' + esc(r.status) + '</td></tr>';
-    });
-    return html + '</table>';
-  }
-  function answerMostReliable(n) {
-    var g = dataGuard(); if (g) return g;
-    var rows = buildAssetRows().slice();
-    rows.sort(function (a, b) {
-      var ad = String(a.status).toLowerCase() === 'down' ? 1 : 0;
-      var bd = String(b.status).toLowerCase() === 'down' ? 1 : 0;
-      if (ad !== bd) return ad - bd;
-      if (a.fails !== b.fails) return a.fails - b.fails;
-      return (b.avail != null ? b.avail : 50) - (a.avail != null ? a.avail : 50);
-    });
-    var clean = rows.filter(function (r) { return String(r.status).toLowerCase() !== 'down'; });
-    if (!clean.length) return 'Not enough data to rank most reliable.';
-    var html = '<strong>Most reliable</strong> · ' + esc(periodLabel()) +
-      '<table><tr><th>#</th><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th></tr>';
-    clean.slice(0, n || 12).forEach(function (r, i) {
-      html += '<tr><td>' + (i + 1) + '</td><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails +
-        '</td><td>' + (r.avail != null ? r.avail.toFixed(1) + '%' : '—') + '</td></tr>';
-    });
-    return html + '</table>';
-  }
-  function answerNeedsReplacement() {
-    var g = dataGuard(); if (g) return g;
-    var rows = buildAssetRows().filter(function (r) {
-      return r.fails >= 4 || (r.avail != null && r.avail < 70) || (r.health != null && r.health < 45) || r.downtime >= 72;
-    });
-    rows.sort(function (a, b) { return b.score - a.score; });
-    if (!rows.length) return 'No assets meet replacement-review flags (≥4 failures, avail &lt;70%, health &lt;45, or ≥72 h downtime).';
-    var html = '<strong>Replacement / overhaul candidates</strong><div class="meta">Heuristic — confirm with engineering</div>' +
-      '<table><tr><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Down hrs</th></tr>';
-    rows.slice(0, 15).forEach(function (r) {
-      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails + '</td><td>' +
-        (r.avail != null ? r.avail.toFixed(1) : '—') + '</td><td>' + r.downtime.toFixed(0) + '</td></tr>';
-    });
-    return html + '</table>';
-  }
-  function answerWorstShaft() {
-    var g = dataGuard(); if (g) return g;
-    var rows = buildAssetRows();
-    if (!rows.length) {
-      var r = api();
-      return 'No equipment rows to compare. Loaded: ' + ((r && r.equipment) || []).length + '. Filter: ' + esc(filterChip()) + '.';
+    var failCount = Math.max(rs.fails, entries.length);
+    var status = String(st.status || rs.status || '').toLowerCase();
+    var verdict = 'Caution';
+    var colour = 'var(--warning)';
+    var reasons = [];
+    if (status === 'down') { verdict = 'Not safe to use right now'; colour = 'var(--danger)'; reasons.push('Status is <strong>Down</strong>.'); }
+    if (failCount >= 5) { verdict = 'Not recommended without investigation'; colour = 'var(--danger)'; reasons.push(failCount + ' failure entries.'); }
+    else if (failCount >= 3) { if (verdict === 'Caution') verdict = 'Use with caution'; reasons.push(failCount + ' failure entries.'); }
+    else if (failCount >= 1) reasons.push(failCount + ' failure entry — review last fault.');
+    else reasons.push('No failure entries in period.');
+    if (rs.avail != null && rs.avail < 70) { verdict = 'Not recommended without investigation'; colour = 'var(--danger)'; reasons.push('Availability ' + rs.avail.toFixed(1) + '%.'); }
+    else if (rs.avail != null) reasons.push('Availability ' + rs.avail.toFixed(1) + '%.');
+    if (status === 'up' && failCount === 0 && (rs.avail == null || rs.avail >= 90)) {
+      verdict = 'No reliability flags in current data'; colour = 'var(--success)';
+      reasons = ['Up, no failures in period, metrics look healthy in logged data.'];
     }
+    var html = '<strong style="color:' + colour + '">' + esc(verdict) + '</strong>' +
+      '<div class="meta">Advisory from logged events — not a formal pre-use clearance.</div>' +
+      '<br><strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') +
+      '<br>Failures: <strong>' + failCount + '</strong> · Downtime: <strong>' + rs.downtime.toFixed(1) + ' h</strong>';
+    html += '<ul style="margin:0.4rem 0 0 1.1rem">' + reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>';
+    return html;
+  }
+
+  /* Generic free-text search across status reasons + equipment fields */
+  function searchEverything(q) {
+    var words = tokens(q);
+    var shaft = extractShaft(q);
+    var type = extractType(q);
+    var equipToken = extractEquipToken(q);
+    var wantDown = /\b(down|offline|broken|faulty)\b/i.test(q);
+    var wantUp = /\b\bup\b\b|\boperational\b|\bfixed\b/i.test(q) && !wantDown;
+    var wantFail = /\b(fail|failure|breakdown|fault|incident)\b/i.test(q);
+    var wantMaint = /\b(maint|pm\b|service|overdue|schedule)\b/i.test(q);
+    var wantCount = /\b(how many|count|number of|total)\b/i.test(q);
+    var wantList = /\b(list|show|which|what are|display)\b/i.test(q);
+    var wantWorst = /\b(worst|bad|poor|underperform|lowest|least reliable)\b/i.test(q);
+    var wantBest = /\b(best|most reliable|highest|healthiest|top)\b/i.test(q);
+    var wantSafe = /\b(safe|safety|fit to use|ok to use|can i use|serviceable)\b/i.test(q);
+    var wantReplace = /\b(replac|scrap|write.?off|retire|overhaul)\b/i.test(q);
+    var wantNoBreak = /\b(no breakdown|no failure|no fault|without breakdown|never failed|zero failure|no report)\b/i.test(q);
+    var wantAvail = /\b(availab)/i.test(q);
+    var wantMtbf = /\b(mtbf|mttr|mean time)\b/i.test(q);
+    var wantLongest = /\b(longest|most downtime|highest downtime)\b/i.test(q);
+
+    // Single equipment focus
+    if (equipToken) {
+      if (wantSafe) return answerIsSafe(equipToken);
+      var prof = answerEquipProfile(equipToken);
+      if (prof) return prof;
+    }
+
+    if (wantNoBreak) return answerNoBreakdowns(shaft, type);
+    if (wantReplace) return answerReplacement(shaft, type);
+    if (wantWorst && /\bshaft\b/i.test(q)) return answerShaftRank();
+    if (wantWorst) return answerRank(false, shaft, type);
+    if (wantBest) return answerRank(true, shaft, type);
+    if (wantLongest) return answerLongestDowntime(shaft, type);
+    if (wantMaint) return answerMaintenance(q, shaft);
+    if (wantMtbf) return answerMtbfList(shaft, type);
+
+    // Filter equipment set
+    var eqList = filteredEq().filter(function (e) {
+      if (shaft && String(e.shaft || '').toLowerCase().indexOf(shaft.toLowerCase().replace(/\s*shaft$/, '')) === -1 &&
+          String(e.shaft || '').toLowerCase() !== shaft.toLowerCase()) {
+        // soft match
+        var es = String(e.shaft || '').toLowerCase();
+        var sk = shaft.toLowerCase().replace(/\s*shaft$/, '').trim();
+        if (es.indexOf(sk) === -1) return false;
+      }
+      if (type) {
+        var et = String(inferType(e)).toLowerCase();
+        if (et.indexOf(type.toLowerCase()) === -1) return false;
+      }
+      if (wantDown) {
+        var st = eqStatus(e.id) || {};
+        if (String(st.status || '').toLowerCase() !== 'down') return false;
+      }
+      if (wantUp) {
+        var st2 = eqStatus(e.id) || {};
+        if (String(st2.status || '').toLowerCase() !== 'up') return false;
+      }
+      return true;
+    });
+
+    // Search fault text in status updates
+    var keywordHits = [];
+    if (words.length) {
+      var ups = filteredUp();
+      ups.forEach(function (u) {
+        var blob = [u.reason, u.fault, u.actionTaken, u.comment, u.rootCause, u.operator, u.reportedBy, u.equipmentId, u.shaft, u.workplace]
+          .map(function (x) { return String(x || '').toLowerCase(); }).join(' ');
+        var score = 0;
+        words.forEach(function (w) {
+          if (blob.indexOf(w) !== -1) score += 1;
+        });
+        if (shaft) {
+          var us = String(u.shaft || '').toLowerCase();
+          if (us.indexOf(shaft.toLowerCase().replace(/\s*shaft$/, '')) !== -1) score += 2;
+        }
+        if (score > 0) keywordHits.push({ u: u, score: score });
+      });
+      keywordHits.sort(function (a, b) { return b.score - a.score; });
+    }
+
+    // Count intent
+    if (wantCount) {
+      if (wantFail || wantDown) {
+        var downN = eqList.filter(function (e) {
+          var st = eqStatus(e.id) || {};
+          return String(st.status || '').toLowerCase() === 'down';
+        }).length;
+        var failEvents = filteredUp().filter(function (u) {
+          return u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down';
+        }).length;
+        return '<strong>Counts</strong> · ' + esc(filterChip()) + ' · ' + esc(periodLabel()) +
+          (shaft ? '<br>Shaft filter: ' + esc(shaft) : '') +
+          (type ? '<br>Type: ' + esc(type) : '') +
+          '<br>Equipment matching filters: <strong>' + eqList.length + '</strong>' +
+          '<br>Currently Down: <strong>' + downN + '</strong>' +
+          '<br>Failure/down events in period: <strong>' + failEvents + '</strong>';
+      }
+      return '<strong>Counts</strong> · ' + esc(filterChip()) +
+        (shaft ? '<br>Shaft: ' + esc(shaft) : '') +
+        (type ? '<br>Type: ' + esc(type) : '') +
+        '<br>Equipment: <strong>' + eqList.length + '</strong>' +
+        '<br>Status events (period): <strong>' + filteredUp().length + '</strong>' +
+        '<br>Maintenance tasks: <strong>' + filteredMt().length + '</strong>';
+    }
+
+    // Availability summary
+    if (wantAvail && !words.filter(function (w) { return w.length > 3; }).length) {
+      return answerAvailSummary(eqList);
+    }
+
+    // Keyword hits in fault history take priority for free text
+    if (keywordHits.length && (wantFail || wantList || words.length >= 1)) {
+      var html = '<strong>Matches in status / fault history</strong> · ' + keywordHits.length + ' event(s)' +
+        '<div class="meta">' + esc(periodLabel()) + ' · ' + esc(filterChip()) + '</div>';
+      html += table(['Date', 'Equipment', 'Status', 'Reason'], keywordHits.slice(0, 15).map(function (h) {
+        var u = h.u;
+        return [esc(u.date || ''), esc(u.equipmentId || u.locoNumber || ''), esc(u.status || ''), esc(String(u.reason || '').slice(0, 70))];
+      }), 15);
+      // Also list unique equipment from hits
+      var seen = {};
+      var uniq = [];
+      keywordHits.forEach(function (h) {
+        var id = normId(h.u.equipmentId || h.u.locoNumber);
+        if (id && !seen[id]) { seen[id] = 1; uniq.push(id); }
+      });
+      if (uniq.length && uniq.length <= 20) {
+        html += '<br><strong>Equipment involved:</strong> ' + uniq.map(function (id) { return esc(id); }).join(', ');
+      }
+      return html;
+    }
+
+    // List equipment matching filters
+    if (wantList || wantDown || wantUp || shaft || type) {
+      if (!eqList.length) {
+        return 'No equipment matched those filters (' + esc(filterChip()) +
+          (shaft ? ', shaft ' + esc(shaft) : '') +
+          (type ? ', type ' + esc(type) : '') + ').';
+      }
+      var rows = eqList.map(function (e) {
+        var st = eqStatus(e.id) || {};
+        var rs = riskScore(e);
+        return {
+          id: e.id, shaft: e.shaft || '—', type: inferType(e),
+          status: st.status || '—', fails: rs.fails,
+          avail: rs.avail, downtime: rs.downtime
+        };
+      });
+      if (wantDown) rows = rows.filter(function (r) { return String(r.status).toLowerCase() === 'down'; });
+      rows.sort(function (a, b) { return b.fails - a.fails || String(a.id).localeCompare(String(b.id)); });
+      var title = wantDown ? 'Down equipment' : (type ? type + ' list' : 'Equipment list');
+      var html2 = '<strong>' + esc(title) + '</strong> — ' + rows.length + ' asset(s)' +
+        '<div class="meta">' + esc(periodLabel()) + (shaft ? ' · ' + esc(shaft) : '') + '</div>';
+      html2 += table(['ID', 'Shaft', 'Type', 'Status', 'Fails', 'Avail'], rows.map(function (r) {
+        return [esc(r.id), esc(r.shaft), esc(r.type), esc(r.status), String(r.fails),
+          r.avail != null ? r.avail.toFixed(1) + '%' : '—'];
+      }), 25);
+      return html2;
+    }
+
+    // Fallback: search equipment fields + recent updates for any remaining words
+    if (words.length) {
+      var eqHits = filteredEq().filter(function (e) {
+        var blob = [e.id, e.shaft, e.level, e.section, e.oem, e.OEM, e.locoSize, inferType(e)]
+          .join(' ').toLowerCase();
+        return words.some(function (w) { return blob.indexOf(w) !== -1; });
+      });
+      if (eqHits.length) {
+        var html3 = '<strong>Equipment matches</strong> — ' + eqHits.length;
+        html3 += table(['ID', 'Shaft', 'Type', 'Workplace'], eqHits.slice(0, 20).map(function (e) {
+          return [esc(e.id), esc(e.shaft || '—'), esc(inferType(e)), esc(e.level || '—')];
+        }), 20);
+        return html3;
+      }
+      // search all status text broader
+      if (!keywordHits.length) {
+        var broad = [];
+        allScopedUp().forEach(function (u) {
+          var blob = [u.reason, u.fault, u.equipmentId, u.operator, u.shaft].join(' ').toLowerCase();
+          var sc = 0;
+          words.forEach(function (w) { if (blob.indexOf(w) !== -1) sc++; });
+          if (sc) broad.push({ u: u, score: sc });
+        });
+        broad.sort(function (a, b) { return b.score - a.score; });
+        if (broad.length) {
+          var html4 = '<strong>Related status events</strong> — ' + broad.length;
+          html4 += table(['Date', 'Equipment', 'Reason'], broad.slice(0, 15).map(function (h) {
+            return [esc(h.u.date || ''), esc(h.u.equipmentId || ''), esc(String(h.u.reason || '').slice(0, 70))];
+          }), 15);
+          return html4;
+        }
+      }
+    }
+
+    // Last resort snapshot
+    return answerAvailSummary(filteredEq()) +
+      '<br><br><div class="meta">Tip: name an Equipment ID, shaft, fault keyword (e.g. brake, antenna), or ask for down / overdue / worst / no breakdowns.</div>';
+  }
+
+  function answerAvailSummary(eqList) {
+    eqList = eqList || filteredEq();
+    var withA = 0, sum = 0, down = 0, up = 0;
+    eqList.forEach(function (e) {
+      var rs = riskScore(e);
+      if (rs.avail != null) { withA++; sum += rs.avail; }
+      if (String(rs.status).toLowerCase() === 'down') down++;
+      else if (String(rs.status).toLowerCase() === 'up') up++;
+    });
+    return '<strong>Fleet snapshot</strong> · ' + esc(periodLabel()) + ' · ' + esc(filterChip()) +
+      '<br>Assets: <strong>' + eqList.length + '</strong> · Avg availability: <strong>' +
+      (withA ? (sum / withA).toFixed(1) + '%' : '—') + '</strong>' +
+      '<br>Up: <strong>' + up + '</strong> · Down: <strong>' + down + '</strong>';
+  }
+
+  function answerRank(best, shaft, type) {
+    var rows = filteredEq().filter(function (e) {
+      if (shaft && String(e.shaft || '').toLowerCase().indexOf(String(shaft).toLowerCase().replace(/\s*shaft$/, '')) === -1) return false;
+      if (type && String(inferType(e)).toLowerCase().indexOf(type.toLowerCase()) === -1) return false;
+      return true;
+    }).map(function (e) {
+      var rs = riskScore(e);
+      return { id: e.id, shaft: e.shaft || '—', fails: rs.fails, avail: rs.avail, status: rs.status, score: rs.score };
+    });
+    rows.sort(function (a, b) {
+      if (best) {
+        var ad = String(a.status).toLowerCase() === 'down' ? 1 : 0;
+        var bd = String(b.status).toLowerCase() === 'down' ? 1 : 0;
+        if (ad !== bd) return ad - bd;
+        if (a.fails !== b.fails) return a.fails - b.fails;
+        return (b.avail != null ? b.avail : 50) - (a.avail != null ? a.avail : 50);
+      }
+      return b.score - a.score;
+    });
+    if (!rows.length) return 'No equipment to rank.';
+    var html = '<strong>' + (best ? 'Most reliable' : 'Worst-performing') + '</strong> · ' + esc(periodLabel());
+    html += table(['#', 'ID', 'Shaft', 'Fails', 'Avail', 'Status'], rows.slice(0, 12).map(function (r, i) {
+      return [String(i + 1), esc(r.id), esc(r.shaft), String(r.fails),
+        r.avail != null ? r.avail.toFixed(1) + '%' : '—', esc(r.status)];
+    }), 12);
+    return html;
+  }
+
+  function answerShaftRank() {
+    var rows = filteredEq();
     var by = {};
-    rows.forEach(function (r) {
-      var s = r.shaft && r.shaft !== '—' ? r.shaft : 'Unassigned';
-      if (!by[s]) by[s] = { shaft: s, n: 0, fails: 0, availSum: 0, availN: 0, downNow: 0, score: 0 };
+    rows.forEach(function (e) {
+      var s = e.shaft || 'Unassigned';
+      if (!by[s]) by[s] = { shaft: s, n: 0, fails: 0, score: 0, downNow: 0, availSum: 0, availN: 0 };
       var b = by[s];
-      b.n++; b.fails += r.fails; b.score += r.score;
-      if (r.avail != null) { b.availSum += r.avail; b.availN++; }
-      if (String(r.status).toLowerCase() === 'down') b.downNow++;
+      var rs = riskScore(e);
+      b.n++; b.fails += rs.fails; b.score += rs.score;
+      if (rs.avail != null) { b.availSum += rs.avail; b.availN++; }
+      if (String(rs.status).toLowerCase() === 'down') b.downNow++;
     });
     var list = Object.keys(by).map(function (k) {
       var b = by[k];
@@ -9355,95 +9617,164 @@ window.RBE = {
       return b;
     });
     list.sort(function (a, b) { return b.avgScore - a.avgScore || b.fails - a.fails; });
-    var html = '<strong>Shaft performance</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">' + rows.length + ' assets · ' + esc(filterChip()) + '</div>' +
-      '<table><tr><th>Shaft</th><th>Assets</th><th>Fails</th><th>Avg avail</th><th>Down now</th></tr>';
-    list.forEach(function (b) {
-      html += '<tr><td>' + esc(b.shaft) + '</td><td>' + b.n + '</td><td>' + b.fails + '</td><td>' +
-        (b.avgAvail != null ? b.avgAvail.toFixed(1) + '%' : '—') + '</td><td>' + b.downNow + '</td></tr>';
-    });
-    html += '</table>';
-    if (list.length) {
-      var w = list[0];
-      html += '<br><strong>Worst:</strong> ' + esc(w.shaft) + ' — ' + w.fails + ' failures across ' + w.n + ' assets.';
-    }
+    var html = '<strong>Shaft performance</strong> · ' + esc(periodLabel());
+    html += table(['Shaft', 'Assets', 'Fails', 'Avg avail', 'Down now'], list.map(function (b) {
+      return [esc(b.shaft), String(b.n), String(b.fails),
+        b.avgAvail != null ? b.avgAvail.toFixed(1) + '%' : '—', String(b.downNow)];
+    }));
+    if (list.length) html += '<br><strong>Worst:</strong> ' + esc(list[0].shaft);
     return html;
   }
-  function answerNoBreakdowns() {
-    var g = dataGuard(); if (g) return g;
-    var failedIds = {};
+
+  function answerNoBreakdowns(shaft, type) {
+    var failed = {};
     allScopedUp().forEach(function (u) {
       if (u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down') {
-        failedIds[normId(u.equipmentId || u.locoNumber)] = 1;
+        failed[normId(u.equipmentId || u.locoNumber)] = 1;
       }
     });
-    var clean = [];
-    filteredEq().forEach(function (e) {
+    var clean = filteredEq().filter(function (e) {
+      if (shaft && String(e.shaft || '').toLowerCase().indexOf(String(shaft).toLowerCase().replace(/\s*shaft$/, '')) === -1) return false;
+      if (type && String(inferType(e)).toLowerCase().indexOf(type.toLowerCase()) === -1) return false;
       var st = eqStatus(e.id) || {};
-      if ((Number(st.failures) || 0) > 0) return;
-      if (failedIds[normId(e.id)]) return;
-      clean.push({ id: e.id, shaft: e.shaft || '—', type: inferType(e), status: st.status || '—', avail: st.availability });
+      if ((Number(st.failures) || 0) > 0) return false;
+      if (failed[normId(e.id)]) return false;
+      return true;
     });
-    if (!clean.length) return 'Every asset in scope has at least one failure/down entry in the current window.';
-    var html = '<strong>No breakdown / failure entries</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">' + clean.length + ' of ' + filteredEq().length + ' assets</div>' +
-      '<table><tr><th>ID</th><th>Shaft</th><th>Type</th><th>Status</th></tr>';
-    clean.slice(0, 25).forEach(function (r) {
-      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + esc(r.type) + '</td><td>' + esc(r.status) + '</td></tr>';
-    });
-    return html + '</table>';
-  }
-  function answerEquipDetail(token) {
-    var g = dataGuard(); if (g) return g;
-    var eq = findEquip(token);
-    if (!eq) return 'No equipment matching <strong>' + esc(token) + '</strong> in scope.';
-    var st = eqStatus(eq.id) || {};
-    var m = relMetrics(eq.id) || {};
-    var entries = failureEntriesFor(eq.id);
-    var html = '<strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') +
-      '<br>Status: <strong>' + esc(st.status || '—') + '</strong>' +
-      '<br>Availability: <strong>' + (st.availability != null ? Number(st.availability).toFixed(1) + '%' : '—') + '</strong>' +
-      '<br>Failures: <strong>' + (st.failures != null ? st.failures : entries.length) + '</strong>';
-    if (m.mtbfLabel) html += '<br>MTBF: ' + esc(m.mtbfLabel) + ' · MTTR: ' + esc(m.mttrLabel || '—');
+    if (!clean.length) return 'No assets without breakdown/failure entries in the current window.';
+    var html = '<strong>No breakdown / failure entries</strong> — ' + clean.length + ' asset(s)';
+    html += table(['ID', 'Shaft', 'Type', 'Status'], clean.slice(0, 25).map(function (e) {
+      var st = eqStatus(e.id) || {};
+      return [esc(e.id), esc(e.shaft || '—'), esc(inferType(e)), esc(st.status || '—')];
+    }), 25);
     return html;
   }
-  function answerHelp() {
-    return 'Ask naturally:<ul style="margin:0.4rem 0 0 1.1rem;padding:0">' +
-      '<li>Is loco 511 safe to use?</li><li>Which equipment is the worst?</li>' +
-      '<li>Which shaft is worst performing?</li><li>Most reliable equipment</li>' +
-      '<li>What needs replacement?</li><li>Which equipment has no breakdowns?</li></ul>';
+
+  function answerReplacement(shaft, type) {
+    var rows = filteredEq().filter(function (e) {
+      if (shaft && String(e.shaft || '').toLowerCase().indexOf(String(shaft).toLowerCase().replace(/\s*shaft$/, '')) === -1) return false;
+      if (type && String(inferType(e)).toLowerCase().indexOf(type.toLowerCase()) === -1) return false;
+      var rs = riskScore(e);
+      return rs.fails >= 4 || (rs.avail != null && rs.avail < 70) || (rs.health != null && rs.health < 45) || rs.downtime >= 72;
+    }).map(function (e) {
+      var rs = riskScore(e);
+      return { id: e.id, shaft: e.shaft || '—', fails: rs.fails, avail: rs.avail, downtime: rs.downtime, score: rs.score };
+    });
+    rows.sort(function (a, b) { return b.score - a.score; });
+    if (!rows.length) return 'No assets meet replacement-review flags (≥4 failures, avail &lt;70%, or ≥72 h downtime).';
+    var html = '<strong>Replacement / overhaul candidates</strong><div class="meta">Heuristic — confirm with engineering</div>';
+    html += table(['ID', 'Shaft', 'Fails', 'Avail', 'Down hrs'], rows.slice(0, 15).map(function (r) {
+      return [esc(r.id), esc(r.shaft), String(r.fails),
+        r.avail != null ? r.avail.toFixed(1) : '—', r.downtime.toFixed(0)];
+    }), 15);
+    return html;
   }
+
+  function answerLongestDowntime(shaft, type) {
+    var rows = filteredEq().map(function (e) {
+      var rs = riskScore(e);
+      return { id: e.id, shaft: e.shaft || '—', downtime: rs.downtime, fails: rs.fails, status: rs.status };
+    }).filter(function (r) {
+      if (shaft && String(r.shaft).toLowerCase().indexOf(String(shaft).toLowerCase().replace(/\s*shaft$/, '')) === -1) return false;
+      return r.downtime > 0;
+    });
+    rows.sort(function (a, b) { return b.downtime - a.downtime; });
+    if (!rows.length) return 'No downtime recorded in the current period.';
+    var html = '<strong>Longest downtime</strong> · ' + esc(periodLabel());
+    html += table(['ID', 'Shaft', 'Downtime hrs', 'Fails', 'Status'], rows.slice(0, 15).map(function (r) {
+      return [esc(r.id), esc(r.shaft), r.downtime.toFixed(1), String(r.fails), esc(r.status)];
+    }), 15);
+    return html;
+  }
+
+  function answerMaintenance(q, shaft) {
+    var list = filteredMt();
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var overdue = [], soon = [], all = [];
+    list.forEach(function (m) {
+      if (shaft) {
+        var ms = String(m.shaft || '').toLowerCase();
+        // try resolve via equipment
+        if (!ms) {
+          var eq = findEquip(m.equipment || m.equipmentId);
+          ms = eq ? String(eq.shaft || '').toLowerCase() : '';
+        }
+        if (ms.indexOf(String(shaft).toLowerCase().replace(/\s*shaft$/, '')) === -1) return;
+      }
+      var due = m.due || m.nextDue || m.dueDate;
+      var days = null;
+      if (due) {
+        var d = new Date(due);
+        if (!isNaN(d.getTime())) {
+          d.setHours(0, 0, 0, 0);
+          days = Math.ceil((d - today) / 86400000);
+        }
+      }
+      var row = { id: m.equipment || m.equipmentId || '—', task: m.task || m.description || '—', due: due ? String(due).slice(0, 10) : '—', days: days };
+      all.push(row);
+      if (days != null && days < 0) overdue.push(row);
+      else if (days != null && days <= 14) soon.push(row);
+    });
+    if (/\boverdue\b/i.test(q) || (!/\bsoon\b/i.test(q) && overdue.length)) {
+      overdue.sort(function (a, b) { return (a.days || 0) - (b.days || 0); });
+      var html = '<strong>Overdue maintenance</strong> — ' + overdue.length;
+      if (overdue.length) {
+        html += table(['Equipment', 'Task', 'Due', 'Days'], overdue.slice(0, 15).map(function (r) {
+          return [esc(r.id), esc(r.task), esc(r.due), '<span style="color:var(--danger)">' + r.days + '</span>'];
+        }), 15);
+      } else html += '<br>None overdue in scope.';
+      if (soon.length) html += '<br><strong>Due within 14 days:</strong> ' + soon.length;
+      return html;
+    }
+    var html2 = '<strong>Maintenance tasks</strong> — ' + all.length + ' (overdue ' + overdue.length + ', due soon ' + soon.length + ')';
+    html2 += table(['Equipment', 'Task', 'Due', 'Days left'], all.slice(0, 20).map(function (r) {
+      return [esc(r.id), esc(r.task), esc(r.due), r.days != null ? String(r.days) : '—'];
+    }), 20);
+    return html2;
+  }
+
+  function answerMtbfList(shaft, type) {
+    var rows = [];
+    filteredEq().forEach(function (e) {
+      if (shaft && String(e.shaft || '').toLowerCase().indexOf(String(shaft).toLowerCase().replace(/\s*shaft$/, '')) === -1) return;
+      if (type && String(inferType(e)).toLowerCase().indexOf(type.toLowerCase()) === -1) return;
+      var m = relMetrics(e.id) || {};
+      var st = eqStatus(e.id) || {};
+      if (m.mtbf != null || m.mtbfLabel) {
+        rows.push({ id: e.id, shaft: e.shaft || '—', mtbf: m.mtbf, label: m.mtbfLabel || '—', mttr: m.mttrLabel || '—', fails: st.failures || 0 });
+      }
+    });
+    rows.sort(function (a, b) { return (a.mtbf != null ? a.mtbf : 1e9) - (b.mtbf != null ? b.mtbf : 1e9); });
+    if (!rows.length) return 'Insufficient data for MTBF in the current period.';
+    var html = '<strong>MTBF (lowest first)</strong> · ' + esc(periodLabel());
+    html += table(['ID', 'Shaft', 'MTBF', 'MTTR', 'Fails'], rows.slice(0, 12).map(function (r) {
+      return [esc(r.id), esc(r.shaft), esc(r.label), esc(r.mttr), String(r.fails)];
+    }), 12);
+    return html;
+  }
+
   function route(q) {
-    var raw = String(q || '').trim();
-    var t = raw.toLowerCase();
-    if (!t) return 'Ask about reliability, a loco ID, shafts, or breakdowns.';
-    if (/\b(no breakdown|no failure|no fault|without (any )?breakdown|never failed|zero failure|no report|not report|haven'?t reported|without failures?|clean record|no down|equipment with no)\b/.test(t) || /\bno breakdowns?\b/.test(t))
-      return answerNoBreakdowns();
-    if (/\b(replac|write[- ]?off|scrap|beyond repair|overhaul|retire|end of life|eol)\b/.test(t))
-      return answerNeedsReplacement();
-    if (/\bshafts?\b/.test(t) && /\b(worst|bad|poor|underperform|perform|rank|compar|worse)\b/.test(t))
-      return answerWorstShaft();
-    if (/\b(which|what)\s+shaft\b/.test(t)) return answerWorstShaft();
-    if (/\b(most reliable|best perform|healthiest|top perform|most available|least fail)\b/.test(t) || (/\breliable\b/.test(t) && !/\bunreliable\b/.test(t)))
-      return answerMostReliable(12);
-    if (/\b(worst|bad(dest)?|poor(est)?|underperform|problematic|trouble|chronic|worse)\b/.test(t))
-      return answerWorst(12);
-    if (/\b(help|what can|examples)\b/.test(t)) return answerHelp();
-    var token = extractEquipToken(raw);
-    if (/\b(safe|safety|fit to use|ok to use|can i use|should we use|clear to run|serviceable)\b/.test(t)) {
-      if (token) return answerIsSafe(token);
-      return 'Tell me which equipment — e.g. <em>Is loco 511 safe to use?</em>';
+    var g = dataGuard();
+    // allow help even without data
+    if (/\b(help|what can|examples|how to ask)\b/i.test(q)) {
+      return 'Ask <strong>anything already on the system</strong> — free text is fine.<br><br>' +
+        '<strong>Equipment</strong>: status of 511 · is loco 16L safe · loco on 11 shaft<br>' +
+        '<strong>Faults</strong>: brake problems · antenna faults · who reported door switch<br>' +
+        '<strong>Performance</strong>: worst equipment · best availability · longest downtime · which shaft is worst<br>' +
+        '<strong>Counts / lists</strong>: how many down · list hoppers · equipment with no breakdowns<br>' +
+        '<strong>Maintenance</strong>: overdue PM · maintenance on 12 shaft<br>' +
+        '<strong>Reliability</strong>: MTBF · what needs replacement<br>' +
+        '<div class="meta">Answers use live data in your shaft scope and the dashboard period/filters.</div>';
     }
-    if (token) return answerEquipDetail(token);
-    if (/\b(summary|overview|fleet|availability)\b/.test(t)) {
-      var g = dataGuard(); if (g) return g;
-      var rows = buildAssetRows();
-      var down = rows.filter(function (r) { return String(r.status).toLowerCase() === 'down'; }).length;
-      return '<strong>Fleet snapshot</strong> · ' + esc(filterChip()) + '<br>Assets: <strong>' + rows.length +
-        '</strong> · Down: <strong>' + down + '</strong> · Period: ' + esc(periodLabel());
+    if (g) return g;
+    try {
+      return searchEverything(q);
+    } catch (err) {
+      console.error(err);
+      return 'Could not answer that. Try naming an Equipment ID, shaft, or fault keyword.';
     }
-    return 'Not sure how to read that. ' + answerHelp();
   }
+
   function send() {
     var q = (input.value || '').trim();
     if (!q) return;
@@ -9455,13 +9786,20 @@ window.RBE = {
       removeTyping();
       var reply;
       try { reply = route(q); }
-      catch (err) { console.error(err); reply = 'Something went wrong. Open Dashboard so data can load, then try again.'; }
+      catch (err) {
+        console.error(err);
+        reply = 'Something went wrong. Open Dashboard so data can load, then try again.';
+      }
       addMsg(reply, 'bot');
       sendBtn.disabled = false;
       input.focus();
-      try { var r = api(); if (r && r.logAudit) r.logAudit('chat_query', q.slice(0, 200), extractEquipToken(q) || ''); } catch (e) {}
-    }, 180);
+      try {
+        var r = api();
+        if (r && r.logAudit) r.logAudit('chat_query', q.slice(0, 200), extractEquipToken(q) || '');
+      } catch (e) {}
+    }, 160);
   }
+
   window.openAskRBE = openChat;
   window.closeAskRBE = closeChat;
 })();
