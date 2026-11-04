@@ -715,7 +715,7 @@
       display: flex; align-items: center; justify-content: center;
       font-size: 1.25rem; transition: transform 0.2s, box-shadow 0.2s;
     }
-    #rbe-chat-fab:hover { transform: scale(1.06); box-shadow: 0 8px 28px rgba(12,74,110,0.55); }
+    #rbe-chat-fab:hover { transform: scale(1.06); }
     #rbe-chat-fab.open { background: linear-gradient(135deg, #b91c1c, #dc2626); }
     #rbe-chat-panel {
       position: fixed; right: 14px; bottom: 124px; z-index: 1502;
@@ -724,20 +724,18 @@
       border-radius: 16px; box-shadow: 0 16px 48px rgba(15,23,42,0.22);
       display: none; flex-direction: column; overflow: hidden;
     }
-    #rbe-chat-panel.open { display: flex; animation: modalSlideIn 0.2s ease-out; }
+    #rbe-chat-panel.open { display: flex; }
     #rbe-chat-header {
       background: linear-gradient(135deg, #0c4a6e, #0369a1);
-      color: #fff; padding: 0.85rem 1rem; display: flex; align-items: center; gap: 10px;
-      flex-shrink: 0;
+      color: #fff; padding: 0.85rem 1rem; display: flex; align-items: center; gap: 10px; flex-shrink: 0;
     }
     #rbe-chat-header .title { flex: 1; font-weight: 700; font-size: 0.95rem; }
-    #rbe-chat-header .sub { font-size: 0.72rem; opacity: 0.85; font-weight: 500; }
+    #rbe-chat-header .sub { font-size: 0.72rem; opacity: 0.85; }
     #rbe-chat-header button {
       background: rgba(255,255,255,0.15); border: none; color: #fff;
       width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
     }
-    #rbe-chat-header button:hover { background: rgba(255,255,255,0.28); }
     #rbe-chat-messages {
       flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;
       background: var(--surface-2);
@@ -746,26 +744,12 @@
       max-width: 92%; padding: 0.7rem 0.9rem; border-radius: 12px; font-size: 0.88rem; line-height: 1.45;
       word-break: break-word;
     }
-    .rbe-msg.bot {
-      align-self: flex-start; background: var(--surface); border: 1px solid var(--border);
-      color: var(--text); border-bottom-left-radius: 4px;
-    }
-    .rbe-msg.user {
-      align-self: flex-end; background: var(--primary); color: #fff;
-      border-bottom-right-radius: 4px;
-    }
+    .rbe-msg.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
+    .rbe-msg.user { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
     .rbe-msg .meta { font-size: 0.7rem; opacity: 0.7; margin-top: 0.35rem; }
     .rbe-msg table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 0.4rem; }
     .rbe-msg th, .rbe-msg td { padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--border-light); text-align: left; }
     .rbe-msg th { font-weight: 700; color: var(--primary); }
-    .rbe-suggest {
-      display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem;
-    }
-    .rbe-suggest button {
-      background: var(--primary-soft); color: var(--primary); border: 1px solid rgba(12,74,110,0.25);
-      border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.75rem; font-weight: 600; cursor: pointer;
-    }
-    .rbe-suggest button:hover { background: var(--primary); color: #fff; }
     #rbe-chat-input-wrap {
       padding: 0.75rem; border-top: 1px solid var(--border); background: var(--surface);
       display: flex; gap: 0.5rem; flex-shrink: 0;
@@ -774,29 +758,19 @@
       flex: 1; padding: 0.6rem 0.85rem; border: 1px solid var(--border); border-radius: 10px;
       font-size: 0.9rem; background: var(--surface-2); color: var(--text); outline: none;
     }
-    #rbe-chat-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(12,74,110,0.12); }
+    #rbe-chat-input:focus { border-color: var(--primary); }
     #rbe-chat-send {
-      background: var(--primary); color: #fff; border: none; border-radius: 10px;
-      padding: 0 1rem; font-weight: 700; cursor: pointer;
+      background: var(--primary); color: #fff; border: none; border-radius: 10px; padding: 0 1rem; font-weight: 700; cursor: pointer;
     }
-    #rbe-chat-send:hover { background: var(--primary-600); }
-    #rbe-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
     .rbe-typing { display: inline-flex; gap: 4px; padding: 0.5rem 0.75rem; }
-    .rbe-typing span {
-      width: 7px; height: 7px; border-radius: 50%; background: var(--text-3);
-      animation: rbe-bounce 1.2s infinite ease-in-out;
-    }
+    .rbe-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); animation: rbe-bounce 1.2s infinite ease-in-out; }
     .rbe-typing span:nth-child(2) { animation-delay: 0.15s; }
     .rbe-typing span:nth-child(3) { animation-delay: 0.3s; }
-    @keyframes rbe-bounce {
-      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-      40% { transform: translateY(-5px); opacity: 1; }
+    @keyframes rbe-bounce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-5px);opacity:1} }
+    @media (max-width:640px) {
+      #rbe-chat-panel { right:8px; left:8px; width:auto; bottom:80px; height:min(70vh,520px); }
+      #rbe-chat-fab { right:12px; bottom:70px; }
     }
-    @media (max-width: 640px) {
-      #rbe-chat-panel { right: 8px; left: 8px; width: auto; bottom: 80px; height: min(70vh, 520px); }
-      #rbe-chat-fab { right: 12px; bottom: 70px; }
-    }
-    @media print { #rbe-chat-fab, #rbe-chat-panel { display: none !important; } }
 
     @media print{.sidebar,#v23-fab,#v23-net,#v23-pal,.toast,#rbe-chat-fab,#rbe-chat-panel{display:none!important}.main{margin:0!important}body{background:#fff!important}}
   </style>
@@ -8877,7 +8851,6 @@ function _relIndex() {
   return (_pc.idx = m);
 }
 let _deferTok = 0;
-let _deferTok = 0;
 function deferHeavy(sectionId, fn) {
   const tok = ++_deferTok;
   const sec = document.getElementById(sectionId);
@@ -8895,25 +8868,23 @@ function deferHeavy(sectionId, fn) {
   }, 0));
 }
 
-/* ── Expose live data API for Ask RBE chatbot (classic script cannot see module scope) ── */
+/* Expose live data for Ask RBE (classic script cannot see module scope) */
 window.RBE = {
   get equipment() { return equipment || []; },
   get updates() { return updates || []; },
   get maintenance() { return maintenance || []; },
-  getFilteredEquipment: () => (typeof getFilteredEquipment === 'function' ? getFilteredEquipment() : (equipment || [])),
-  getFilteredUpdates: () => (typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (updates || [])),
-  getScopedUpdates: () => (typeof getScopedUpdates === 'function' ? getScopedUpdates() : (updates || [])),
-  getFilteredMaintenance: () => (typeof getFilteredMaintenance === 'function' ? getFilteredMaintenance() : (maintenance || [])),
-  getEquipmentStatus: (id) => (typeof getEquipmentStatus === 'function' ? getEquipmentStatus(id) : null),
-  getReliabilityMetrics: (id) => (typeof getReliabilityMetrics === 'function' ? getReliabilityMetrics(id) : null),
-  getSystemPeriod: () => (typeof getSystemPeriod === 'function' ? getSystemPeriod() : { key: 'weekly', label: 'selected period' }),
-  normaliseEquipId: (id) => (typeof normaliseEquipId === 'function' ? normaliseEquipId(id) : String(id || '').trim().toUpperCase()),
-  inferEquipmentType: (e) => (typeof inferEquipmentType === 'function' ? inferEquipmentType(e) : (e && e.equipmentType) || '—'),
-  get currentShaftFilter() { return (typeof currentShaftFilter !== 'undefined' ? currentShaftFilter : '') || ''; },
-  get currentTypeFilter() { return (typeof currentTypeFilter !== 'undefined' ? currentTypeFilter : '') || ''; },
-  get currentUserRole() { return (typeof currentUserRole !== 'undefined' ? currentUserRole : '') || ''; },
-  get currentAllowedShafts() { return (typeof currentAllowedShafts !== 'undefined' ? currentAllowedShafts : []) || []; },
-  logAudit: (a, d, e) => { try { if (typeof logAudit === 'function') logAudit(a, d, e); } catch (err) {} }
+  getFilteredEquipment: function () { return typeof getFilteredEquipment === 'function' ? getFilteredEquipment() : (equipment || []); },
+  getFilteredUpdates: function () { return typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (updates || []); },
+  getScopedUpdates: function () { return typeof getScopedUpdates === 'function' ? getScopedUpdates() : (updates || []); },
+  getFilteredMaintenance: function () { return typeof getFilteredMaintenance === 'function' ? getFilteredMaintenance() : (maintenance || []); },
+  getEquipmentStatus: function (id) { return typeof getEquipmentStatus === 'function' ? getEquipmentStatus(id) : null; },
+  getReliabilityMetrics: function (id) { return typeof getReliabilityMetrics === 'function' ? getReliabilityMetrics(id) : null; },
+  getSystemPeriod: function () { return typeof getSystemPeriod === 'function' ? getSystemPeriod() : { key: 'weekly', label: 'selected period' }; },
+  normaliseEquipId: function (id) { return typeof normaliseEquipId === 'function' ? normaliseEquipId(id) : String(id || '').trim().toUpperCase(); },
+  inferEquipmentType: function (e) { return typeof inferEquipmentType === 'function' ? inferEquipmentType(e) : ((e && e.equipmentType) || '—'); },
+  get currentShaftFilter() { return (typeof currentShaftFilter !== 'undefined' && currentShaftFilter) || ''; },
+  get currentTypeFilter() { return (typeof currentTypeFilter !== 'undefined' && currentTypeFilter) || ''; },
+  logAudit: function (a, d, e) { try { if (typeof logAudit === 'function') logAudit(a, d, e); } catch (err) {} }
 };
 </script>
 
@@ -9061,615 +9032,439 @@ window.RBE = {
   addEventListener('unhandledrejection',function(e){console.error('Unhandled:',e.reason)});
 })();
 </script>
+</body>
 
 <!-- Ask RBE Chatbot -->
-<button type="button" id="rbe-chat-fab" title="Ask RBE about your data" aria-label="Open Ask RBE chatbot">
+<button type="button" id="rbe-chat-fab" title="Ask RBE about your data" aria-label="Open Ask RBE">
   <i class="fas fa-comments"></i>
 </button>
-<div id="rbe-chat-panel" role="dialog" aria-label="Ask RBE chatbot" aria-modal="true">
+<div id="rbe-chat-panel" role="dialog" aria-label="Ask RBE">
   <div id="rbe-chat-header">
     <div>
       <div class="title"><i class="fas fa-robot"></i> Ask RBE</div>
       <div class="sub">Answers from live, shaft-scoped data</div>
     </div>
-    <button type="button" id="rbe-chat-clear" title="Clear conversation"><i class="fas fa-eraser"></i></button>
+    <button type="button" id="rbe-chat-clear" title="Clear"><i class="fas fa-eraser"></i></button>
     <button type="button" id="rbe-chat-close" title="Close"><i class="fas fa-times"></i></button>
   </div>
   <div id="rbe-chat-messages"></div>
   <div id="rbe-chat-input-wrap">
-    <input type="text" id="rbe-chat-input" placeholder="e.g. lowest availability, overdue PM, MTBF for 16L…" autocomplete="off">
+    <input type="text" id="rbe-chat-input" placeholder="e.g. is loco 511 safe? worst shaft? no breakdowns?" autocomplete="off">
     <button type="button" id="rbe-chat-send"><i class="fas fa-paper-plane"></i></button>
   </div>
 </div>
-
-
 <script>
-/* ═══ Ask RBE — data-aware chatbot (uses window.RBE from app module) ═══ */
+/* Ask RBE — uses window.RBE from app module */
 (function () {
-  const fab = document.getElementById('rbe-chat-fab');
-  const panel = document.getElementById('rbe-chat-panel');
-  const msgs = document.getElementById('rbe-chat-messages');
-  const input = document.getElementById('rbe-chat-input');
-  const sendBtn = document.getElementById('rbe-chat-send');
-  const closeBtn = document.getElementById('rbe-chat-close');
-  const clearBtn = document.getElementById('rbe-chat-clear');
+  var fab = document.getElementById('rbe-chat-fab');
+  var panel = document.getElementById('rbe-chat-panel');
+  var msgs = document.getElementById('rbe-chat-messages');
+  var input = document.getElementById('rbe-chat-input');
+  var sendBtn = document.getElementById('rbe-chat-send');
+  var closeBtn = document.getElementById('rbe-chat-close');
+  var clearBtn = document.getElementById('rbe-chat-clear');
   if (!fab || !panel || !msgs || !input) return;
 
   function api() { return window.RBE || null; }
-
   function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
   }
-
   function addMsg(html, role) {
-    const div = document.createElement('div');
+    var div = document.createElement('div');
     div.className = 'rbe-msg ' + role;
     div.innerHTML = html;
     msgs.appendChild(div);
     msgs.scrollTop = msgs.scrollHeight;
     return div;
   }
-
   function showTyping() {
-    const d = addMsg('<div class="rbe-typing"><span></span><span></span><span></span></div>', 'bot');
-    d.dataset.typing = '1';
+    var d = addMsg('<div class="rbe-typing"><span></span><span></span><span></span></div>', 'bot');
+    d.setAttribute('data-typing', '1');
     return d;
   }
   function removeTyping() {
-    msgs.querySelectorAll('[data-typing]').forEach(el => el.remove());
+    msgs.querySelectorAll('[data-typing]').forEach(function (el) { el.remove(); });
   }
-
   function welcome() {
     msgs.innerHTML = '';
-    const r = api();
-    const nEq = r ? (r.equipment || []).length : 0;
-    const nUp = r ? (r.updates || []).length : 0;
-    const ready = !!(r && (nEq || nUp));
+    var r = api();
+    var nEq = r ? (r.equipment || []).length : 0;
+    var nUp = r ? (r.updates || []).length : 0;
+    var ready = !!(r && (nEq || nUp));
     addMsg(
-      '<strong>Ask RBE</strong> — ask in plain language about the data you can see.<br><br>' +
+      '<strong>Ask RBE</strong> — ask in plain language.<br><br>' +
       'Examples: <em>Is loco 511 safe to use?</em> · <em>Which equipment is the worst?</em> · ' +
       '<em>Which shaft is underperforming?</em> · <em>Most reliable assets</em> · ' +
       '<em>Equipment with no breakdowns</em> · <em>What needs replacement?</em>' +
       '<div class="meta" style="margin-top:0.5rem">' +
       (ready
-        ? ('Data linked: ' + nEq + ' equipment, ' + nUp + ' status events. Shaft-scoped · not a formal clearance.')
-        : 'Waiting for live data… Sign in and open the dashboard, then ask again.') +
+        ? ('Data linked: ' + nEq + ' equipment, ' + nUp + ' status events. Not a formal clearance.')
+        : 'Waiting for live data… Sign in, open Dashboard, then ask again.') +
       '</div>',
       'bot'
     );
   }
-
   function openChat() {
     panel.classList.add('open');
     fab.classList.add('open');
     fab.innerHTML = '<i class="fas fa-times"></i>';
     if (!msgs.children.length) welcome();
-    setTimeout(() => input.focus(), 100);
+    setTimeout(function () { input.focus(); }, 80);
   }
   function closeChat() {
     panel.classList.remove('open');
     fab.classList.remove('open');
     fab.innerHTML = '<i class="fas fa-comments"></i>';
   }
-
-  fab.addEventListener('click', () => panel.classList.contains('open') ? closeChat() : openChat());
+  fab.addEventListener('click', function () {
+    if (panel.classList.contains('open')) closeChat(); else openChat();
+  });
   closeBtn.addEventListener('click', closeChat);
-  clearBtn.addEventListener('click', () => { welcome(); });
-
+  clearBtn.addEventListener('click', welcome);
   sendBtn.addEventListener('click', send);
-  input.addEventListener('keydown', e => {
+  input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
 
-  function safe(fn, fallback) {
-    try { return fn(); } catch (e) { console.warn('[AskRBE]', e); return fallback; }
+  function safe(fn, fb) {
+    try { return fn(); } catch (e) { console.warn('[AskRBE]', e); return fb; }
   }
-
   function filteredEq() {
-    const r = api();
-    if (!r) return [];
-    let list = safe(() => r.getFilteredEquipment(), []);
-    if (!list || !list.length) {
-      // Fallback: all equipment (still better than empty); RBAC may have filtered to zero
-      list = r.equipment || [];
-    }
-    return list || [];
-  }
-  function filteredUp() {
-    const r = api();
-    if (!r) return [];
-    let list = safe(() => r.getFilteredUpdates(), []);
-    if (!list || !list.length) list = safe(() => r.getScopedUpdates(), r.updates || []);
+    var r = api(); if (!r) return [];
+    var list = safe(function () { return r.getFilteredEquipment(); }, []);
+    if (!list || !list.length) list = r.equipment || [];
     return list || [];
   }
   function allScopedUp() {
-    const r = api();
-    if (!r) return [];
-    return safe(() => r.getScopedUpdates(), r.updates || []) || [];
+    var r = api(); if (!r) return [];
+    return safe(function () { return r.getScopedUpdates(); }, r.updates || []) || [];
   }
   function filteredMt() {
-    const r = api();
-    if (!r) return [];
-    return safe(() => r.getFilteredMaintenance(), r.maintenance || []) || [];
+    var r = api(); if (!r) return [];
+    return safe(function () { return r.getFilteredMaintenance(); }, r.maintenance || []) || [];
   }
   function eqStatus(id) {
-    const r = api();
-    return r ? safe(() => r.getEquipmentStatus(id), null) : null;
+    var r = api(); return r ? safe(function () { return r.getEquipmentStatus(id); }, null) : null;
   }
   function relMetrics(id) {
-    const r = api();
-    return r ? safe(() => r.getReliabilityMetrics(id), null) : null;
+    var r = api(); return r ? safe(function () { return r.getReliabilityMetrics(id); }, null) : null;
   }
   function periodLabel() {
-    const r = api();
-    const p = r ? safe(() => r.getSystemPeriod(), null) : null;
+    var r = api();
+    var p = r ? safe(function () { return r.getSystemPeriod(); }, null) : null;
     return (p && (p.label || p.key)) || 'selected period';
   }
   function filterChip() {
-    const r = api();
+    var r = api();
     if (!r) return 'All Shafts · All Types';
-    const s = r.currentShaftFilter || 'All Shafts';
-    const t = r.currentTypeFilter || 'All Types';
-    return s + ' · ' + t;
+    return (r.currentShaftFilter || 'All Shafts') + ' · ' + (r.currentTypeFilter || 'All Types');
   }
   function normId(id) {
-    const r = api();
+    var r = api();
     if (r && r.normaliseEquipId) return r.normaliseEquipId(id);
     return String(id || '').trim().toUpperCase();
   }
   function inferType(e) {
-    const r = api();
+    var r = api();
     if (r && r.inferEquipmentType) return r.inferEquipmentType(e);
     return (e && e.equipmentType) || '—';
   }
-
   function riskScore(e) {
-    const st = eqStatus(e.id) || {};
-    const m = relMetrics(e.id) || {};
-    const fails = Number(st.failures) || 0;
-    const downtime = Number(st.downtime) || 0;
-    const avail = st.availability != null ? Number(st.availability) : null;
-    const health = m.health != null ? Number(m.health) : null;
-    const anomaly = m.anomaly != null ? Number(m.anomaly) : 0;
-    let score = 0;
-    score += fails * 12;
-    score += Math.min(40, downtime / 4);
+    var st = eqStatus(e.id) || {};
+    var m = relMetrics(e.id) || {};
+    var fails = Number(st.failures) || 0;
+    var downtime = Number(st.downtime) || 0;
+    var avail = st.availability != null ? Number(st.availability) : null;
+    var health = m.health != null ? Number(m.health) : null;
+    var anomaly = m.anomaly != null ? Number(m.anomaly) : 0;
+    var score = fails * 12 + Math.min(40, downtime / 4);
     if (avail != null) score += Math.max(0, 100 - avail) * 0.55;
     if (health != null) score += Math.max(0, 100 - health) * 0.35;
     score += anomaly * 0.4;
     if (String(st.status || '').toLowerCase() === 'down') score += 25;
-    return { score, fails, downtime, avail, health, anomaly, status: st.status || '—', lastUpdate: st.lastUpdate || st.lastReason || '' };
+    return { score: score, fails: fails, downtime: downtime, avail: avail, health: health, status: st.status || '—' };
   }
-
   function buildAssetRows() {
-    return filteredEq().map(e => {
-      const r = riskScore(e);
-      return { id: e.id, shaft: e.shaft || '—', type: inferType(e), ...r };
+    return filteredEq().map(function (e) {
+      var r = riskScore(e);
+      return { id: e.id, shaft: e.shaft || '—', type: inferType(e), score: r.score, fails: r.fails, downtime: r.downtime, avail: r.avail, health: r.health, status: r.status };
     });
   }
-
-  /** Only real equipment IDs — never stop-words like "with", "no", "the" */
-  const STOP = new Set(('a an the is are was were be been being to of in on for with without from by at as and or not no yes which what who when where how shaft shafts equipment equipments loco locos asset assets unit units machine machines breakdown breakdowns failure failures report reports performing underperforming worst best most more less safe use needs need replacement reliable reliability status').split(' '));
-
+  var STOP = { a:1, an:1, the:1, is:1, are:1, to:1, of:1, in:1, on:1, for:1, with:1, without:1, from:1, by:1, as:1, and:1, or:1, not:1, no:1, which:1, what:1, shaft:1, shafts:1, equipment:1, loco:1, asset:1, unit:1, breakdown:1, breakdowns:1, failure:1, failures:1, performing:1, underperforming:1, worst:1, best:1, most:1, safe:1, use:1, needs:1, replacement:1, reliable:1 };
   function extractEquipToken(text) {
-    const t = String(text || '');
-    // loco 511 / equipment 16L10T026 — but reject stop-words as the captured ID
-    let m = t.match(/\b(?:loco|caboose|hopper|winch|winder|unit|equipment|eq|asset|machine)\s*[#:]?\s*([A-Za-z0-9\-_\/]+)\b/i);
-    if (m && !STOP.has(m[1].toLowerCase()) && !/^(with|no|the|a|an|for|from|that|this|which)$/i.test(m[1])) {
-      return m[1];
-    }
-    // Structured mining IDs or pure numbers (3+ digits)
+    var t = String(text || '');
+    var m = t.match(/\b(?:loco|caboose|hopper|winch|winder|unit|equipment|eq|asset|machine)\s*[#:]?\s*([A-Za-z0-9\-_\/]+)\b/i);
+    if (m && !STOP[m[1].toLowerCase()]) return m[1];
     m = t.match(/\b(\d{1,3}[A-Za-z]{1,8}\d{2,8}|\d{2,3}[A-Za-z]{1,6}\d{2,8}|[A-Za-z]{2,8}\d{3,10}|\d{3,10})\b/);
-    if (m && !STOP.has(m[1].toLowerCase())) return m[1];
+    if (m && !STOP[m[1].toLowerCase()]) return m[1];
     return null;
   }
-
   function findEquip(token) {
-    const r = api();
-    const eq = filteredEq();
-    const all = (r && r.equipment) || [];
-    const n = normId(token);
-    const dig = String(token).replace(/\D/g, '');
-    for (const pool of [eq, all]) {
-      let hit = pool.find(e => normId(e.id) === n);
+    var r = api();
+    var pools = [filteredEq(), (r && r.equipment) || []];
+    var n = normId(token);
+    var dig = String(token).replace(/\D/g, '');
+    for (var p = 0; p < pools.length; p++) {
+      var pool = pools[p];
+      var hit = pool.find(function (e) { return normId(e.id) === n; });
       if (hit) return hit;
       if (dig.length >= 2) {
-        hit = pool.find(e => {
-          const id = String(e.id || '');
-          return id === dig || id.endsWith(dig) || normId(id).endsWith(dig) ||
-            new RegExp('(?:^|[^0-9])' + dig + '(?:[^0-9]|$)').test(id);
+        hit = pool.find(function (e) {
+          var id = String(e.id || '');
+          return id === dig || id.endsWith(dig) || normId(id).endsWith(dig);
         });
         if (hit) return hit;
       }
-      hit = pool.find(e => normId(e.id).includes(n) || String(e.id).toLowerCase().includes(String(token).toLowerCase()));
-      if (hit) return hit;
     }
     return null;
   }
-
   function failureEntriesFor(id) {
-    const nid = normId(id);
-    const list = allScopedUp().filter(u => {
+    var nid = normId(id);
+    var list = allScopedUp().filter(function (u) {
       if (normId(u.equipmentId || u.locoNumber) !== nid) return false;
       return u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down';
     });
-    list.sort((a, b) => String((b.date || '') + (b.time || '')).localeCompare(String((a.date || '') + (a.time || ''))));
+    list.sort(function (a, b) {
+      return String((b.date || '') + (b.time || '')).localeCompare(String((a.date || '') + (a.time || '')));
+    });
     return list;
   }
-
   function dataGuard() {
-    const r = api();
-    if (!r) {
-      return 'Live data is not linked yet. Sign in, wait for the dashboard to load, then open Ask RBE again.';
-    }
-    const n = (r.equipment || []).length;
-    if (!n) {
-      return 'No equipment records are loaded yet (still syncing, or none in the database). Open the <strong>Dashboard</strong> or <strong>Equipment Register</strong>, wait for data, then ask again.';
+    var r = api();
+    if (!r) return 'Live data is not linked yet. Sign in, wait for the dashboard, then open Ask RBE again.';
+    if (!(r.equipment || []).length) {
+      return 'No equipment records loaded yet. Open the <strong>Dashboard</strong>, wait for KPIs, then ask again.';
     }
     return null;
   }
 
-  // ── Answers ──
-
   function answerIsSafe(token) {
-    const g = dataGuard(); if (g) return g;
-    const eq = findEquip(token);
-    if (!eq) {
-      return 'I couldn\'t find equipment matching <strong>' + esc(token) + '</strong> in scope (' +
-        esc(filterChip()) + '). Try the full Equipment ID from the register.';
-    }
-    const st = eqStatus(eq.id) || {};
-    const m = relMetrics(eq.id) || {};
-    const entries = failureEntriesFor(eq.id);
-    const failsPeriod = Number(st.failures) || 0;
-    const failCount = Math.max(failsPeriod, entries.length);
-    const downtime = Number(st.downtime) || 0;
-    const avail = st.availability != null ? Number(st.availability) : null;
-    const status = String(st.status || '').toLowerCase();
-    const health = m.health != null ? Number(m.health) : null;
-
-    let verdict = 'Caution';
-    let colour = 'var(--warning)';
-    let reasons = [];
-
-    if (status === 'down') {
-      verdict = 'Not safe to use right now';
-      colour = 'var(--danger)';
-      reasons.push('Current status is <strong>Down</strong>.');
-    }
-    if (failCount >= 5) {
-      verdict = 'Not recommended without investigation';
-      colour = 'var(--danger)';
-      reasons.push('<strong>' + failCount + '</strong> failure / down entries in the analysis window.');
-    } else if (failCount >= 3) {
-      if (verdict === 'Caution') verdict = 'Use with caution';
-      reasons.push('<strong>' + failCount + '</strong> failure entries — recurring issue pattern possible.');
-    } else if (failCount >= 1) {
-      reasons.push('<strong>' + failCount + '</strong> failure entry in the period — review last fault before dispatch.');
-    } else {
-      reasons.push('No failure / down entries in the selected period.');
-    }
-    if (avail != null && avail < 70) {
-      verdict = 'Not recommended without investigation';
-      colour = 'var(--danger)';
-      reasons.push('Availability only <strong>' + avail.toFixed(1) + '%</strong>.');
-    } else if (avail != null && avail < 85) {
-      reasons.push('Availability <strong>' + avail.toFixed(1) + '%</strong> (below 85%).');
-    } else if (avail != null) {
-      reasons.push('Availability <strong>' + avail.toFixed(1) + '%</strong>.');
-    }
-    if (health != null && health < 45) {
-      verdict = 'Not recommended without investigation';
-      colour = 'var(--danger)';
-      reasons.push('Health score <strong>' + health + '</strong> (critical/poor band).');
-    } else if (health != null && health < 70) {
-      reasons.push('Health score <strong>' + health + '</strong>.');
-    }
-    if (downtime > 48) reasons.push('Downtime in period: <strong>' + downtime.toFixed(1) + ' h</strong>.');
-
+    var g = dataGuard(); if (g) return g;
+    var eq = findEquip(token);
+    if (!eq) return 'Could not find <strong>' + esc(token) + '</strong> in scope (' + esc(filterChip()) + ').';
+    var st = eqStatus(eq.id) || {};
+    var m = relMetrics(eq.id) || {};
+    var entries = failureEntriesFor(eq.id);
+    var failCount = Math.max(Number(st.failures) || 0, entries.length);
+    var downtime = Number(st.downtime) || 0;
+    var avail = st.availability != null ? Number(st.availability) : null;
+    var status = String(st.status || '').toLowerCase();
+    var health = m.health != null ? Number(m.health) : null;
+    var verdict = 'Caution';
+    var colour = 'var(--warning)';
+    var reasons = [];
+    if (status === 'down') { verdict = 'Not safe to use right now'; colour = 'var(--danger)'; reasons.push('Current status is <strong>Down</strong>.'); }
+    if (failCount >= 5) { verdict = 'Not recommended without investigation'; colour = 'var(--danger)'; reasons.push('<strong>' + failCount + '</strong> failure / down entries.'); }
+    else if (failCount >= 3) { if (verdict === 'Caution') verdict = 'Use with caution'; reasons.push('<strong>' + failCount + '</strong> failure entries.'); }
+    else if (failCount >= 1) reasons.push('<strong>' + failCount + '</strong> failure entry — review last fault.');
+    else reasons.push('No failure / down entries in the selected period.');
+    if (avail != null && avail < 70) { verdict = 'Not recommended without investigation'; colour = 'var(--danger)'; reasons.push('Availability <strong>' + avail.toFixed(1) + '%</strong>.'); }
+    else if (avail != null) reasons.push('Availability <strong>' + avail.toFixed(1) + '%</strong>.');
+    if (health != null && health < 45) { verdict = 'Not recommended without investigation'; colour = 'var(--danger)'; reasons.push('Health <strong>' + health + '</strong>.'); }
     if (status === 'up' && failCount === 0 && (avail == null || avail >= 90) && (health == null || health >= 75)) {
-      verdict = 'No reliability flags in current data';
-      colour = 'var(--success)';
-      reasons = ['Status <strong>Up</strong>, no failure entries in period, availability/health look healthy in the logged data.'];
+      verdict = 'No reliability flags in current data'; colour = 'var(--success)';
+      reasons = ['Status <strong>Up</strong>, no failure entries, metrics look healthy in logged data.'];
     }
-
-    let html = '<strong style="color:' + colour + '">' + esc(verdict) + '</strong>' +
-      '<div class="meta">Advisory from logged events only — not a formal pre-use clearance. Follow site checklist &amp; procedures.</div>' +
-      '<br><strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') + ' · ' + esc(inferType(eq)) +
-      '<br>Status: <strong>' + esc(st.status || '—') + '</strong> · Period: ' + esc(periodLabel()) +
-      '<br>Failure / down entries: <strong>' + failCount + '</strong> · Downtime: <strong>' + downtime.toFixed(1) + ' h</strong>';
-    if (m.mtbfLabel) html += '<br>MTBF: ' + esc(m.mtbfLabel) + ' · MTTR: ' + esc(m.mttrLabel || '—');
-    html += '<ul style="margin:0.5rem 0 0 1.1rem;padding:0">' + reasons.map(x => '<li>' + x + '</li>').join('') + '</ul>';
+    var html = '<strong style="color:' + colour + '">' + esc(verdict) + '</strong>' +
+      '<div class="meta">Advisory only — not a formal pre-use clearance.</div>' +
+      '<br><strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') +
+      '<br>Status: <strong>' + esc(st.status || '—') + '</strong> · Failures: <strong>' + failCount + '</strong> · Downtime: <strong>' + downtime.toFixed(1) + ' h</strong>';
+    html += '<ul style="margin:0.5rem 0 0 1.1rem;padding:0">' + reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>';
     if (entries.length) {
-      html += '<br><strong>Recent failure / down entries</strong><table><tr><th>Date</th><th>Shift</th><th>Reason</th></tr>';
-      entries.slice(0, 8).forEach(u => {
-        html += '<tr><td>' + esc(u.date || '') + '</td><td>' + esc(u.shift || '') + '</td><td>' +
-          esc(String(u.reason || '').slice(0, 70)) + '</td></tr>';
+      html += '<br><strong>Recent faults</strong><table><tr><th>Date</th><th>Reason</th></tr>';
+      entries.slice(0, 6).forEach(function (u) {
+        html += '<tr><td>' + esc(u.date || '') + '</td><td>' + esc(String(u.reason || '').slice(0, 70)) + '</td></tr>';
       });
       html += '</table>';
     }
     return html;
   }
-
   function answerWorst(n) {
-    const g = dataGuard(); if (g) return g;
+    var g = dataGuard(); if (g) return g;
     n = n || 12;
-    const rows = buildAssetRows().filter(r => r.fails > 0 || (r.avail != null && r.avail < 95) || String(r.status).toLowerCase() === 'down' || (r.health != null && r.health < 80));
-    rows.sort((a, b) => b.score - a.score);
-    if (!rows.length) {
-      const all = buildAssetRows();
-      if (!all.length) return 'No equipment in scope (' + esc(filterChip()) + ').';
-      return 'No clearly underperforming assets in the current period. Scope: ' + esc(filterChip()) + ' · ' + all.length + ' assets loaded.';
-    }
-    let html = '<strong>Worst-performing equipment</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">Ranked by failures, downtime, availability, health &amp; Down status · ' + esc(filterChip()) + '</div>' +
-      '<table><tr><th>#</th><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Status</th></tr>';
-    rows.slice(0, n).forEach((r, i) => {
-      html += '<tr><td>' + (i + 1) + '</td><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' +
-        r.fails + '</td><td>' + (r.avail != null ? r.avail.toFixed(1) + '%' : '—') + '</td><td>' + esc(r.status) + '</td></tr>';
+    var rows = buildAssetRows().filter(function (r) {
+      return r.fails > 0 || (r.avail != null && r.avail < 95) || String(r.status).toLowerCase() === 'down';
     });
-    html += '</table>';
-    return html;
+    rows.sort(function (a, b) { return b.score - a.score; });
+    if (!rows.length) return 'No clearly underperforming assets. Scope: ' + esc(filterChip()) + ' · ' + buildAssetRows().length + ' assets.';
+    var html = '<strong>Worst-performing equipment</strong> · ' + esc(periodLabel()) +
+      '<table><tr><th>#</th><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Status</th></tr>';
+    rows.slice(0, n).forEach(function (r, i) {
+      html += '<tr><td>' + (i + 1) + '</td><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails +
+        '</td><td>' + (r.avail != null ? r.avail.toFixed(1) + '%' : '—') + '</td><td>' + esc(r.status) + '</td></tr>';
+    });
+    return html + '</table>';
   }
-
   function answerMostReliable(n) {
-    const g = dataGuard(); if (g) return g;
-    n = n || 12;
-    const rows = buildAssetRows().slice();
-    rows.sort((a, b) => {
-      const ad = String(a.status).toLowerCase() === 'down' ? 1 : 0;
-      const bd = String(b.status).toLowerCase() === 'down' ? 1 : 0;
+    var g = dataGuard(); if (g) return g;
+    var rows = buildAssetRows().slice();
+    rows.sort(function (a, b) {
+      var ad = String(a.status).toLowerCase() === 'down' ? 1 : 0;
+      var bd = String(b.status).toLowerCase() === 'down' ? 1 : 0;
       if (ad !== bd) return ad - bd;
       if (a.fails !== b.fails) return a.fails - b.fails;
-      const aa = a.avail != null ? a.avail : 50;
-      const ba = b.avail != null ? b.avail : 50;
-      return ba - aa;
+      return (b.avail != null ? b.avail : 50) - (a.avail != null ? a.avail : 50);
     });
-    const clean = rows.filter(r => String(r.status).toLowerCase() !== 'down');
-    if (!clean.length) return 'Not enough data to rank most reliable assets.';
-    let html = '<strong>Most reliable (logged data)</strong> · ' + esc(periodLabel()) +
-      '<table><tr><th>#</th><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Status</th></tr>';
-    clean.slice(0, n).forEach((r, i) => {
-      html += '<tr><td>' + (i + 1) + '</td><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' +
-        r.fails + '</td><td>' + (r.avail != null ? r.avail.toFixed(1) + '%' : '—') + '</td><td>' + esc(r.status) + '</td></tr>';
+    var clean = rows.filter(function (r) { return String(r.status).toLowerCase() !== 'down'; });
+    if (!clean.length) return 'Not enough data to rank most reliable.';
+    var html = '<strong>Most reliable</strong> · ' + esc(periodLabel()) +
+      '<table><tr><th>#</th><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th></tr>';
+    clean.slice(0, n || 12).forEach(function (r, i) {
+      html += '<tr><td>' + (i + 1) + '</td><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails +
+        '</td><td>' + (r.avail != null ? r.avail.toFixed(1) + '%' : '—') + '</td></tr>';
     });
-    html += '</table>';
-    return html;
+    return html + '</table>';
   }
-
   function answerNeedsReplacement() {
-    const g = dataGuard(); if (g) return g;
-    const rows = buildAssetRows().filter(r =>
-      r.fails >= 4 || (r.avail != null && r.avail < 70) || (r.health != null && r.health < 45) || r.downtime >= 72
-    );
-    rows.sort((a, b) => b.score - a.score);
-    if (!rows.length) {
-      return 'No assets meet replacement-review flags this period (≥4 failures, avail &lt;70%, health &lt;45, or ≥72 h downtime). Still check overdue PM.';
-    }
-    let html = '<strong>Candidates for replacement / major overhaul review</strong>' +
-      '<div class="meta">Heuristic only — confirm with engineering</div>' +
-      '<table><tr><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Down hrs</th><th>Why</th></tr>';
-    rows.slice(0, 15).forEach(r => {
-      const why = [];
-      if (r.fails >= 4) why.push(r.fails + ' fails');
-      if (r.avail != null && r.avail < 70) why.push('avail ' + r.avail.toFixed(0) + '%');
-      if (r.health != null && r.health < 45) why.push('health ' + r.health);
-      if (r.downtime >= 72) why.push(r.downtime.toFixed(0) + 'h down');
-      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails + '</td><td>' +
-        (r.avail != null ? r.avail.toFixed(1) : '—') + '</td><td>' + r.downtime.toFixed(0) + '</td><td>' + esc(why.join(', ')) + '</td></tr>';
+    var g = dataGuard(); if (g) return g;
+    var rows = buildAssetRows().filter(function (r) {
+      return r.fails >= 4 || (r.avail != null && r.avail < 70) || (r.health != null && r.health < 45) || r.downtime >= 72;
     });
-    html += '</table>';
-    return html;
+    rows.sort(function (a, b) { return b.score - a.score; });
+    if (!rows.length) return 'No assets meet replacement-review flags (≥4 failures, avail &lt;70%, health &lt;45, or ≥72 h downtime).';
+    var html = '<strong>Replacement / overhaul candidates</strong><div class="meta">Heuristic — confirm with engineering</div>' +
+      '<table><tr><th>ID</th><th>Shaft</th><th>Fails</th><th>Avail</th><th>Down hrs</th></tr>';
+    rows.slice(0, 15).forEach(function (r) {
+      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + r.fails + '</td><td>' +
+        (r.avail != null ? r.avail.toFixed(1) : '—') + '</td><td>' + r.downtime.toFixed(0) + '</td></tr>';
+    });
+    return html + '</table>';
   }
-
   function answerWorstShaft() {
-    const g = dataGuard(); if (g) return g;
-    const rows = buildAssetRows();
+    var g = dataGuard(); if (g) return g;
+    var rows = buildAssetRows();
     if (!rows.length) {
-      const r = api();
-      return 'No equipment rows available to compare shafts. Loaded equipment: ' + ((r && r.equipment) || []).length +
-        '. Scope filter: ' + esc(filterChip()) + '.';
+      var r = api();
+      return 'No equipment rows to compare. Loaded: ' + ((r && r.equipment) || []).length + '. Filter: ' + esc(filterChip()) + '.';
     }
-    const by = {};
-    rows.forEach(r => {
-      const s = r.shaft && r.shaft !== '—' ? r.shaft : 'Unassigned';
-      if (!by[s]) by[s] = { shaft: s, n: 0, fails: 0, downtime: 0, availSum: 0, availN: 0, downNow: 0, score: 0 };
-      const b = by[s];
-      b.n++; b.fails += r.fails; b.downtime += r.downtime; b.score += r.score;
+    var by = {};
+    rows.forEach(function (r) {
+      var s = r.shaft && r.shaft !== '—' ? r.shaft : 'Unassigned';
+      if (!by[s]) by[s] = { shaft: s, n: 0, fails: 0, availSum: 0, availN: 0, downNow: 0, score: 0 };
+      var b = by[s];
+      b.n++; b.fails += r.fails; b.score += r.score;
       if (r.avail != null) { b.availSum += r.avail; b.availN++; }
       if (String(r.status).toLowerCase() === 'down') b.downNow++;
     });
-    const list = Object.values(by).map(b => ({
-      ...b,
-      avgAvail: b.availN ? b.availSum / b.availN : null,
-      avgScore: b.n ? b.score / b.n : 0
-    }));
-    list.sort((a, b) => b.avgScore - a.avgScore || b.fails - a.fails);
-    let html = '<strong>Shaft performance</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">Worst first · ' + rows.length + ' assets · ' + esc(filterChip()) + '</div>' +
+    var list = Object.keys(by).map(function (k) {
+      var b = by[k];
+      b.avgAvail = b.availN ? b.availSum / b.availN : null;
+      b.avgScore = b.n ? b.score / b.n : 0;
+      return b;
+    });
+    list.sort(function (a, b) { return b.avgScore - a.avgScore || b.fails - a.fails; });
+    var html = '<strong>Shaft performance</strong> · ' + esc(periodLabel()) +
+      '<div class="meta">' + rows.length + ' assets · ' + esc(filterChip()) + '</div>' +
       '<table><tr><th>Shaft</th><th>Assets</th><th>Fails</th><th>Avg avail</th><th>Down now</th></tr>';
-    list.forEach(b => {
+    list.forEach(function (b) {
       html += '<tr><td>' + esc(b.shaft) + '</td><td>' + b.n + '</td><td>' + b.fails + '</td><td>' +
         (b.avgAvail != null ? b.avgAvail.toFixed(1) + '%' : '—') + '</td><td>' + b.downNow + '</td></tr>';
     });
     html += '</table>';
     if (list.length) {
-      const w = list[0];
-      html += '<br><strong>Worst in this view:</strong> ' + esc(w.shaft) +
-        ' — ' + w.fails + ' failures across ' + w.n + ' assets' +
-        (w.avgAvail != null ? ', avg availability ' + w.avgAvail.toFixed(1) + '%' : '') + '.';
+      var w = list[0];
+      html += '<br><strong>Worst:</strong> ' + esc(w.shaft) + ' — ' + w.fails + ' failures across ' + w.n + ' assets.';
     }
     return html;
   }
-
   function answerNoBreakdowns() {
-    const g = dataGuard(); if (g) return g;
-    const failedIds = new Set();
-    allScopedUp().forEach(u => {
-      const isFail = u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down';
-      if (isFail) failedIds.add(normId(u.equipmentId || u.locoNumber));
+    var g = dataGuard(); if (g) return g;
+    var failedIds = {};
+    allScopedUp().forEach(function (u) {
+      if (u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down') {
+        failedIds[normId(u.equipmentId || u.locoNumber)] = 1;
+      }
     });
-    const clean = [];
-    filteredEq().forEach(e => {
-      const st = eqStatus(e.id) || {};
+    var clean = [];
+    filteredEq().forEach(function (e) {
+      var st = eqStatus(e.id) || {};
       if ((Number(st.failures) || 0) > 0) return;
-      if (failedIds.has(normId(e.id))) return;
+      if (failedIds[normId(e.id)]) return;
       clean.push({ id: e.id, shaft: e.shaft || '—', type: inferType(e), status: st.status || '—', avail: st.availability });
     });
-    clean.sort((a, b) => String(a.shaft).localeCompare(String(b.shaft)) || String(a.id).localeCompare(String(b.id)));
-    if (!clean.length) {
-      return 'Every asset in scope has at least one failure/down entry in the current window (or status metrics show failures).';
-    }
-    let html = '<strong>Equipment with no breakdown / failure entries</strong> · ' + esc(periodLabel()) +
-      '<div class="meta">' + clean.length + ' of ' + filteredEq().length + ' assets in scope</div>' +
-      '<table><tr><th>ID</th><th>Shaft</th><th>Type</th><th>Status</th><th>Avail</th></tr>';
-    clean.slice(0, 25).forEach(r => {
-      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + esc(r.type) +
-        '</td><td>' + esc(r.status) + '</td><td>' + (r.avail != null ? Number(r.avail).toFixed(1) + '%' : '—') + '</td></tr>';
+    if (!clean.length) return 'Every asset in scope has at least one failure/down entry in the current window.';
+    var html = '<strong>No breakdown / failure entries</strong> · ' + esc(periodLabel()) +
+      '<div class="meta">' + clean.length + ' of ' + filteredEq().length + ' assets</div>' +
+      '<table><tr><th>ID</th><th>Shaft</th><th>Type</th><th>Status</th></tr>';
+    clean.slice(0, 25).forEach(function (r) {
+      html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.shaft) + '</td><td>' + esc(r.type) + '</td><td>' + esc(r.status) + '</td></tr>';
     });
-    html += '</table>';
-    if (clean.length > 25) html += '<div class="meta">Showing 25 of ' + clean.length + '</div>';
-    return html;
+    return html + '</table>';
   }
-
   function answerEquipDetail(token) {
-    const g = dataGuard(); if (g) return g;
-    const eq = findEquip(token);
-    if (!eq) return 'No equipment matching <strong>' + esc(token) + '</strong> in scope (' + esc(filterChip()) + ').';
-    const st = eqStatus(eq.id) || {};
-    const m = relMetrics(eq.id) || {};
-    const entries = failureEntriesFor(eq.id);
-    let html = '<strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') + ' · ' + esc(inferType(eq)) +
+    var g = dataGuard(); if (g) return g;
+    var eq = findEquip(token);
+    if (!eq) return 'No equipment matching <strong>' + esc(token) + '</strong> in scope.';
+    var st = eqStatus(eq.id) || {};
+    var m = relMetrics(eq.id) || {};
+    var entries = failureEntriesFor(eq.id);
+    var html = '<strong>' + esc(eq.id) + '</strong> · ' + esc(eq.shaft || '—') +
       '<br>Status: <strong>' + esc(st.status || '—') + '</strong>' +
-      '<br>Availability: <strong>' + (st.availability != null ? Number(st.availability).toFixed(1) + '%' : 'Insufficient data') + '</strong>' +
-      '<br>Failures (period): <strong>' + (st.failures != null ? st.failures : entries.length) + '</strong> · Downtime: <strong>' +
-      (st.downtime != null ? Number(st.downtime).toFixed(1) : '0') + ' h</strong>';
+      '<br>Availability: <strong>' + (st.availability != null ? Number(st.availability).toFixed(1) + '%' : '—') + '</strong>' +
+      '<br>Failures: <strong>' + (st.failures != null ? st.failures : entries.length) + '</strong>';
     if (m.mtbfLabel) html += '<br>MTBF: ' + esc(m.mtbfLabel) + ' · MTTR: ' + esc(m.mttrLabel || '—');
-    if (m.health != null) html += '<br>Health: <strong>' + m.health + '</strong> (' + esc(m.band || '') + ')';
-    if (entries.length) {
-      html += '<br><br>Recent faults<table><tr><th>Date</th><th>Reason</th></tr>';
-      entries.slice(0, 5).forEach(u => {
-        html += '<tr><td>' + esc(u.date || '') + '</td><td>' + esc(String(u.reason || '').slice(0, 80)) + '</td></tr>';
-      });
-      html += '</table>';
-    }
     return html;
   }
-
   function answerHelp() {
-    return 'Ask naturally, for example:' +
-      '<ul style="margin:0.4rem 0 0 1.1rem;padding:0">' +
-      '<li>Is loco 511 safe to use?</li>' +
-      '<li>Which equipment is the worst?</li>' +
-      '<li>Which shaft is worst performing?</li>' +
-      '<li>Most reliable equipment</li>' +
-      '<li>What needs replacement?</li>' +
-      '<li>Which equipment has no breakdowns?</li>' +
-      '</ul>' +
-      '<div class="meta">Uses live shaft-scoped data and current dashboard filters/period.</div>';
+    return 'Ask naturally:<ul style="margin:0.4rem 0 0 1.1rem;padding:0">' +
+      '<li>Is loco 511 safe to use?</li><li>Which equipment is the worst?</li>' +
+      '<li>Which shaft is worst performing?</li><li>Most reliable equipment</li>' +
+      '<li>What needs replacement?</li><li>Which equipment has no breakdowns?</li></ul>';
   }
-
   function route(q) {
-    const raw = String(q || '').trim();
-    const t = raw.toLowerCase();
-    if (!t) return 'Ask something about reliability, a loco ID, shafts, or breakdowns.';
-
-    // Intent first — before ID extraction (avoids "equipment with…" → token "with")
-    if (/\b(no breakdown|no failure|no fault|without (any )?breakdown|never failed|zero failure|no report|not report|haven'?t reported|without failures?|clean record|no down|equipment with no)\b/.test(t) ||
-        /\bno breakdowns?\b/.test(t)) {
+    var raw = String(q || '').trim();
+    var t = raw.toLowerCase();
+    if (!t) return 'Ask about reliability, a loco ID, shafts, or breakdowns.';
+    if (/\b(no breakdown|no failure|no fault|without (any )?breakdown|never failed|zero failure|no report|not report|haven'?t reported|without failures?|clean record|no down|equipment with no)\b/.test(t) || /\bno breakdowns?\b/.test(t))
       return answerNoBreakdowns();
-    }
-    if (/\b(replac|write[- ]?off|scrap|beyond repair|overhaul|retire|end of life|eol)\b/.test(t)) {
+    if (/\b(replac|write[- ]?off|scrap|beyond repair|overhaul|retire|end of life|eol)\b/.test(t))
       return answerNeedsReplacement();
-    }
-    if (/\bshafts?\b/.test(t) && /\b(worst|bad|poor|underperform|perform|rank|compar|worse)\b/.test(t)) {
+    if (/\bshafts?\b/.test(t) && /\b(worst|bad|poor|underperform|perform|rank|compar|worse)\b/.test(t))
       return answerWorstShaft();
-    }
     if (/\b(which|what)\s+shaft\b/.test(t)) return answerWorstShaft();
-    if (/\b(most reliable|best perform|healthiest|top perform|most available|least fail)\b/.test(t) ||
-        (/\breliable\b/.test(t) && !/\bunreliable\b/.test(t))) {
+    if (/\b(most reliable|best perform|healthiest|top perform|most available|least fail)\b/.test(t) || (/\breliable\b/.test(t) && !/\bunreliable\b/.test(t)))
       return answerMostReliable(12);
-    }
-    if (/\b(worst|bad(dest)?|poor(est)?|underperform|problematic|trouble|chronic|worse)\b/.test(t)) {
+    if (/\b(worst|bad(dest)?|poor(est)?|underperform|problematic|trouble|chronic|worse)\b/.test(t))
       return answerWorst(12);
-    }
-    if (/\b(overdue|due soon|maintenance|pm\b|service due)\b/.test(t)) {
-      const g = dataGuard(); if (g) return g;
-      const list = filteredMt();
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const overdue = [];
-      list.forEach(m => {
-        const due = m.due || m.nextDue || m.dueDate;
-        if (!due) return;
-        const d = new Date(due);
-        if (isNaN(d.getTime())) return;
-        d.setHours(0, 0, 0, 0);
-        const days = Math.ceil((d - today) / 86400000);
-        if (days < 0) overdue.push({ id: m.equipment || m.equipmentId || '—', task: m.task || m.description || '—', due: String(due).slice(0, 10), days });
-      });
-      overdue.sort((a, b) => a.days - b.days);
-      let html = '<strong>Overdue maintenance:</strong> ' + overdue.length;
-      if (overdue.length) {
-        html += '<table><tr><th>Equipment</th><th>Task</th><th>Due</th><th>Days</th></tr>';
-        overdue.slice(0, 12).forEach(r => {
-          html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.task) + '</td><td>' + esc(r.due) + '</td><td style="color:var(--danger)">' + r.days + '</td></tr>';
-        });
-        html += '</table>';
-      }
-      return html;
-    }
-    if (/\b(help|what can|examples|how to ask)\b/.test(t)) return answerHelp();
-
-    const token = extractEquipToken(raw);
-
-    if (/\b(safe|safety|fit to use|ok to use|can i use|should we use|clear to run|serviceable|roadworthy)\b/.test(t)) {
+    if (/\b(help|what can|examples)\b/.test(t)) return answerHelp();
+    var token = extractEquipToken(raw);
+    if (/\b(safe|safety|fit to use|ok to use|can i use|should we use|clear to run|serviceable)\b/.test(t)) {
       if (token) return answerIsSafe(token);
       return 'Tell me which equipment — e.g. <em>Is loco 511 safe to use?</em>';
     }
-
     if (token) return answerEquipDetail(token);
-
     if (/\b(summary|overview|fleet|availability)\b/.test(t)) {
-      const g = dataGuard(); if (g) return g;
-      const rows = buildAssetRows();
-      let down = rows.filter(r => String(r.status).toLowerCase() === 'down').length;
+      var g = dataGuard(); if (g) return g;
+      var rows = buildAssetRows();
+      var down = rows.filter(function (r) { return String(r.status).toLowerCase() === 'down'; }).length;
       return '<strong>Fleet snapshot</strong> · ' + esc(filterChip()) + '<br>Assets: <strong>' + rows.length +
-        '</strong> · Currently Down: <strong>' + down + '</strong> · Period: ' + esc(periodLabel());
+        '</strong> · Down: <strong>' + down + '</strong> · Period: ' + esc(periodLabel());
     }
-
-    return 'I\'m not sure how to read that. ' + answerHelp();
+    return 'Not sure how to read that. ' + answerHelp();
   }
-
   function send() {
-    const q = (input.value || '').trim();
+    var q = (input.value || '').trim();
     if (!q) return;
     input.value = '';
     addMsg(esc(q), 'user');
     sendBtn.disabled = true;
     showTyping();
-    setTimeout(() => {
+    setTimeout(function () {
       removeTyping();
-      let reply;
+      var reply;
       try { reply = route(q); }
-      catch (err) {
-        console.error(err);
-        reply = 'Something went wrong. Open the Dashboard so data can load, then try again.';
-      }
+      catch (err) { console.error(err); reply = 'Something went wrong. Open Dashboard so data can load, then try again.'; }
       addMsg(reply, 'bot');
       sendBtn.disabled = false;
       input.focus();
-      try {
-        const r = api();
-        if (r && r.logAudit) r.logAudit('chat_query', q.slice(0, 200), extractEquipToken(q) || '');
-      } catch (e) {}
-    }, 200);
+      try { var r = api(); if (r && r.logAudit) r.logAudit('chat_query', q.slice(0, 200), extractEquipToken(q) || ''); } catch (e) {}
+    }, 180);
   }
-
   window.openAskRBE = openChat;
   window.closeAskRBE = closeChat;
 })();
 </script>
 
-</body>
 </html>
