@@ -3474,19 +3474,42 @@
 
   function _eventTimeMs(u) {
     if (!u) return 0;
+    /* Prefer operational date+time (what the operator logged). Import/createdAt is only a fallback
+       so a re-import of an old row cannot become the "latest" status. */
     try {
-      if (u.createdAt && typeof u.createdAt.toMillis === 'function') return u.createdAt.toMillis();
-      if (u.createdAt && typeof u.createdAt === 'object' && u.createdAt.seconds) return Number(u.createdAt.seconds) * 1000;
+      const d = String(u.date || '').trim();
+      if (d) {
+        let day = d;
+        if (/^\d{4}-\d{2}-\d{2}/.test(d)) day = d.slice(0, 10);
+        else {
+          const parsed = new Date(d);
+          if (!isNaN(parsed.getTime())) day = parsed.toISOString().slice(0, 10);
+          else day = '';
+        }
+        if (day) {
+          let tm = String(u.time || '12:00').trim();
+          if (!/^\d{1,2}:\d{2}/.test(tm)) tm = '12:00';
+          const parts = tm.split(':');
+          const hh = String(Math.min(23, parseInt(parts[0], 10) || 0)).padStart(2, '0');
+          const mm = String(Math.min(59, parseInt(parts[1], 10) || 0)).padStart(2, '0');
+          const t = new Date(day + 'T' + hh + ':' + mm + ':00').getTime();
+          if (!isNaN(t)) return t;
+        }
+      }
+    } catch (e) {}
+    try {
+      if (u.startAt) {
+        const t = new Date(u.startAt).getTime();
+        if (!isNaN(t)) return t;
+      }
       if (u.changedAt) {
         const t = new Date(u.changedAt).getTime();
         if (!isNaN(t)) return t;
       }
+      if (u.createdAt && typeof u.createdAt.toMillis === 'function') return u.createdAt.toMillis();
+      if (u.createdAt && typeof u.createdAt === 'object' && u.createdAt.seconds) return Number(u.createdAt.seconds) * 1000;
     } catch (e) {}
-    const d = String(u.date || '').slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return 0;
-    const tm = String(u.time || '12:00').slice(0, 5);
-    const t = new Date(d + 'T' + (tm.length === 5 ? tm : '12:00') + ':00').getTime();
-    return isNaN(t) ? 0 : t;
+    return 0;
   }
 
   /**
@@ -3568,7 +3591,7 @@
     const idNorm = parsed.id || normaliseEquipId(id);
     const shaftWant = parsed.shaft || (currentShaftFilter ? normaliseShaftName(currentShaftFilter) : '');
     const per = getSystemPeriod();
-    const cacheKey = (equipCompositeKey(idNorm, shaftWant) || idNorm) + '#' + per.key;
+    const cacheKey = (equipCompositeKey(idNorm, shaftWant) || idNorm) + '#' + per.key + '#v26c';
     if (window._statusCache && window._statusCache.has(cacheKey)) {
       return window._statusCache.get(cacheKey);
     }
@@ -3599,24 +3622,8 @@
       return c;
     }
     function _eventMsRaw(u) {
-      // Prefer explicit timestamps for true "last" ordering
-      try {
-        if (u.createdAt && typeof u.createdAt.toMillis === 'function') return u.createdAt.toMillis();
-        if (u.createdAt && typeof u.createdAt === 'object' && u.createdAt.seconds) return Number(u.createdAt.seconds) * 1000;
-        if (u.changedAt) {
-          const t = new Date(u.changedAt).getTime();
-          if (!isNaN(t)) return t;
-        }
-      } catch (e) {}
-      try {
-        const d = String(u.date || '').trim();
-        const t = String(u.time || '00:00').trim().padStart(5, '0');
-        if (d) {
-          const ms = new Date(d + 'T' + t).getTime();
-          if (!isNaN(ms)) return ms;
-        }
-      } catch (e) {}
-      return 0;
+      // Operational date+time first (matches _eventTimeMs). createdAt is last resort only.
+      return _eventTimeMs(u);
     }
 
     // Collect updates for this ID, then keep only same-shaft (critical: no cross-shaft mixing)
@@ -3672,9 +3679,9 @@
     }
     const currentlyDown = (statusCode === 'Down' || statusCode === 'Restricted');
 
-    // Current status above uses ALL events; failures / downtime / availability use the selected period only
+    // Current status uses ALL events; failures / downtime / availability use the selected period,
+    // PLUS open downtime when the unit is still Down (even if the Down event started before the window).
     const euP = (eu || []).filter(u => updateInPeriod(u, per));
-    // Ascending time order for Down→Fixed pairing
     const euPAsc = euP.slice().sort((a, b) => {
       const da = _eventTimeMs(a), db = _eventTimeMs(b);
       if (da !== db) return da - db;
@@ -3682,38 +3689,95 @@
     });
     const failIdxs = [];
     euPAsc.forEach((u, i) => { if (isFailureEvent(u)) failIdxs.push(i); });
+
+    // Open Down event (all-time) — needed when last status is Down but the Down row is outside the period
+    let openDownEvent = null;
+    if (currentlyDown && eu && eu.length) {
+      // eu is newest-first; walk until first failure-like / Down event
+      for (let i = 0; i < eu.length; i++) {
+        const u = eu[i];
+        if (isFixedLikeEvent(u) && !isFailureEvent(u)) break;
+        if (isFailureEvent(u) || String(u.statusCode || u.status || '').toLowerCase() === 'down') {
+          openDownEvent = u;
+          break;
+        }
+      }
+    }
+
     const lastOpenFailIdx = (currentlyDown && failIdxs.length) ? failIdxs[failIdxs.length - 1] : -1;
 
     let downtime = 0;
     euPAsc.forEach((u, i) => {
       const hrs = eventDowntimeHours(u, euPAsc, i, {
-        currentlyDown,
+        currentlyDown: currentlyDown && i === lastOpenFailIdx,
         isLastOpenFailure: i === lastOpenFailIdx
       });
-      // Count duration for failure events always; also honour positive non-failure downtime fields
       if (isFailureEvent(u) || hrs > 0) downtime += hrs;
     });
 
-    const failures = failIdxs.length;
+    // If still Down and the open Down event is NOT already in the period set, add open hours
+    // clipped into the analysis window (from max(eventTime, periodStart) → now).
+    let openExtra = 0;
+    if (currentlyDown && openDownEvent) {
+      const alreadyInPeriod = euP.some(u => u === openDownEvent);
+      const t0 = _eventTimeMs(openDownEvent);
+      const periodStartMs = per.start ? per.start.getTime() : (Date.now() - per.hours * 3600000);
+      const openFrom = Math.max(t0 || periodStartMs, periodStartMs);
+      const openHrs = Math.max(0, (Date.now() - openFrom) / 3600000);
+      const capped = Math.min(openHrs, MAX_EVENT_HOURS, per.hours);
+      if (!alreadyInPeriod) {
+        openExtra = capped;
+        downtime += openExtra;
+      } else if (lastOpenFailIdx < 0) {
+        // In period but pairing did not attribute open hours
+        openExtra = capped;
+        downtime += openExtra;
+      }
+    }
+
+    let failures = failIdxs.length;
+    // Still Down with an open failure that started in-period but was missed by isFailureEvent edge cases
+    if (currentlyDown && openDownEvent && updateInPeriod(openDownEvent, per) && failures === 0 && isFailureEvent(openDownEvent)) {
+      failures = 1;
+    }
+    // Still Down with open event outside period: count at least 1 failure for operational truth
+    // only when period has zero failures — keeps KPI honest that unit is in a failed state.
+    if (currentlyDown && failures === 0 && openDownEvent && isFailureEvent(openDownEvent)) {
+      failures = 1;
+    }
 
     const windowDays = Math.ceil(per.days);
     const windowHours = per.hours;
-    const downtimeInWindow = downtime; // same precise sum — aligned with Total downtime
-    const hasObservation = euP.length > 0;
+    const downtimeInWindow = Math.min(downtime, windowHours);
+    const hasObservation = euP.length > 0 || (currentlyDown && !!openDownEvent);
     let avail = null;
     let availabilityLabel = 'Insufficient data';
     const dataDays = hasObservation ? windowDays : 0;
-    if (hasObservation && dataDays >= MIN_DAYS_FOR_AVAIL) {
+    if (hasObservation && (dataDays >= MIN_DAYS_FOR_AVAIL || failures > 0 || currentlyDown)) {
       avail = Math.max(0, Math.min(100, ((windowHours - downtimeInWindow) / windowHours) * 100));
+      // Currently Down must never read as a perfect 100% availability
+      if (currentlyDown && avail >= 99.95) {
+        const minDown = Math.min(DEFAULT_UNLOGGED_FAILURE_H, windowHours);
+        avail = Math.max(0, Math.min(100, ((windowHours - Math.max(downtimeInWindow, minDown)) / windowHours) * 100));
+      }
       availabilityLabel = avail.toFixed(1) + '%';
     } else if (!hasObservation) {
-      // No status reports in the period = never reported for failure = 100% available
-      avail = 100;
-      availabilityLabel = '100.0%';
-    } else if (hasObservation && failures > 0) {
-      // Short window but known failures: still reflect lost time
-      avail = Math.max(0, Math.min(100, ((windowHours - downtimeInWindow) / windowHours) * 100));
-      availabilityLabel = avail.toFixed(1) + '%';
+      avail = currentlyDown ? null : 100;
+      availabilityLabel = currentlyDown ? 'Insufficient data' : '100.0%';
+    }
+
+    const lastMs = last ? _eventTimeMs(last) : 0;
+    let lastUpdateStr = '-';
+    if (last) {
+      const d = String(last.date || '').slice(0, 10);
+      const tm = String(last.time || '').slice(0, 5);
+      if (d) lastUpdateStr = d + (tm ? ' ' + tm : '');
+      else if (lastMs) {
+        try {
+          const dt = new Date(lastMs);
+          lastUpdateStr = dt.toISOString().slice(0, 10) + ' ' + dt.toTimeString().slice(0, 5);
+        } catch (e) { lastUpdateStr = '-'; }
+      }
     }
 
     const result = {
@@ -3727,7 +3791,7 @@
       periodLabel: per.label,
       shaft: effectiveShaft || '—',
       equipId: idNorm,
-      lastUpdate: last ? (last.date + ' ' + (last.time || '')) : '-',
+      lastUpdate: lastUpdateStr,
       lastReason: last ? (last.reason || last.fault || '') : '',
       color: currentlyDown || downtime > 168 ? 'RED' : (downtime > 24 || failures >= 2 ? 'ORANGE' : 'GREEN')
     };
