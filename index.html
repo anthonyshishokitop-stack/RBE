@@ -762,8 +762,8 @@
     #rbe-chat-messages::-webkit-scrollbar { width: 6px; }
     #rbe-chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
     .rbe-msg {
-      max-width: 94%; padding: 0.85rem 1.05rem; border-radius: 16px;
-      font-size: 0.9375rem; line-height: 1.55; letter-spacing: -0.01em;
+      max-width: 96%; padding: 0.75rem 0.95rem; border-radius: 14px;
+      font-size: 0.875rem; line-height: 1.5; letter-spacing: -0.01em;
       word-break: break-word; font-weight: 450;
     }
     .rbe-msg.bot {
@@ -785,26 +785,40 @@
     .rbe-msg strong { font-weight: 700; color: inherit; }
     .rbe-msg.bot strong { color: var(--primary); }
     .rbe-msg .meta {
-      font-size: 0.75rem; line-height: 1.4; opacity: 0.78; margin-top: 0.55rem;
-      padding-top: 0.45rem; border-top: 1px solid var(--border-light);
+      font-size: 0.7rem; line-height: 1.35; opacity: 0.78; margin-top: 0.45rem;
+      padding-top: 0.4rem; border-top: 1px solid var(--border-light);
       font-weight: 500; letter-spacing: 0;
     }
     .rbe-msg.user .meta { border-top-color: rgba(255,255,255,0.2); opacity: 0.85; }
     .rbe-msg table {
-      width: 100%; font-size: 0.8125rem; border-collapse: separate; border-spacing: 0;
-      margin-top: 0.55rem; border-radius: 10px; overflow: hidden;
+      width: max-content; min-width: 100%; max-width: none;
+      font-size: 0.7rem; border-collapse: collapse; border-spacing: 0;
+      margin-top: 0.5rem; border-radius: 8px;
       border: 1px solid var(--border-light);
+      table-layout: auto;
     }
+    .rbe-msg .rbe-table-scroll {
+      width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      border-radius: 8px; margin-top: 0.5rem;
+    }
+    .rbe-msg .rbe-table-scroll table { margin-top: 0; }
     .rbe-msg th, .rbe-msg td {
-      padding: 0.4rem 0.55rem; text-align: left;
+      padding: 0.28rem 0.42rem; text-align: left;
       border-bottom: 1px solid var(--border-light);
+      white-space: nowrap;
+      vertical-align: middle;
+      line-height: 1.3;
+      letter-spacing: 0;
+      font-size: 0.7rem;
     }
     .rbe-msg th {
       font-weight: 700; color: #fff; background: #0f172a;
-      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+      font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.03em;
+      position: sticky; top: 0; z-index: 1;
     }
     .rbe-msg tr:last-child td { border-bottom: none; }
     .rbe-msg tr:nth-child(even) td { background: var(--surface-2); }
+    .rbe-msg td.wrap, .rbe-msg th.wrap { white-space: normal; word-break: break-word; max-width: 140px; }
     .rbe-msg ul { margin: 0.45rem 0 0 1.15rem; padding: 0; }
     .rbe-msg li { margin: 0.2rem 0; }
     .rbe-msg em { font-style: italic; opacity: 0.95; }
@@ -9795,11 +9809,11 @@ window.RBE = {
   function table(headers, rows, limit) {
     limit = limit || 20;
     if (!rows.length) return '<em>No matching rows.</em>';
-    var html = '<table><tr>' + headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
+    var html = '<div class="rbe-table-scroll"><table><tr>' + headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
     rows.slice(0, limit).forEach(function (row) {
       html += '<tr>' + row.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>';
     });
-    html += '</table>';
+    html += '</table></div>';
     if (rows.length > limit) html += '<div class="meta">Showing ' + limit + ' of ' + rows.length + '</div>';
     return html;
   }
