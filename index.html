@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor Enterprise 2.7 | Reliability Improvement</title>
+  <title>RBE Monitor Enterprise 2.8 | Reliability Improvement</title>
   <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.googletagmanager.com blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.google-analytics.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://tessdata.projectnaptha.com blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'">
@@ -864,6 +864,51 @@
     }
 
     @media print{.sidebar,#v23-fab,#v23-net,#v23-pal,.toast,#rbe-chat-fab,#rbe-chat-panel{display:none!important}.main{margin:0!important}body{background:#fff!important}}
+
+    /* ── Reliability Improvement layout ── */
+    #reliability-improvement .ri-wrap{max-width:1600px;margin:0 auto;padding:0 1.5rem 2rem;display:grid;gap:1.1rem;width:100%;box-sizing:border-box}
+    #reliability-improvement .card{margin:0;min-width:0}
+    #reliability-improvement .header-bar{margin-bottom:1.1rem}
+    .ri-sub{font-size:.82rem;opacity:.85;margin-top:.15rem}
+    .ri-actions{display:flex;gap:.55rem;flex-wrap:wrap}
+    .ri-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;align-items:end}
+    .ri-bar label{display:grid;gap:.25rem;font-size:.74rem;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.03em}
+    .ri-bar .form-control,.ri-bar input,.ri-bar select{width:100%;box-sizing:border-box;padding:.5rem .6rem;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:.9rem}
+    #ri-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem;margin:0}
+    #ri-kpis .kpi-card{padding:1rem .8rem;min-height:112px;display:flex;flex-direction:column;justify-content:center;gap:.1rem}
+    #ri-kpis .kpi-card h2{font-size:clamp(1.45rem,2.6vw,1.9rem);margin:.15rem 0}
+    #ri-kpis .kpi-card p{font-size:.8rem;line-height:1.25}
+    #ri-kpis .kpi-card p:first-child{font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;font-size:.72rem}
+    .ri-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:1.1rem}
+    .ri-charts .chart-wrapper{min-width:0}
+    .ri-charts .chart-container{height:clamp(230px,32vh,300px)}
+    .ri-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:1.1rem}
+    .ri-head{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem}
+    .ri-head h2{margin:0;display:flex;align-items:center;gap:.5rem;font-size:1.08rem}
+    .ri-head h3{margin:0;font-size:1rem;color:var(--primary)}
+    .ri-tbl{overflow:auto;border:1px solid var(--border-light);border-radius:10px;max-width:100%}
+    .ri-tbl table{margin:0;min-width:600px;table-layout:auto}
+    .ri-tbl th,.ri-tbl td{padding:.55rem .75rem;vertical-align:top;font-size:.86rem}
+    .ri-tbl td.nw,.ri-tbl th.nw{white-space:nowrap}
+    .ri-tbl td.wrap{white-space:normal;min-width:180px;max-width:420px;word-break:break-word}
+    .ri-tbl td.num,.ri-tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
+    .ri-more{display:flex;align-items:center;gap:.8rem;margin-top:.65rem;flex-wrap:wrap}
+    .ri-more:empty{display:none}
+    .ri-more-btn{padding:.45rem .95rem;border:1px solid var(--primary);background:transparent;color:var(--primary);border-radius:8px;font-weight:600;cursor:pointer;font-size:.85rem;display:inline-flex;gap:6px;align-items:center}
+    .ri-more-btn:hover{background:var(--primary-soft)}
+    .ri-count{font-size:.78rem;color:var(--text-3)}
+    .ri-chips{display:flex;gap:.45rem;flex-wrap:wrap}
+    .ri-chip{display:inline-block;padding:.15rem .6rem;border-radius:99px;font-size:.74rem;font-weight:700;background:var(--primary-soft);color:var(--primary);white-space:nowrap}
+    .ri-chip.r{background:rgba(185,28,28,.12);color:var(--danger)}
+    .ri-chip.o{background:rgba(194,65,12,.12);color:var(--warning)}
+    .ri-chip.g{background:rgba(21,128,61,.12);color:var(--success)}
+    .ri-est{font-size:.68rem;font-weight:700;color:var(--warning);margin-left:.25rem}
+    .ri-shift-set{display:flex;gap:.5rem;flex-wrap:wrap}
+    .ri-shift-set label{font-size:.72rem;font-weight:700;color:var(--text-3);display:flex;align-items:center;gap:.3rem}
+    .ri-shift-set input{padding:.3rem .4rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)}
+    .ri-imp{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.5rem;margin:0 0 .9rem}
+    .ri-imp div{padding:.55rem .7rem;border-radius:8px;border:1px solid var(--border-light);background:var(--surface-2);font-size:.8rem;display:flex;justify-content:space-between;gap:.5rem;align-items:center}
+    @media(max-width:700px){#reliability-improvement .ri-wrap{padding:0 .75rem 1.25rem}#ri-kpis{grid-template-columns:repeat(2,1fr);gap:.7rem}.ri-two{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -1076,7 +1121,6 @@
                   <option value="weekly" selected>Weekly (last 12 weeks)</option>
                   <option value="monthly">Monthly (last 12 months)</option>
                 </select>
-                <span style="font-size:0.78rem;color:var(--text-3);">Applies to the whole system: KPIs, tables, charts, reliability &amp; reports</span>
               </div>
               <div id="trend-summary-chips" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
             </div>
@@ -1088,7 +1132,7 @@
                 <span><i class="fas fa-arrow-trend-up"></i> Fleet Availability Trend</span>
                 <span id="avail-trend-badge" style="font-size:0.78rem;font-weight:700;padding:0.25rem 0.65rem;border-radius:999px;"></span>
               </div>
-              <p style="font-size:0.82rem;color:var(--text-3);margin:-0.35rem 0 0.75rem;">Shows whether fleet availability is <strong>increasing</strong> or <strong>decreasing</strong> over the selected period.</p>
+              
               <div class="chart-container"><canvas id="availTrendChart"></canvas></div>
             </div>
             <div class="card chart-wrapper" style="margin-bottom:0;">
@@ -1096,7 +1140,7 @@
                 <span><i class="fas fa-hourglass-half"></i> Downtime / Delay Trend</span>
                 <span id="delay-trend-badge" style="font-size:0.78rem;font-weight:700;padding:0.25rem 0.65rem;border-radius:999px;"></span>
               </div>
-              <p style="font-size:0.82rem;color:var(--text-3);margin:-0.35rem 0 0.75rem;">Total downtime hours and breakdown closures — lower is better (improvement).</p>
+              
               <div class="chart-container"><canvas id="delayTrendChart"></canvas></div>
             </div>
           </div>
@@ -1134,10 +1178,7 @@
         <section id="add-equipment" class="hidden">
           <div class="header-bar"><h1>Add New Equipment</h1></div>
           <form id="add-eq-form" style="max-width:600px;margin:0 auto;">
-            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;line-height:1.45;">
-              Register assets that appear in status updates, reliability KPIs and the executive PDF.
-              <strong>Operation</strong>, <strong>Equipment ID</strong> and <strong>Type</strong> are required for availability and shaft scoping.
-            </p>
+            
             <div class="form-group"><label>Operation <span style="color:var(--danger)">*</span></label><select id="shaft" required><option value="">Select Operation</option></select></div>
             <div class="form-group"><label>Work Place / Level</label><input id="level" type="text" placeholder="e.g. 21, 16L, Tip area"></div>
             <div class="form-group"><label>Equipment Type <span style="color:var(--danger)">*</span></label>
@@ -1161,10 +1202,7 @@
         <section id="add-status" class="hidden">
           <div class="header-bar"><h1>Status Update</h1></div>
           <form id="add-status-form" style="max-width:600px;margin:0 auto;">
-            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;line-height:1.45;">
-              Logs feed availability, MTBF/MTTR, failure patterns (day / shift) and the executive PDF.
-              Use <strong>Down</strong> for faults, <strong>Fixed → Up</strong> when restored. Downtime hours and Is Failure drive reliability metrics.
-            </p>
+            
             <div class="form-group"><label>Date <span style="color:var(--danger)">*</span></label><input id="u-date" type="date" required></div>
             <div class="form-group"><label>Time <span style="color:var(--danger)">*</span></label><input id="u-time" type="time" required></div>
             <div class="form-group"><label>Equipment ID <span style="color:var(--danger)">*</span></label><input id="u-loco" list="loco-list" required placeholder="Select or type equipment ID"></div>
@@ -1207,13 +1245,13 @@
             <div><i class="fas fa-filter" style="margin-right:6px;"></i><strong>System scope:</strong> <span id="search-scope-text">All Shafts · All Types</span> — results respect the main dashboard Shaft and Equipment type filters (plus your role shaft access).</div>
           </div>
           <form id="search-form" style="max-width:640px;margin:0 auto;">
-            <p style="font-size:0.9rem;color:var(--text-3);margin-bottom:1.1rem;">Flexible search — Equipment ID, date range (From / To), and/or Reason / Fault. Results are limited by the dashboard shaft / equipment-type filters.</p>
+            
             <div class="form-group"><label>Equipment ID (optional)</label><input id="s-loco" list="loco-list" placeholder="Leave blank for all"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
               <div class="form-group"><label>From date (optional)</label><input id="s-date-from" type="date" title="Start of date range"></div>
               <div class="form-group"><label>To date (optional)</label><input id="s-date-to" type="date" title="End of date range"></div>
             </div>
-            <p style="font-size:0.82rem;color:var(--text-3);margin:-0.5rem 0 1rem;">Leave both blank for any date. Use only <em>From</em> for “on or after”, only <em>To</em> for “on or before”, or both for a range. Legacy single-date field is also accepted if present.</p>
+            
             <input type="hidden" id="s-date" value="">
             <div class="form-group"><label>Reason / Fault filter (optional)</label><input id="s-reason" type="text" placeholder="e.g. brake, antenna"></div>
             <div style="margin:1.5rem 0;display:flex;align-items:center;gap:8px;">
@@ -1353,11 +1391,7 @@
             <div class="form-group">
               <label>Select Excel or PDF (.xlsx / .xls / .pdf)</label>
               <input type="file" id="excel-file" accept=".xlsx,.xls,.pdf,application/pdf" style="padding:0.85rem;border:2px dashed var(--border);border-radius:var(--radius-md);background:var(--surface-2);width:100%;">
-              <p style="font-size:0.82rem;color:var(--text-3);margin-top:0.45rem;">
-                Supports breakdown Excel sheets plus PDF <strong>pre-use checklists</strong> (Loco / Caboose / Hopper),
-                <strong>Non-routine Maintenance Orders</strong>, and <strong>Action Manager</strong> reports.
-                Text PDFs are parsed directly; scanned PDFs use on-device OCR (may take longer).
-              </p>
+              
             </div>
             <div class="form-group">
               <label>Force Shaft (optional)</label>
@@ -1517,10 +1551,7 @@
                 <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="exportEquipReliabilityCSV()"><i class="fas fa-file-csv"></i> CSV</button>
               </div>
             </div>
-            <p style="font-size:0.82rem;color:var(--text-3);margin:0.25rem 0 0.75rem;">
-              <strong>Availability</strong> = uptime % over the selected analysis period (<span id="equip-rel-period">—</span>). <strong>MTBF (h)</strong> = operating hours ÷ failures. <strong>MTTR (h)</strong> = downtime hours ÷ failures.
-              Rows with fewer than 3 failures in the period are marked <em>Low confidence</em>. Click a row for the full equipment profile.
-            </p>
+            
             <div style="overflow:auto;max-height:60vh;border:1px solid var(--border);border-radius:10px;">
               <table style="width:100%;">
                 <thead><tr>
@@ -1562,7 +1593,7 @@
               <h2 style="margin:0;">Recent privileged &amp; change events</h2>
               <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="refreshAuditLog()"><i class="fas fa-sync-alt"></i> Refresh</button>
             </div>
-            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Captures status changes</p>
+            
             <div id="audit-log-body" style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px;"></div>
           </div>
         </section>
@@ -1590,7 +1621,7 @@
 
             <div id="dc-panel-type" style="margin-top:1rem;display:grid;gap:0.75rem;max-width:760px;">
               <div class="form-group" style="margin:0;"><label>Equipment type(s)</label><select id="dc-types" multiple size="7" style="min-height:130px;" onchange="dcOnChange()"></select></div>
-              <div class="form-group" style="margin:0;"><label>Limit to shaft(s) <span style="color:var(--text-3);font-weight:400;">(leave empty = all shafts)</span></label><select id="dc-type-shafts" multiple size="6" style="min-height:110px;" onchange="dcOnChange()"></select></div>
+              <div class="form-group" style="margin:0;"><label>Limit to shaft(s)</label><select id="dc-type-shafts" multiple size="6" style="min-height:110px;" onchange="dcOnChange()"></select></div>
             </div>
 
             <div id="dc-panel-shaft" style="margin-top:1rem;display:none;gap:0.75rem;max-width:760px;">
@@ -1625,7 +1656,7 @@
               <div class="form-group" style="margin:0;"><label>History from <span style="color:var(--text-3);font-weight:400;">(optional)</span></label><input type="date" id="dc-from" onchange="dcOnChange()"></div>
               <div class="form-group" style="margin:0;"><label>History to <span style="color:var(--text-3);font-weight:400;">(optional)</span></label><input type="date" id="dc-to" onchange="dcOnChange()"></div>
             </div>
-            <p style="font-size:0.82rem;color:var(--text-3);margin:0.6rem 0 0;">Tip: untick “Equipment register” to clear only the history and keep the units. The date range applies to status / breakdown history only.</p>
+            
           </div>
 
           <div class="card" style="border-left:4px solid var(--danger,#dc2626);">
@@ -1652,12 +1683,12 @@
           </div>
           <div class="card">
             <h2 style="margin:0 0 0.75rem;"><i class="fas fa-user-plus"></i> Invite / register user</h2>
-            <p style="font-size:0.88rem;color:var(--text-3);margin-bottom:1rem;">Creates user profile</p>
+            
             <form id="invite-user-form" style="display:grid;gap:0.85rem;max-width:720px;">
-              <div class="form-group" style="margin:0;"><label>Email <span style="color:var(--text-3);font-weight:400;">(sign-in only – not displayed in the app)</span></label><input id="invite-email" type="email" required placeholder="user@company.com"></div>
+              <div class="form-group" style="margin:0;"><label>Email</label><input id="invite-email" type="email" required placeholder="user@company.com"></div>
               <div class="user-form-grid">
-                <div class="form-group" style="margin:0;"><label>User name</label><input id="invite-name" type="text" placeholder="e.g. Anthony Shishoki"><div style="font-size:0.76rem;color:var(--text-3);margin-top:0.25rem;">Leave blank to build it from the email.</div></div>
-                <div class="form-group" style="margin:0;"><label>User ID (company / employee number)</label><input id="invite-company" type="text" placeholder="e.g. 12345678"><div style="font-size:0.76rem;color:var(--text-3);margin-top:0.25rem;">Shown instead of the email. If blank, only the name is shown.</div></div>
+                <div class="form-group" style="margin:0;"><label>User name</label><input id="invite-name" type="text" placeholder="e.g. Anthony Shishoki"></div>
+                <div class="form-group" style="margin:0;"><label>User ID (company / employee number)</label><input id="invite-company" type="text" placeholder="e.g. 12345678"></div>
               </div>
               <div class="form-group" style="margin:0;"><label>Role</label>
                 <select id="invite-role" required>
@@ -1756,106 +1787,36 @@
 
       </div>
     
-        <!-- RELIABILITY IMPROVEMENT: additive analytics; existing system and data flow remain unchanged -->
+<!-- RELIABILITY IMPROVEMENT -->
         <section id="reliability-improvement" class="hidden">
           <div class="header-bar">
-            <div>
-              <h1>Reliability Improvement</h1>
-              <div style="font-size:.82rem;opacity:.88;margin-top:.2rem;">90-day reliability view • breakdown data quality • failure-pattern review</div>
-            </div>
-            <div style="display:flex;gap:.55rem;flex-wrap:wrap;">
+            <div><h1>Reliability Improvement</h1><div class="ri-sub">Rolling 90 days</div></div>
+            <div class="ri-actions">
               <button class="btn btn-secondary" type="button" onclick="window.rbeReliabilityRefresh()"><i class="fas fa-sync-alt"></i> Refresh</button>
-              <button class="btn btn-primary" type="button" onclick="window.rbeReliabilityExport()"><i class="fas fa-file-export"></i> Export review CSV</button>
+              <button class="btn btn-primary" type="button" onclick="window.rbeReliabilityExport()"><i class="fas fa-file-export"></i> Export CSV</button>
             </div>
           </div>
-          <div class="card" style="border-left:4px solid var(--primary);">
-            <strong>Scope of this update</strong>
-            <p style="margin-top:.35rem;color:var(--text-2);">This is an additive reliability-analysis page. It uses the equipment and breakdown records already available in RBE Monitor. It does not replace the existing system, change its database, create work assignments, or introduce cost or production modules. Continue using the existing Excel import process for operational data input.</p>
-            <p style="margin-top:.35rem;font-size:.83rem;color:var(--text-3);">The calculations below use the information recorded in the current system. Missing timestamps are shown as missing/estimated; this page does not insert a default repair duration into source records.</p>
-          </div>
-
-          <div class="card">
-            <div style="display:flex;gap:1rem;align-items:end;flex-wrap:wrap;justify-content:space-between;">
-              <div>
-                <h2 style="margin-bottom:.25rem;">Review filters</h2>
-                <p style="font-size:.82rem;color:var(--text-3);">The reliability baseline is rolling 90 days. Shorter periods remain useful for operational trends, but are not used here as the primary reliability baseline.</p>
-              </div>
-              <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
-                <label style="font-size:.82rem;">Shaft<br><select id="ri-shaft" class="form-control" style="min-width:150px;" onchange="window.rbeReliabilityRefresh()"><option value="">All available shafts</option></select></label>
-                <label style="font-size:.82rem;">Equipment type<br><select id="ri-type" class="form-control" style="min-width:170px;" onchange="window.rbeReliabilityRefresh()"><option value="">All equipment types</option></select></label>
-                <label style="font-size:.82rem;">Classification<br><select id="ri-class" class="form-control" style="min-width:160px;" onchange="window.rbeReliabilityRefresh()"><option value="">All events</option><option>Mechanical</option><option>Electrical</option><option>Derailment</option><option>Operational</option><option>Unclassified</option></select></label>
-              </div>
+          <div class="ri-wrap">
+            <div class="card"><div class="ri-bar">
+              <label>Shaft<select id="ri-shaft" onchange="window.rbeReliabilityRefresh()"></select></label><label>Equipment type<select id="ri-type" onchange="window.rbeReliabilityRefresh()"></select></label><label>Classification<select id="ri-class" onchange="window.rbeReliabilityRefresh()"><option value="">All events</option><option>Mechanical</option><option>Electrical</option><option>Derailment</option><option>Operational</option><option>Unclassified</option></select></label>
+              <label>Scheduled h / day<input id="ri-sched" type="number" min="1" max="24" step="0.5"></label>
+              <label>Availability target %<input id="ri-target" type="number" min="1" max="100" step="0.5"></label>
+            </div></div>
+            <div class="kpi-grid" id="ri-kpis"></div>
+            <div class="ri-charts">
+              <div class="chart-wrapper"><div class="chart-title"><i class="fas fa-chart-bar"></i> Downtime Pareto – equipment</div><div class="chart-container"><canvas id="ri-pareto"></canvas></div></div>
+              <div class="chart-wrapper"><div class="chart-title"><i class="fas fa-chart-bar"></i> Downtime Pareto – fault mode</div><div class="chart-container"><canvas id="ri-pareto-mode"></canvas></div></div>
+              <div class="chart-wrapper"><div class="chart-title"><i class="fas fa-chart-pie"></i> Failure classification</div><div class="chart-container"><canvas id="ri-class-chart"></canvas></div></div>
             </div>
-          </div>
-
-          <div class="kpi-grid" id="ri-kpis">
-            <div class="kpi-card"><p>90-day failures</p><h2>—</h2><p>Loading records</p></div>
-            <div class="kpi-card"><p>Recorded downtime</p><h2>—</h2><p>Hours</p></div>
-            <div class="kpi-card"><p>Open breakdowns</p><h2>—</h2><p>Still unresolved</p></div>
-            <div class="kpi-card"><p>Data-quality flags</p><h2>—</h2><p>Records needing review</p></div>
-          </div>
-
-          <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;">
-            <div class="chart-wrapper">
-              <div class="chart-title"><i class="fas fa-chart-bar"></i> Downtime Pareto – highest contributors</div>
-              <div class="chart-container"><canvas id="ri-pareto"></canvas></div>
-            </div>
-            <div class="chart-wrapper">
-              <div class="chart-title"><i class="fas fa-chart-pie"></i> Failure classification</div>
-              <div class="chart-container"><canvas id="ri-class-chart"></canvas></div>
-            </div>
-          </div>
-
-          <div class="card">
-            <h2><i class="fas fa-exclamation-triangle"></i> Open breakdowns and ageing</h2>
-            <p style="color:var(--text-3);font-size:.84rem;">Open failures continue to be visible until a repair/closure time is recorded. Ageing is capped at 168 hours for this review display only. Items older than seven days are marked for confirmation, not automatically closed.</p>
-            <div class="table-responsive" style="overflow:auto;"><table id="ri-open-table"><thead><tr><th>Equipment</th><th>Shaft</th><th>Reported</th><th>Age (h)</th><th>Age band</th><th>Reported fault</th><th>Fault found</th></tr></thead><tbody><tr><td colspan="7">Loading…</td></tr></tbody></table></div>
-          </div>
-
-          <div class="card">
-            <h2><i class="fas fa-repeat"></i> Repeat failures and repair verification signals</h2>
-            <p style="color:var(--text-3);font-size:.84rem;">Highlights the same equipment with a similar fault description recurring within seven days. This is a screening indicator for engineering review, not proof of poor workmanship or a confirmed root cause.</p>
-            <div class="table-responsive" style="overflow:auto;"><table id="ri-repeat-table"><thead><tr><th>Equipment</th><th>Shaft</th><th>Fault mode / description</th><th>Earlier event</th><th>Repeat event</th><th>Gap (days)</th></tr></thead><tbody><tr><td colspan="6">Loading…</td></tr></tbody></table></div>
-          </div>
-
-          <div class="card">
-            <h2><i class="fas fa-clipboard-check"></i> Data-quality review</h2>
-            <p style="color:var(--text-3);font-size:.84rem;">These checks identify records that may distort availability, MTBF and MTTR. Correct the source Excel record and use the existing import process; this page does not silently alter imported records.</p>
-            <div class="table-responsive" style="overflow:auto;"><table id="ri-quality-table"><thead><tr><th>Issue</th><th>Count</th><th>Why it matters</th></tr></thead><tbody><tr><td colspan="3">Loading…</td></tr></tbody></table></div>
-          </div>
-
-          <div class="card">
-            <h2><i class="fas fa-map-marker-alt"></i> Event location and shift-start review</h2>
-            <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;">
-              <div>
-                <h3 style="font-size:1rem;margin:.4rem 0;">Workplace / section hotspots</h3>
-                <div class="table-responsive" style="overflow:auto;"><table id="ri-location-table"><thead><tr><th>Workplace / section</th><th>Events</th><th>Recorded downtime (h)</th></tr></thead><tbody><tr><td colspan="3">Loading…</td></tr></tbody></table></div>
-              </div>
-              <div>
-                <h3 style="font-size:1rem;margin:.4rem 0;">Failures reported in first hour of shift</h3>
-                <p style="font-size:.8rem;color:var(--text-3);margin-bottom:.45rem;">Enter the actual start time used at your operation; no shift times are assumed.</p>
-                <div style="display:flex;gap:.45rem;flex-wrap:wrap;margin-bottom:.5rem;">
-                  <label style="font-size:.78rem;">M shift <input id="ri-start-M" type="time" class="form-control" style="width:120px;" onchange="window.rbeReliabilityRefresh()"></label>
-                  <label style="font-size:.78rem;">A shift <input id="ri-start-A" type="time" class="form-control" style="width:120px;" onchange="window.rbeReliabilityRefresh()"></label>
-                  <label style="font-size:.78rem;">N shift <input id="ri-start-N" type="time" class="form-control" style="width:120px;" onchange="window.rbeReliabilityRefresh()"></label>
-                </div>
-                <div class="table-responsive" style="overflow:auto;"><table id="ri-shift-table"><thead><tr><th>Shift</th><th>First-hour events</th><th>Total events</th><th>Share</th></tr></thead><tbody><tr><td colspan="4">Loading…</td></tr></tbody></table></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <h2><i class="fas fa-book"></i> Calculation and interpretation rules</h2>
-            <ul style="padding-left:1.25rem;color:var(--text-2);display:grid;gap:.45rem;">
-              <li><strong>Reliability baseline:</strong> use a rolling 90-day window for MTBF, MTTR and availability confidence. Use shorter date windows for trends and recent changes only.</li>
-              <li><strong>MTBF:</strong> operating/scheduled hours divided by qualifying equipment failures. Do not treat calendar hours as operating hours; scheduled hours must be known and configured by shaft/shift before a defensible MTBF can be published.</li>
-              <li><strong>MTTR:</strong> actual repair duration from recorded report and repair timestamps. Do not substitute a fixed four-hour assumption. Missing timestamps remain missing and must be corrected or explicitly estimated outside the source data.</li>
-              <li><strong>Availability:</strong> operating time divided by scheduled time. Approved non-operating periods and operational stops must be treated consistently and documented.</li>
-              <li><strong>Failure classification:</strong> distinguish Mechanical, Electrical, Derailment and Operational events. Operational stops such as no operator, no power or waiting for track should not automatically count as equipment failures for MTBF.</li>
-              <li><strong>Fault analysis:</strong> use the Serviceman / Artisan report (fault found) as the primary failure-mode description where available; compare it with the original reported symptom.</li>
-              <li><strong>Repeat failure:</strong> a similar description on the same equipment within seven days is a review flag only. Confirm the component and root cause before concluding that a repair was ineffective.</li>
-            </ul>
-            <p style="margin-top:.8rem;font-size:.82rem;color:var(--text-3);">Important: scheduled operating hours and a complete, consistent repair timestamp history are required before this page can calculate a fully defensible MTBF/MTTR/availability result. Where those inputs are absent, the page deliberately reports the limitation rather than manufacturing a value.</p>
+            <div class="card"><div class="ri-head"><h2><i class="fas fa-exclamation-triangle"></i> Open breakdowns</h2><div class="ri-chips" id="ri-open-chips"></div></div><div class="ri-tbl"><table id="ri-open-table"><thead><tr><th class="">Equipment</th><th class="">Shaft</th><th class="">Reported</th><th class="">Age</th><th class="">Age band</th><th class="">Reported fault</th><th class="">Fault found</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="card"><div class="ri-head"><h2><i class="fas fa-list-check"></i> Weekly action list</h2></div><div class="ri-tbl"><table id="ri-action-table"><thead><tr><th class="">Type</th><th class="">Item</th><th class="">Detail</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="card"><div class="ri-head"><h2><i class="fas fa-ranking-star"></i> Shaft performance</h2></div><div class="ri-tbl"><table id="ri-shaft-table"><thead><tr><th class="">Shaft</th><th class="num">Equip.</th><th class="num">Failures</th><th class="num">Downtime (h)</th><th class="">Availability</th><th class="num">Target</th><th class="num">MTBF (h)</th><th class="num">MTTR (h)</th><th class="num">vs last week</th><th class="num">vs last month</th><th class="num">vs best shaft</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="card"><div class="ri-head"><h2><i class="fas fa-hourglass-half"></i> Failure forecast</h2></div><div class="ri-tbl"><table id="ri-forecast-table"><thead><tr><th class="">Equipment</th><th class="">Shaft</th><th class="">Fault mode</th><th class="num">Events</th><th class="num">Mean gap (d)</th><th class="">Consistency</th><th class="num">Since last (d)</th><th class="">Risk ratio</th><th class="">Basis</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="card"><div class="ri-head"><h2><i class="fas fa-repeat"></i> Repeat failures</h2></div><div class="ri-tbl"><table id="ri-repeat-table"><thead><tr><th class="">Equipment</th><th class="">Shaft</th><th class="">Fault</th><th class="">Earlier</th><th class="">Repeat</th><th class="num">Gap (h)</th><th class="">Flag</th><th class="">Repair team</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="ri-two"><div class="card"><div class="ri-head"><h3>Repeat rate by shaft</h3></div><div class="ri-tbl"><table id="ri-repeat-shaft"><thead><tr><th class="">Shaft</th><th class="num">Events</th><th class="num">Repeats</th><th class="">Rate</th></tr></thead><tbody></tbody></table></div></div><div class="card"><div class="ri-head"><h3>Repeat rate by repair team</h3></div><div class="ri-tbl"><table id="ri-repeat-team"><thead><tr><th class="">Team</th><th class="num">Events</th><th class="num">Repeats</th><th class="">Rate</th></tr></thead><tbody></tbody></table></div></div></div>
+            <div class="ri-two"><div class="card"><div class="ri-head"><h2><i class="fas fa-clipboard-check"></i> Data quality</h2></div><div class="ri-tbl"><table id="ri-quality-table"><thead><tr><th class="">Issue</th><th class="num">Count</th></tr></thead><tbody></tbody></table></div></div><div style="display:grid;gap:1.1rem;align-content:start"><div class="card"><div class="ri-head"><h3>Score by shaft</h3></div><div class="ri-tbl"><table id="ri-dq-shaft"><thead><tr><th class="">Shaft</th><th class="num">Events</th><th class="">Score</th></tr></thead><tbody></tbody></table></div></div><div class="card"><div class="ri-head"><h3>Score by shift</h3></div><div class="ri-tbl"><table id="ri-dq-shift"><thead><tr><th class="">Shift</th><th class="num">Events</th><th class="">Score</th></tr></thead><tbody></tbody></table></div></div></div></div>
+            <div class="ri-two"><div class="card"><div class="ri-head"><h2><i class="fas fa-map-marker-alt"></i> Location hotspots</h2></div><div class="ri-tbl"><table id="ri-location-table"><thead><tr><th class="">Workplace / section</th><th class="num">Events</th><th class="num">Derailments</th><th class="num">Downtime (h)</th></tr></thead><tbody></tbody></table></div></div><div class="card"><div class="ri-head"><h2><i class="fas fa-clock"></i> Shift-start failures</h2><div class="ri-shift-set"><label>M<input id="ri-start-M" type="time"></label><label>A<input id="ri-start-A" type="time"></label><label>N<input id="ri-start-N" type="time"></label></div></div><div class="ri-tbl"><table id="ri-shift-table"><thead><tr><th class="">Shift</th><th class="num">First hour</th><th class="num">Total</th><th class="">Share</th></tr></thead><tbody></tbody></table></div></div></div>
+            <div class="ri-two"><div class="card"><div class="ri-head"><h2><i class="fas fa-book"></i> Unclassified fault phrases</h2></div><div class="ri-tbl"><table id="ri-phrase-table"><thead><tr><th class="">Phrase</th><th class="num">Count</th></tr></thead><tbody></tbody></table></div></div><div class="card"><div class="ri-head"><h2><i class="fas fa-code-compare"></i> Reported vs fault found</h2></div><div class="ri-tbl"><table id="ri-mismatch-table"><thead><tr><th class="">Reported group</th><th class="num">Pairs</th><th class="num">Differ</th><th class="">Mismatch</th></tr></thead><tbody></tbody></table></div></div></div>
           </div>
         </section>
 </main>
@@ -1873,7 +1834,7 @@
       </div>
       <form id="edit-equipment-form">
         <input type="hidden" id="edit-eq-original-id">
-        <div class="form-group"><label>Equipment ID <span style="font-weight:500;color:var(--text-3);font-size:0.82rem;">(admin can rename)</span></label><input id="edit-eq-id" type="text" required></div>
+        <div class="form-group"><label>Equipment ID</label><input id="edit-eq-id" type="text" required></div>
         <div class="form-group"><label>Operation / Shaft</label><select id="edit-eq-shaft" required></select></div>
         <div class="form-group"><label>Work Place</label><input id="edit-eq-level" type="text"></div>
         <div class="form-group"><label>Equipment Type</label>
@@ -1975,7 +1936,7 @@
       <div class="form-group" id="action-reschedule-wrap" style="display:none;">
         <label for="action-reschedule-date">Reschedule predicted inspection (optional)</label>
         <input type="date" id="action-reschedule-date">
-        <p style="font-size:0.8rem;color:var(--text-3);margin-top:0.35rem;">Leave blank to keep the current due date. Setting a date updates or creates the maintenance schedule.</p>
+        
       </div>
       <div style="display:flex;gap:0.65rem;margin-top:1.1rem;flex-wrap:wrap;">
         <button type="button" class="btn btn-success" id="action-confirm-submit" onclick="if(window.handleActionConfirmSubmit)handleActionConfirmSubmit();"><i class="fas fa-check"></i> Confirm</button>
@@ -3671,6 +3632,36 @@
     return 0;
   }
 
+  /** Median measured repair time by shaft + equipment type (fallbacks: shaft, type, all); flat default only when no measured rows exist. */
+  let _medCache = null, _medKey = '';
+  function estimatedRepairHours(u) {
+    try {
+      const ups = updates || [], key = ups.length + '|' + (equipment || []).length;
+      if (!_medCache || _medKey !== key) {
+        const typeOf = new Map((equipment || []).map(e => [normaliseEquipId(e.id), inferEquipmentType(e)]));
+        const g = { st: {}, s: {}, t: {}, all: [] };
+        const add = (o, k, v) => { (o[k] || (o[k] = [])).push(v); };
+        ups.forEach(x => {
+          if (!isFailureEvent(x)) return;
+          let h = null;
+          if (x.startAt && x.endAt) h = (new Date(x.endAt) - new Date(x.startAt)) / 3600000;
+          else { const d = Number(x.downtimeHours != null ? x.downtimeHours : (x.downtime || 0)) || 0; if (d > 0) h = d; }
+          if (h == null || !(h > 0)) return;
+          h = Math.min(h, MAX_EVENT_HOURS);
+          const s = normaliseShaftName(x.shaft || ''), t = typeOf.get(normaliseEquipId(x.equipmentId)) || '';
+          add(g.st, s + '|' + t, h); add(g.s, s, h); if (t) add(g.t, t, h); g.all.push(h);
+        });
+        const med = a => { if (!a || a.length < 3) return null; const v = [...a].sort((p, q) => p - q), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+        _medCache = { g, med }; _medKey = key;
+      }
+      const s = normaliseShaftName(u.shaft || ''), t = (equipment || []).filter(e => normaliseEquipId(e.id) === normaliseEquipId(u.equipmentId)).map(inferEquipmentType)[0] || '';
+      const { g, med } = _medCache;
+      const m = med(g.st[s + '|' + t]) ?? med(g.s[s]) ?? med(g.t[t]) ?? med(g.all);
+      return m != null ? Math.round(m * 100) / 100 : DEFAULT_UNLOGGED_FAILURE_H;
+    } catch (e) { return DEFAULT_UNLOGGED_FAILURE_H; }
+  }
+  window.rbeEstimatedRepairH = function (u) { const m = estimatedRepairHours(u); return m; };
+
   /**
    * Precise downtime for one event (hours). Order of preference:
    * 1) startAt/endAt span  2) logged downtimeHours  3) open failure elapsed time
@@ -3738,8 +3729,8 @@
       }
     }
 
-    // Closed failure with no duration data — site default only
-    return DEFAULT_UNLOGGED_FAILURE_H;
+    // Closed failure with no duration data — median repair time (type + shaft) from measured rows
+    return estimatedRepairHours(u);
   }
   window.eventDowntimeHours = eventDowntimeHours;
 
@@ -8609,6 +8600,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
       }
     }
     selectedMapping = mapping;
+    window.__impTotal = sheet.rows.length;
     excelData = sheet.rows.map((row, idx) => {
       const get = f => selectedMapping[f] != null ? row[selectedMapping[f]] : null;
       let equip = sanitizeEquipmentId(get('equipmentId')) || String(get('equipmentId') || '').trim();
@@ -8652,6 +8644,9 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
       let shiftVal = String(get('shift') || 'Night').trim() || 'Night';
       const shiftCode = { M: 'Morning', A: 'Afternoon', N: 'Night' };
       if (shiftCode[shiftVal.toUpperCase()]) shiftVal = shiftCode[shiftVal.toUpperCase()];
+      const _rd0 = parseExcelDate(get('date')), _rd1 = parseExcelDate(get('dateRepaired'));
+      let _rep = { d: '', t: '', bad: false, hrs: null };
+      if (_rd1) { const _rt1 = parseExcelTime(get('timeRepaired')); const _h = (new Date(_rd1 + 'T' + _rt1) - new Date(_rd0 + 'T' + parseExcelTime(get('time')))) / 3600000; _rep = { d: _rd1, t: _rt1, bad: _h < 0, hrs: isFinite(_h) ? _h : null }; }
       // FIXED Y/N → action / status hint
       const fixedRaw = String(get('action') || '').trim().toUpperCase();
       const isFixed = ['YES','Y','FIXED','TRUE','1','DONE','OK'].includes(fixedRaw);
@@ -8666,7 +8661,8 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
         workplace: String(get('workplace') || '').trim(),
         section: String(get('section') || '').trim(),
         shaft: document.getElementById('import-shaft')?.value || '',
-        sourceSheet: currentSheetName, selected: true
+        sourceSheet: currentSheetName, selected: true,
+        dateRepaired: _rep.d, timeRepaired: _rep.t, repBeforeRep: _rep.bad, rawHours: _rep.hrs
       };
     }).filter(r => {
       const id = String(r.equipmentId || '').trim();
@@ -8675,10 +8671,27 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     renderPreview();
     document.getElementById('mapping-preview').style.display = 'block';
   }
+  function importValidationHtml() {
+    const rows = excelData || [], reg = new Set(((window.RBE && window.RBE.equipment) || []).map(e => String(e.id || '').trim().toUpperCase()));
+    const seen = new Set(); let dup = 0;
+    rows.forEach(r => { const k = [r.equipmentId, r.date, r.time, String(r.reason).toLowerCase()].join('|'); if (seen.has(k)) dup++; else seen.add(k); });
+    const items = [
+      ['Repaired before reported', rows.filter(r => r.repBeforeRep).length],
+      ['Missing equipment ID / fault', Math.max(0, (window.__impTotal || rows.length) - rows.length)],
+      ['Missing shaft', rows.filter(r => !r.shaft).length],
+      ['Duplicate rows', dup],
+      ['Duration over 168 h (capped)', rows.filter(r => r.downtimeHours > 168 || r.rawHours > 168).length],
+      ['Unrecognised equipment ID', rows.filter(r => !reg.has(String(r.equipmentId || '').trim().toUpperCase())).length]
+    ];
+    return '<div class="ri-imp">' + items.map(i => '<div><span>' + i[0] + '</span><span class="ri-chip ' + (i[1] ? 'r' : 'g') + '">' + i[1] + '</span></div>').join('') + '</div>';
+  }
   function renderPreview() {
     const table = document.getElementById('preview-table');
     const countEl = document.getElementById('preview-count');
     if (!table) return;
+    let _iv = document.getElementById('import-validation');
+    if (!_iv) { _iv = document.createElement('div'); _iv.id = 'import-validation'; table.parentElement.parentElement.insertBefore(_iv, table.parentElement); }
+    _iv.innerHTML = importValidationHtml();
     if (!excelData.length) { table.innerHTML = '<tbody><tr><td colspan="9">No valid rows</td></tr></tbody>'; return; }
     if (countEl) countEl.textContent = `(${excelData.filter(r => r.selected).length} of ${excelData.length} selected)`;
     let html = `<thead><tr><th style="width:40px;"><input type="checkbox" checked onchange="toggleAllRows(this.checked)"></th><th>#</th><th>Date</th><th>Time</th><th>ID</th><th>Reason</th><th>Downtime</th><th>Shift</th><th>Sheet</th></tr></thead><tbody>`;
@@ -8920,12 +8933,13 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
           signedByCompanyNumber: row.signedByCompanyNumber || '',
           shaft: rowShaft, workplace: row.workplace || '',
           fixedYn: row.fixedYn || (rowStatus === 'Up' ? 'YES' : 'NO'),
-          source: row.source || 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp(),
+          section: row.section || '', dateFixed: row.repBeforeRep ? '' : (row.dateRepaired || ''), timeRepaired: row.repBeforeRep ? '' : (row.timeRepaired || ''), source: row.source || 'Imported Breakdown Report', sourceSheet: row.sourceSheet || '', createdAt: serverTimestamp(),
           updatedBy: actor.name, updatedByEmail: actor.email, updatedByUid: actor.uid,
           updatedByCompanyNumber: actor.companyNumber || '',
           changedAt: new Date().toISOString()
         };
         if (rawId && rawId !== equipId) statusPayload.originalEquipmentId = rawId;
+        if (row.dateRepaired && !row.repBeforeRep && startAtIso) { try { const _e = new Date(row.dateRepaired + 'T' + String(row.timeRepaired || '00:00').padStart(5, '0')); if (!isNaN(_e) && _e > new Date(startAtIso)) statusPayload.endAt = _e.toISOString(); } catch (e) {} }
         // Work-order / PDF structured extras (optional)
         if (row.orderNumber) statusPayload.orderNumber = row.orderNumber;
         if (row.orderDescription) statusPayload.orderDescription = row.orderDescription;
@@ -9433,175 +9447,274 @@ window.RBE = {
 </script>
 
 <script>
-/* RBE Monitor additive reliability review. Reads existing RBE data only; no database writes. */
+/* RBE Monitor reliability review. Reads existing RBE data only; settings kept in this browser. */
 (function () {
   'use strict';
-  let paretoChart = null, classChart = null, lastRows = [];
+  const LS = 'rbe_ri_settings';
+  let S = {sched:{}, target:{}, start:{}};
+  try { S = Object.assign(S, JSON.parse(localStorage.getItem(LS) || '{}')); } catch(e) {}
+  const save = () => { try { localStorage.setItem(LS, JSON.stringify(S)); } catch(e) {} };
+  const ch = {}, pg = {}, expanded = {};
+  let lastRows = [];
   const $ = id => document.getElementById(id);
   const txt = v => String(v == null ? '' : v).trim();
   const esc = v => txt(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const first = (o, keys) => { for (const k of keys) if (o && o[k] != null && txt(o[k]) !== '') return o[k]; return ''; };
-  const parseDateTime = (date, time) => {
-    if (!date) return null;
-    const d = new Date(String(date).length === 10 ? String(date) + 'T' + (time || '00:00') : date);
-    return Number.isNaN(d.getTime()) ? null : d;
-  };
-  const hoursBetween = (a,b) => Math.max(0,(b-a)/3600000);
-  const classify = u => {
-    const s = (txt(first(u,['actualFault','actionTaken','reason','fault','description'])) + ' ' + txt(first(u,['reason','fault']))).toLowerCase();
+  const parseDT = (d, t) => { if (!d) return null; const x = new Date(String(d).length === 10 ? d + 'T' + (t || '00:00') : d); return isNaN(x) ? null : x; };
+  const hb = (a, b) => Math.max(0, (b - a) / 3600000);
+  const fmt = d => d ? d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') : '—';
+  const n1 = v => v == null || !isFinite(v) ? '—' : Number(v).toFixed(1);
+  const chip = (t, c) => '<span class="ri-chip ' + (c || '') + '">' + esc(t) + '</span>';
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2; };
+
+  const FAULTS = [['Derailment',/derail|off.?rail/],['No operator / waiting',/no operator|no driver|waiting/],['No power',/no power|power (off|fail|outage)/],['Brakes',/brake/],['Battery / charging',/batter|charg|lithium|alternator/],['Winch tripped',/winch/],['Cable / wiring',/cable|wiring|short circuit|contactor/],['Motor',/motor/],['Controller / system fault',/system fault|checklist|controller|plc|fault code|display|abort/],['Hydraulics / pneumatics',/hydraul|pneum|hose|air leak/],['Wheels / drive train',/wheel|axle|bearing|gearbox|coupling|chain|transmission/],['Communication',/antenna|radio|comm|signal/]];
+  const label = s => { s = txt(s).toLowerCase(); for (const f of FAULTS) if (f[1].test(s)) return f[0]; return 'Other'; };
+  const classify = s => {
+    s = txt(s).toLowerCase();
     if (/derail|off.?rail|wheel climb|track obstruction/.test(s)) return 'Derailment';
-    if (/no operator|waiting for track|no power|power outage|waiting for production|operational delay|no driver/.test(s)) return 'Operational';
-    if (/motor|cable|electrical|short circuit|contactor|battery|alternator|wiring|electrical fault/.test(s)) return 'Electrical';
+    if (/no operator|waiting for track|no power|waiting for production|operational delay|no driver/.test(s)) return 'Operational';
+    if (/motor|cable|electrical|short circuit|contactor|battery|charg|alternator|wiring|winch tripped|tripped/.test(s)) return 'Electrical';
     if (/bearing|gearbox|brake|wheel|axle|hydraulic|pneumatic|mechanical|coupling|chain|pump|engine|transmission/.test(s)) return 'Mechanical';
     return 'Unclassified';
   };
-  const isFailure = u => {
-    const status = txt(u.status).toLowerCase();
-    return u.isFailure === '1' || u.isFailure === 1 || ['down','breakdown','failed'].includes(status);
-  };
-  const isClosed = u => {
-    const fixed = txt(first(u,['fixedYn','fixedY/N'])).toLowerCase();
-    return ['yes','y','true','1'].includes(fixed) || ['fixed','up','closed','repaired'].includes(txt(u.status).toLowerCase()) || !!(u.dateFixed && (u.timeFinished || u.timeOff || u.timeRepaired));
-  };
-  const duration = u => {
-    const n = Number(first(u,['downtimeHours','downtime','totalDowntime','downHours']));
-    return Number.isFinite(n) && n >= 0 ? n : null;
-  };
-  const dateOf = u => parseDateTime(first(u,['date','dateReported','date reported']), first(u,['time','timeReported','time reported']));
-  const repairedAt = u => parseDateTime(first(u,['dateFixed','dateRepaired','date repaired']), first(u,['timeFinished','timeOff','timeRepaired','time repaired']));
-  function getRows() {
-    try {
-      const source = window.RBE && (window.RBE.getScopedUpdates ? window.RBE.getScopedUpdates() : window.RBE.getFilteredUpdates());
-      return Array.isArray(source) ? source : [];
-    } catch(e) { return []; }
+  const EQ = new Set(['Mechanical','Electrical','Unclassified']);
+  const isFailure = u => { const s = txt(u.status).toLowerCase(); return u.isFailure === '1' || u.isFailure === 1 || u.isFailure === true || ['down','breakdown','failed'].includes(s); };
+  const isClosed = u => ['yes','y','true','1'].includes(txt(first(u,['fixedYn','fixedY/N'])).toLowerCase()) || ['fixed','up','closed','repaired'].includes(txt(u.status).toLowerCase()) || !!(u.dateFixed && (u.timeFinished || u.timeOff || u.timeRepaired));
+  const dur = u => { const n = Number(first(u,['downtimeHours','downtime','totalDowntime','downHours'])); return isFinite(n) && n > 0 ? n : null; };
+  const startOf = u => u.startAt ? new Date(u.startAt) : parseDT(first(u,['date','dateReported']), first(u,['time','timeReported']));
+  const repOf = u => u.endAt ? new Date(u.endAt) : parseDT(first(u,['dateFixed','dateRepaired']), first(u,['timeFinished','timeOff','timeRepaired']));
+  const setting = (k, shaft, def) => { const m = S[k]; return m[shaft] != null ? Number(m[shaft]) : (m['*'] != null ? Number(m['*']) : def); };
+  const normShaft = s => (window.RBE && window.RBE.normaliseEquipId && txt(s)) || txt(s);
+
+  function pagedTable(id, rows, cols, empty, n) {
+    pg[id] = {rows, cols, empty, n: n || 15};
+    const el = $(id); if (!el) return;
+    const wrap = el.closest('.ri-tbl');
+    let more = wrap.nextElementSibling;
+    if (!more || !more.classList.contains('ri-more')) { more = document.createElement('div'); more.className = 'ri-more'; wrap.after(more); }
+    const lim = pg[id].n, exp = !!expanded[id], list = exp ? rows : rows.slice(0, lim);
+    el.querySelector('tbody').innerHTML = list.length ? list.map(r => '<tr>' + r.map(v => v && v.h != null ? '<td class="' + (v.c || '') + '">' + v.h + '</td>' : '<td>' + v + '</td>').join('') + '</tr>').join('') : '<tr><td colspan="' + cols + '">' + empty + '</td></tr>';
+    more.innerHTML = rows.length > lim
+      ? '<button type="button" class="ri-more-btn" data-id="' + id + '"><i class="fas fa-chevron-' + (exp ? 'up' : 'down') + '"></i> ' + (exp ? 'Show less' : 'Show more (' + (rows.length - lim) + ')') + '</button><span class="ri-count">Showing ' + list.length + ' of ' + rows.length + '</span>'
+      : (rows.length ? '<span class="ri-count">' + rows.length + ' record' + (rows.length > 1 ? 's' : '') + '</span>' : '');
   }
-  function optionsFrom(data, key, label) {
-    const el = $(key); if (!el) return;
-    const old = el.value;
-    const vals = [...new Set(data.map(x => txt(x)).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    el.innerHTML = '<option value="">All available ' + label + '</option>' + vals.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
+  const C = (h, c) => ({h, c});
+
+  function opts(id, vals, all) {
+    const el = $(id); if (!el) return; const old = el.value;
+    vals = [...new Set(vals.map(txt).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    el.innerHTML = '<option value="">' + all + '</option>' + vals.map(v => '<option value="' + esc(v) + '">' + esc(v) + '</option>').join('');
     if (vals.includes(old)) el.value = old;
   }
-  function table(id, headers, rows, empty) {
-    const el = $(id); if (!el) return;
-    const tbody = el.querySelector('tbody');
-    tbody.innerHTML = rows.length ? rows.map(r=>'<tr>'+r.map(v=>'<td>'+v+'</td>').join('')+'</tr>').join('') :
-      '<tr><td colspan="'+headers+'">'+(empty || 'No matching records found.')+'</td></tr>';
+  function chart(id, cfg) {
+    const c = $(id); if (!c || !window.Chart) return;
+    if (ch[id]) ch[id].destroy();
+    ch[id] = new Chart(c, cfg);
   }
+  function pareto(id, entries, color) {
+    const top = entries.sort((a, b) => b[1] - a[1]).slice(0, 10), tot = entries.reduce((s, e) => s + e[1], 0) || 1;
+    let run = 0; const cum = top.map(e => (run += e[1], Number((100 * run / tot).toFixed(1))));
+    chart(id, {data: {labels: top.map(e => e[0]), datasets: [
+      {type: 'bar', label: 'Downtime (h)', data: top.map(e => Number(e[1].toFixed(1))), backgroundColor: color, yAxisID: 'y'},
+      {type: 'line', label: 'Cumulative %', data: cum, borderColor: '#b91c1c', backgroundColor: '#b91c1c', pointRadius: 3, tension: .25, yAxisID: 'y2'}]},
+      options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+        plugins: {legend: {position: 'bottom', labels: {boxWidth: 12}}},
+        scales: {x: {ticks: {maxRotation: 55, minRotation: 0, autoSkip: false, font: {size: 10}}}, y: {beginAtZero: true, title: {display: true, text: 'Hours'}}, y2: {position: 'right', min: 0, max: 100, grid: {drawOnChartArea: false}, ticks: {callback: v => v + '%'}}}}});
+  }
+
   function render() {
     if (!window.RBE) return;
-    const all = getRows();
-    const equipment = (window.RBE.getFilteredEquipment && window.RBE.getFilteredEquipment()) || [];
-    optionsFrom(all.map(u=>u.shaft), 'ri-shaft', 'shafts');
-    optionsFrom(equipment.map(e=>first(e,['equipmentType','type','category'])), 'ri-type', 'equipment types');
-    const shaft = $('ri-shaft')?.value || '', type = $('ri-type')?.value || '', cls = $('ri-class')?.value || '';
-    const equipMap = new Map(equipment.map(e=>[String(first(e,['equipmentId','locoNumber','id','equipmentNo'])).toUpperCase(),e]));
-    const now = new Date(), start = new Date(now); start.setDate(start.getDate()-90);
-    let rows = all.map(u => {
-      const id = txt(first(u,['equipmentId','locoNumber','equipment','equipmentNo']));
-      const e = equipMap.get(id.toUpperCase()) || {};
-      const dt = dateOf(u), closedAt = repairedAt(u), fail = isFailure(u);
-      const found = txt(first(u,['actualFault','actionTaken','faultFound','servicemanReport']));
-      const reported = txt(first(u,['reason','fault','description']));
-      const mode = classify({...u,actualFault:found || reported});
-      const age = dt ? Math.min(168,hoursBetween(dt, closedAt || now)) : null;
-      const typeName = txt(first(e,['equipmentType','type','category']));
-      return {u,id,shaft:txt(u.shaft),dt,closedAt,fail,found,reported,mode,age,duration:duration(u),typeName,
-        workplace:txt(first(u,['workplace','level','workingPlace'])),section:txt(u.section),shift:txt(u.shift)};
-    }).filter(x=>x.fail && x.dt && x.dt >= start && x.dt <= now);
-    if (shaft) rows=rows.filter(x=>x.shaft===shaft);
-    if (type) rows=rows.filter(x=>x.typeName===type);
-    if (cls) rows=rows.filter(x=>x.mode===cls);
-    lastRows=rows;
-    const open=rows.filter(x=>!isClosed(x.u));
-    const quality = {
-      'Missing equipment ID': rows.filter(x=>!x.id).length,
-      'Missing shaft': rows.filter(x=>!x.shaft).length,
-      'Missing report date/time': all.filter(u=>isFailure(u)&&!dateOf(u)).length,
-      'Repair time before report time': rows.filter(x=>x.closedAt&&x.dt&&x.closedAt<x.dt).length,
-      'Missing repair timestamp on closed event': rows.filter(x=>isClosed(x.u)&&!x.closedAt).length,
-      'Missing downtime value': rows.filter(x=>x.duration==null&&!isClosed(x.u)).length,
-      'Missing fault found / artisan report': rows.filter(x=>!x.found).length,
-      'Missing workplace or section': rows.filter(x=>!x.workplace&&!x.section).length
+    let all = [];
+    try { all = (window.RBE.getScopedUpdates ? window.RBE.getScopedUpdates() : window.RBE.getFilteredUpdates()) || []; } catch(e) {}
+    const register = window.RBE.equipment || [];
+    const eqId = e => txt(first(e, ['equipmentId','locoNumber','id','equipmentNo'])).toUpperCase();
+    const eqType = e => txt((window.RBE.inferEquipmentType && window.RBE.inferEquipmentType(e)) || first(e, ['equipmentType','type','category']));
+    const regMap = new Map(register.map(e => [eqId(e), e]));
+    let scoped = []; try { scoped = window.RBE.getFilteredEquipment() || []; } catch(e) {}
+    opts('ri-shaft', all.map(u => u.shaft).concat(scoped.map(e => e.shaft)), 'All shafts');
+    opts('ri-type', scoped.map(eqType), 'All types');
+    const shaft = $('ri-shaft').value, type = $('ri-type').value, cls = $('ri-class').value;
+    const key = shaft || '*';
+    if (document.activeElement !== $('ri-sched')) $('ri-sched').value = setting('sched', shaft, 24);
+    if (document.activeElement !== $('ri-target')) $('ri-target').value = setting('target', shaft, 90);
+    ['M','A','N'].forEach(k => { const el = $('ri-start-' + k); if (el && document.activeElement !== el) el.value = S.start[k] || ''; });
+
+    const now = new Date(), start90 = new Date(now - 90 * 864e5);
+    const build = u => {
+      const id = txt(first(u, ['equipmentId','locoNumber','equipment','equipmentNo'])), e = regMap.get(id.toUpperCase());
+      const dt = startOf(u), rep = repOf(u), found = txt(first(u, ['actualFault','actionTaken','faultFound','servicemanReport'])), reported = txt(first(u, ['reason','fault','description']));
+      const closed = isClosed(u), raw = dt ? hb(dt, closed && rep && rep >= dt ? rep : now) : null;
+      const sh = (txt(first(u, ['shift'])) || '—');
+      return {u, id, e, shaft: txt(u.shaft), dt, rep, found, reported, closed, rawAge: raw, age: raw == null ? null : Math.min(168, raw),
+        mode: classify(found || reported), lab: label(found || reported), labRep: label(reported), duration: dur(u),
+        typeName: e ? eqType(e) : '', workplace: txt(first(u, ['workplace','level','workingPlace'])), section: txt(u.section),
+        shift: sh, team: txt(first(u, ['signedBy','repairedBy'])) || 'Not recorded', est: false, hours: null};
     };
-    const qCount=Object.values(quality).reduce((a,b)=>a+b,0);
-    const totalDowntime=rows.reduce((s,x)=>s+(x.duration==null?0:x.duration),0);
-    const measuredRepairs=rows.filter(x=>x.dt&&x.closedAt&&x.closedAt>=x.dt).map(x=>hoursBetween(x.dt,x.closedAt));
-    const mttr=measuredRepairs.length?(measuredRepairs.reduce((a,b)=>a+b,0)/measuredRepairs.length).toFixed(2):'—';
-    const kpis=[
-      ['90-day failures',rows.length,'Qualifying failure records'],
-      ['Recorded downtime',totalDowntime.toFixed(1)+' h','Recorded values only; missing values excluded'],
-      ['Measured MTTR',mttr==='—'?'—':mttr+' h',measuredRepairs.length+' events with valid timestamps'],
-      ['Open breakdowns',open.length,'Not marked repaired / closed'],
-      ['Data-quality flags',qCount,'Checks across the current review set']
-    ];
-    $('ri-kpis').innerHTML=kpis.map((k,i)=>'<div class="kpi-card '+(i===2&&open.length?'orange':i===3&&qCount?'red':'blue')+'"><p>'+k[0]+'</p><h2>'+k[1]+'</h2><p>'+k[2]+'</p></div>').join('');
-    const openRows=open.sort((a,b)=>(b.age||0)-(a.age||0)).map(x=>{
-      const band=x.age==null?'Unknown':x.age>=168?'Over 7 days – confirm':x.age>=72?'72 h – 7 days':x.age>=24?'24 – 72 h':'Under 24 h';
-      return [esc(x.id||'—'),esc(x.shaft||'—'),esc(x.dt?x.dt.toLocaleString():'—'),x.age==null?'—':x.age.toFixed(1),esc(band),esc(x.reported||'—'),esc(x.found||'—')];
+    let hist = all.filter(isFailure).map(build).filter(x => x.dt);
+    if (shaft) hist = hist.filter(x => x.shaft === shaft);
+    if (type) hist = hist.filter(x => x.typeName === type);
+    if (cls) hist = hist.filter(x => x.mode === cls);
+    // Effective downtime: recorded → measured from timestamps → open age → median estimate (flagged)
+    hist.forEach(x => {
+      if (x.duration) x.hours = Math.min(168, x.duration);
+      else if (x.rep && x.rep >= x.dt) x.hours = Math.min(168, hb(x.dt, x.rep));
+      else if (!x.closed) x.hours = x.age;
+      else { const m = window.rbeEstimatedRepairH ? window.rbeEstimatedRepairH(x.u) : null; x.hours = m; x.est = m != null; }
     });
-    table('ri-open-table',7,openRows,'No open breakdowns in the selected 90-day view.');
-    const repeats=[];
-    const sorted=rows.filter(x=>x.id).sort((a,b)=>a.dt-b.dt);
-    for(let i=1;i<sorted.length;i++){
-      const a=sorted[i-1],b=sorted[i];
-      const modeA=(a.found||a.reported).toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-      const modeB=(b.found||b.reported).toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-      const days=(b.dt-a.dt)/86400000;
-      if(a.id===b.id && modeA && modeB && (modeA===modeB || modeA.includes(modeB) || modeB.includes(modeA)) && days<=7)
-        repeats.push([esc(b.id),esc(b.shaft||'—'),esc(b.found||b.reported||'—'),esc(a.dt.toLocaleString()),esc(b.dt.toLocaleString()),days.toFixed(1)]);
-    }
-    table('ri-repeat-table',6,repeats,'No similar same-equipment events detected within seven days.');
-    const explanations={
-      'Missing equipment ID':'Cannot reliably assign the event to an asset.',
-      'Missing shaft':'Weakens shaft-level comparisons and scheduled-hour settings.',
-      'Missing report date/time':'Cannot place the event in the correct reliability period.',
-      'Repair time before report time':'Invalid timestamps can create negative repair durations.',
-      'Missing repair timestamp on closed event':'MTTR cannot be calculated from measured repair time.',
-      'Missing downtime value':'Downtime totals may be understated.',
-      'Missing fault found / artisan report':'Failure-mode analysis must rely on the reported symptom.',
-      'Missing workplace or section':'Event-location hotspot analysis is incomplete.'
+    const rows = hist.filter(x => x.dt >= start90 && x.dt <= now);
+    lastRows = rows;
+    const ef = rows.filter(x => EQ.has(x.mode));
+    const open = rows.filter(x => !x.closed).sort((a, b) => (b.rawAge || 0) - (a.rawAge || 0));
+    const hrs = a => a.reduce((s, x) => s + (x.hours || 0), 0);
+
+    // Repeats (same equipment + same fault group within 7 days; flag ≤72 h)
+    const repeats = [], byId = new Map();
+    rows.filter(x => x.id).forEach(x => { const k = x.id + '|' + x.shaft; (byId.get(k) || byId.set(k, []).get(k)).push(x); });
+    byId.forEach(list => { list.sort((a, b) => a.dt - b.dt); for (let i = 1; i < list.length; i++) { const a = list[i-1], b = list[i], g = hb(a.dt, b.dt); if (g <= 168 && a.lab === b.lab && a.lab !== 'Other') repeats.push({a, b, g}); } });
+    repeats.sort((x, y) => x.g - y.g);
+
+    // Data quality (per event)
+    const reg = new Set(register.map(eqId)), seen = new Map(), dupKeys = new Set();
+    rows.forEach(x => { const k = x.id + '|' + x.dt.getTime() + '|' + x.reported.toLowerCase(); if (seen.has(k)) dupKeys.add(x); else seen.set(k, 1); });
+    const ISS = {
+      'Missing equipment ID': x => !x.id, 'Missing shaft': x => !x.shaft,
+      'Repair time before report time': x => x.rep && x.rep < x.dt,
+      'Duplicate row': x => dupKeys.has(x), 'Duration capped at 168 h': x => (x.duration && x.duration > 168) || (x.rawAge != null && x.rawAge > 168),
+      'Unrecognised equipment ID': x => x.id && !reg.has(x.id.toUpperCase()),
+      'Closed without repair time or duration': x => x.closed && !x.rep && !x.duration,
+      'Missing fault found': x => !x.found, 'Missing workplace / section': x => !x.workplace && !x.section};
+    const issueCount = {}; rows.forEach(x => { x.bad = 0; for (const k in ISS) if (ISS[k](x)) { issueCount[k] = (issueCount[k] || 0) + 1; x.bad++; } });
+    const score = list => list.length ? Math.round(100 * list.filter(x => !x.bad).length / list.length) : null;
+    const scoreC = s => s == null ? '' : s >= 90 ? 'g' : s >= 70 ? 'o' : 'r';
+    const dq = score(rows);
+
+    // Per-shaft performance
+    const eqByShaft = new Map(); scoped.forEach(e => { if (type && eqType(e) !== type) return; const s = txt(e.shaft); (eqByShaft.get(s) || eqByShaft.set(s, new Set()).get(s)).add(eqId(e)); });
+    const shafts = [...new Set([...eqByShaft.keys(), ...rows.map(x => x.shaft)])].filter(s => s && (!shaft || s === shaft)).sort();
+    const stat = (s, evs, days, to) => {
+      const from = new Date((to || now) - days * 864e5), list = evs.filter(x => x.shaft === s && x.dt >= from && x.dt <= (to || now) && EQ.has(x.mode));
+      const n = (eqByShaft.get(s) || new Set(list.map(x => x.id))).size, hpd = setting('sched', s, 24), sched = n * days * hpd, d = Math.min(hrs(list), sched);
+      const meas = list.filter(x => !x.est && x.hours != null).map(x => x.hours);
+      return {n, f: list.length, down: hrs(list), est: list.filter(x => x.est).length, avail: sched ? 100 * (1 - d / sched) : null, mtbf: list.length && sched ? (sched - d) / list.length : null, mttr: avg(meas), target: setting('target', s, 90)};
     };
-    table('ri-quality-table',3,Object.entries(quality).map(([k,v])=>[esc(k),'<strong>'+v+'</strong>',esc(explanations[k])]),'No data-quality issues detected.');
-    const loc=new Map(), shifts=new Map(), classes={Mechanical:0,Electrical:0,Derailment:0,Operational:0,Unclassified:0}, equipDown=new Map();
-    rows.forEach(x=>{
-      classes[x.mode]=(classes[x.mode]||0)+1;
-      const place=[x.workplace,x.section].filter(Boolean).join(' / ')||'Location not recorded';
-      const cur=loc.get(place)||{n:0,h:0};cur.n++;cur.h+=x.duration||0;loc.set(place,cur);
-      const sh=x.shift||'Shift not recorded';const sc=shifts.get(sh)||{n:0,first:0,configured:false};sc.n++;
-      const startInput=$('ri-start-'+sh.trim().toUpperCase());
-      const startVal=startInput&&startInput.value?startInput.value:'';
-      if(startVal){
-        const parts=startVal.split(':').map(Number), startMins=parts[0]*60+parts[1];
-        const eventMins=x.dt.getHours()*60+x.dt.getMinutes();
-        const delta=(eventMins-startMins+1440)%1440;
-        if(delta<60) sc.first++;
-        sc.configured=true;
+    const st = shafts.map(s => ({s, ...stat(s, hist, 90), w1: stat(s, hist, 7), w0: stat(s, hist, 7, new Date(now - 7 * 864e5)), m1: stat(s, hist, 30), m0: stat(s, hist, 30, new Date(now - 30 * 864e5))}));
+    const best = Math.max(...st.map(x => x.avail == null ? -1 : x.avail), -1);
+    const tot = st.reduce((o, x) => ({n: o.n + x.n, f: o.f + x.f, down: o.down + x.down, est: o.est + x.est}), {n: 0, f: 0, down: 0, est: 0});
+    const schedAll = st.reduce((s, x) => s + x.n * 90 * setting('sched', x.s, 24), 0);
+    const availAll = schedAll ? 100 * (1 - Math.min(tot.down, schedAll) / schedAll) : null;
+    const mtbfAll = tot.f && schedAll ? (schedAll - Math.min(tot.down, schedAll)) / tot.f : null;
+    const mttrAll = avg(ef.filter(x => !x.est && x.hours != null).map(x => x.hours));
+    const rr = rows.length ? 100 * repeats.length / rows.length : 0;
+    const old24 = open.filter(x => x.rawAge >= 24).length, old72 = open.filter(x => x.rawAge >= 72).length, old7 = open.filter(x => x.rawAge >= 168).length;
+    const tgtAll = setting('target', shaft, 90);
+
+    const kp = [
+      ['Equipment failures', tot.f || ef.length, (rows.length - ef.length) + ' operational / derailment excluded', 'blue'],
+      ['Downtime', n1(hrs(ef)) + ' h', tot.est ? tot.est + ' estimated' : 'All measured', 'blue'],
+      ['Availability', availAll == null ? '—' : availAll.toFixed(1) + '%', 'Target ' + tgtAll + '%', availAll == null ? 'blue' : availAll >= tgtAll ? 'green' : 'red'],
+      ['MTBF (scheduled)', mtbfAll == null ? '—' : mtbfAll.toFixed(1) + ' h', setting('sched', shaft, 24) + ' h/day', 'blue'],
+      ['MTTR (measured)', mttrAll == null ? '—' : mttrAll.toFixed(1) + ' h', 'Estimates excluded', 'blue'],
+      ['Open breakdowns', open.length, old7 + ' over 7 days', open.length ? 'orange' : 'green'],
+      ['Repeat rate', rr.toFixed(1) + '%', repeats.length + ' repeats within 7 days', rr > 10 ? 'orange' : 'blue'],
+      ['Data quality', dq == null ? '—' : dq + '%', Object.values(issueCount).reduce((a, b) => a + b, 0) + ' issues', dq == null ? 'blue' : dq >= 90 ? 'green' : dq >= 70 ? 'orange' : 'red']];
+    $('ri-kpis').innerHTML = kp.map(k => '<div class="kpi-card ' + k[3] + '"><p>' + k[0] + '</p><h2>' + k[1] + '</h2><p>' + k[2] + '</p></div>').join('');
+
+    // Charts
+    const eqDown = new Map(), modeDown = new Map(), classes = {Mechanical: 0, Electrical: 0, Derailment: 0, Operational: 0, Unclassified: 0};
+    rows.forEach(x => { classes[x.mode]++; if (EQ.has(x.mode)) { const k = x.id || 'Not recorded'; eqDown.set(k, (eqDown.get(k) || 0) + (x.hours || 0)); modeDown.set(x.lab, (modeDown.get(x.lab) || 0) + (x.hours || 0)); } });
+    pareto('ri-pareto', [...eqDown.entries()], '#0369a1');
+    pareto('ri-pareto-mode', [...modeDown.entries()], '#0f766e');
+    chart('ri-class-chart', {type: 'doughnut', data: {labels: Object.keys(classes), datasets: [{data: Object.values(classes), backgroundColor: ['#0369a1','#d97706','#b91c1c','#64748b','#a78bfa']}]}, options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position: 'bottom', labels: {boxWidth: 12}}}}});
+
+    // Open breakdowns
+    $('ri-open-chips').innerHTML = chip('Over 24 h: ' + old24, old24 ? 'o' : 'g') + chip('Over 72 h: ' + old72, old72 ? 'o' : 'g') + chip('Over 7 days: ' + old7, old7 ? 'r' : 'g');
+    const band = a => a >= 168 ? 'Over 7 days – confirm' : a >= 72 ? '72 h – 7 days' : a >= 24 ? '24 – 72 h' : 'Under 24 h';
+    pagedTable('ri-open-table', open.map(x => [C(esc(x.id || '—'), 'nw'), C(esc(x.shaft || '—'), 'nw'), C(fmt(x.dt), 'nw'),
+      C(x.rawAge >= 168 ? '>' + (x.rawAge / 24).toFixed(1) + ' d' : x.age.toFixed(1) + ' h', 'nw num'),
+      C(chip(band(x.rawAge), x.rawAge >= 168 ? 'r' : x.rawAge >= 72 ? 'o' : ''), 'nw'), C(esc(x.reported || '—'), 'wrap'), C(esc(x.found || '—'), 'wrap')]), 7, 'No open breakdowns.', 15);
+
+    // Shaft performance
+    const dlt = (a, b) => a == null || b == null ? '—' : (a - b >= 0 ? '+' : '') + (a - b).toFixed(1) + ' pp';
+    pagedTable('ri-shaft-table', st.map(x => [C('<strong>' + esc(x.s) + '</strong>', 'nw'), C(x.n, 'num'), C(x.f, 'num'), C(n1(x.down) + (x.est ? '<span class="ri-est">' + x.est + ' est.</span>' : ''), 'num nw'),
+      C(x.avail == null ? '—' : chip(x.avail.toFixed(1) + '%', x.avail >= x.target ? 'g' : 'r'), 'nw'), C(x.target + '%', 'num'), C(n1(x.mtbf), 'num'), C(n1(x.mttr), 'num'),
+      C(dlt(x.w1.avail, x.w0.avail), 'num nw'), C(dlt(x.m1.avail, x.m0.avail), 'num nw'), C(x.avail == null || best < 0 ? '—' : dlt(x.avail, best), 'num nw')]), 11, 'No shaft data.', 15);
+
+    // Weekly action list
+    const acts = [];
+    open.forEach(x => acts.push([chip('Open breakdown', x.rawAge >= 168 ? 'r' : 'o'), C(esc(x.id) + ' · ' + esc(x.shaft || '—'), 'nw'), esc(x.reported || '—') + ' — ' + (x.rawAge >= 168 ? 'confirm closed' : x.age.toFixed(0) + ' h open')]));
+    // Forecast
+    const fc = [], ehist = new Map();
+    hist.filter(x => EQ.has(x.mode) && x.id).forEach(x => { const k = x.id + '|' + x.shaft; (ehist.get(k) || ehist.set(k, []).get(k)).push(x); });
+    const typeGaps = new Map(); const gapsOf = list => { const s = [...list].sort((a, b) => a.dt - b.dt), g = []; for (let i = 1; i < s.length; i++) g.push(hb(s[i-1].dt, s[i].dt) / 24); return g; };
+    ehist.forEach(list => { const t = list[0].typeName; if (t) { const g = gapsOf(list); (typeGaps.get(t) || typeGaps.set(t, []).get(t)).push(...g); } });
+    ehist.forEach(list => {
+      const x0 = list[0], since = lst => hb(Math.max(...lst.map(x => x.dt)), now) / 24;
+      if (list.length >= 3) {
+        const by = new Map(); list.forEach(x => (by.get(x.lab) || by.set(x.lab, []).get(x.lab)).push(x));
+        by.forEach((l, lab) => { if (l.length < 3) return; const g = gapsOf(l), m = avg(g), sd = Math.sqrt(avg(g.map(v => (v - m) ** 2))), cv = m ? sd / m : 0; fc.push({x: x0, lab, n: l.length, m, cv, since: since(l), ratio: m ? since(l) / m : null, basis: 'Own history'}); });
+      } else {
+        const m = avg(typeGaps.get(x0.typeName) || []); if (m) fc.push({x: x0, lab: 'All faults', n: list.length, m, cv: null, since: since(list), ratio: since(list) / m, basis: 'Type average'});
       }
-      shifts.set(sh,sc);
-      const ek=x.id||'Equipment not recorded';equipDown.set(ek,(equipDown.get(ek)||0)+(x.duration||0));
     });
-    table('ri-location-table',3,[...loc.entries()].sort((a,b)=>b[1].h-a[1].h).slice(0,12).map(([k,v])=>[esc(k),v.n,v.h.toFixed(1)]),'No workplace/section values recorded.');
-    table('ri-shift-table',4,[...shifts.entries()].map(([k,v])=>[esc(k),v.configured?v.first:'Not configured',v.n,v.configured&&v.n?(100*v.first/v.n).toFixed(1)+'%':'Set shift start time above']),'No shift data recorded.');
-    if (window.Chart) {
-      const top=[...equipDown.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
-      const pc=$('ri-pareto'); if(pc){if(paretoChart)paretoChart.destroy();paretoChart=new Chart(pc,{type:'bar',data:{labels:top.map(x=>x[0]),datasets:[{label:'Recorded downtime (h)',data:top.map(x=>Number(x[1].toFixed(1)))}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}}}});}
-      const cc=$('ri-class-chart');if(cc){if(classChart)classChart.destroy();classChart=new Chart(cc,{type:'doughnut',data:{labels:Object.keys(classes),datasets:[{data:Object.values(classes)}]},options:{responsive:true,maintainAspectRatio:false}});}
-    }
+    fc.sort((a, b) => (b.ratio || 0) - (a.ratio || 0));
+    fc.filter(f => f.ratio >= 1).forEach(f => acts.push([chip('Overdue by pattern', 'o'), C(esc(f.x.id) + ' · ' + esc(f.x.shaft || '—'), 'nw'), esc(f.lab) + ' — ' + f.ratio.toFixed(1) + '× mean interval']));
+    repeats.filter(r => r.g <= 72).forEach(r => acts.push([chip('Repeat ≤72 h', 'r'), C(esc(r.b.id) + ' · ' + esc(r.b.shaft || '—'), 'nw'), esc(r.b.lab) + ' — repeat after ' + r.g.toFixed(0) + ' h']));
+    Object.entries(issueCount).forEach(([k, v]) => acts.push([chip('Data error', ''), C(esc(k), 'nw'), v + ' record' + (v > 1 ? 's' : '') + ' to correct']));
+    pagedTable('ri-action-table', acts, 3, 'Nothing to action this week.', 15);
+    pagedTable('ri-forecast-table', fc.map(f => [C('<strong>' + esc(f.x.id) + '</strong>', 'nw'), C(esc(f.x.shaft || '—'), 'nw'), esc(f.lab), C(f.n, 'num'), C(n1(f.m), 'num'),
+      C(f.cv == null ? '—' : chip(f.cv < .5 ? 'Consistent' : f.cv < 1 ? 'Moderate' : 'Erratic', f.cv < .5 ? 'g' : f.cv < 1 ? 'o' : 'r'), 'nw'), C(n1(f.since), 'num'),
+      C(f.ratio == null ? '—' : chip(f.ratio.toFixed(2) + '×', f.ratio >= 1 ? 'r' : f.ratio >= .75 ? 'o' : 'g'), 'nw'), C(esc(f.basis), 'nw')]), 9, 'Not enough history (3 failures per mode needed).', 15);
+
+    // Repeats
+    pagedTable('ri-repeat-table', repeats.map(r => [C('<strong>' + esc(r.b.id) + '</strong>', 'nw'), C(esc(r.b.shaft || '—'), 'nw'), C(esc(r.b.found || r.b.reported || r.b.lab), 'wrap'), C(fmt(r.a.dt), 'nw'), C(fmt(r.b.dt), 'nw'), C(r.g.toFixed(0), 'num'), C(chip(r.g <= 72 ? '≤72 h' : '≤7 days', r.g <= 72 ? 'r' : 'o'), 'nw'), C(esc(r.a.team), 'nw')]), 8, 'No repeat failures.', 15);
+    const grp = (keyFn) => { const m = new Map(); rows.forEach(x => { const k = keyFn(x) || '—', o = m.get(k) || {n: 0, r: 0}; o.n++; m.set(k, o); }); repeats.forEach(r => { const o = m.get(keyFn(r.a) || '—'); if (o) o.r++; }); return [...m.entries()].sort((a, b) => b[1].r - a[1].r || b[1].n - a[1].n).map(([k, v]) => [C(esc(k), 'wrap'), C(v.n, 'num'), C(v.r, 'num'), C(chip((100 * v.r / v.n).toFixed(0) + '%', v.r / v.n > .15 ? 'r' : ''), 'nw')]); };
+    pagedTable('ri-repeat-shaft', grp(x => x.shaft), 4, 'No data.', 15);
+    pagedTable('ri-repeat-team', grp(x => x.team), 4, 'No data.', 15);
+
+    // Data quality tables
+    pagedTable('ri-quality-table', Object.keys(ISS).map(k => [esc(k), C('<strong>' + (issueCount[k] || 0) + '</strong>', 'num')]), 2, '', 15);
+    const sc = keyFn => { const m = new Map(); rows.forEach(x => { const k = keyFn(x) || '—'; (m.get(k) || m.set(k, []).get(k)).push(x); }); return [...m.entries()].sort().map(([k, l]) => { const s = score(l); return [C(esc(k), 'wrap'), C(l.length, 'num'), C(chip(s + '%', scoreC(s)), 'nw')]; }); };
+    pagedTable('ri-dq-shaft', sc(x => x.shaft), 3, 'No data.', 15);
+    pagedTable('ri-dq-shift', sc(x => x.shift), 3, 'No data.', 15);
+
+    // Hotspots and shift start
+    const loc = new Map();
+    rows.forEach(x => { const p = [x.workplace, x.section].filter(Boolean).join(' / ') || 'Not recorded', o = loc.get(p) || {n: 0, d: 0, h: 0}; o.n++; if (x.mode === 'Derailment') o.d++; o.h += x.hours || 0; loc.set(p, o); });
+    pagedTable('ri-location-table', [...loc.entries()].sort((a, b) => b[1].h - a[1].h).map(([k, v]) => [C(esc(k), 'wrap'), C(v.n, 'num'), C(v.d >= 3 ? chip(v.d + ' · check track', 'r') : v.d, 'num nw'), C(n1(v.h), 'num')]), 4, 'No locations recorded.', 15);
+    const sh = new Map();
+    rows.forEach(x => { const o = sh.get(x.shift) || {n: 0, f: 0, cfg: false}, k = (x.shift[0] || '').toUpperCase(), v = S.start[k]; o.n++;
+      if (v) { const p = v.split(':').map(Number); o.cfg = true; if (((x.dt.getHours() * 60 + x.dt.getMinutes()) - (p[0] * 60 + p[1]) + 1440) % 1440 < 60) o.f++; } sh.set(x.shift, o); });
+    pagedTable('ri-shift-table', [...sh.entries()].map(([k, v]) => [esc(k), C(v.cfg ? v.f : '—', 'num'), C(v.n, 'num'), C(v.cfg && v.n ? chip((100 * v.f / v.n).toFixed(0) + '%', v.f / v.n > .25 ? 'o' : '') : 'Set start time', 'nw')]), 4, 'No shift data.', 15);
+
+    // Fault dictionary + mismatch
+    const ph = new Map(); rows.filter(x => x.lab === 'Other' || x.mode === 'Unclassified').forEach(x => { const p = (x.found || x.reported || 'No reason provided').toLowerCase().replace(/\s+/g, ' ').slice(0, 70); ph.set(p, (ph.get(p) || 0) + 1); });
+    pagedTable('ri-phrase-table', [...ph.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => [C(esc(k), 'wrap'), C(v, 'num')]), 2, 'Every fault matched the dictionary.', 15);
+    const mm = new Map(); rows.filter(x => x.found && x.reported).forEach(x => { const o = mm.get(x.labRep) || {n: 0, d: 0}; o.n++; if (x.lab !== x.labRep) o.d++; mm.set(x.labRep, o); });
+    pagedTable('ri-mismatch-table', [...mm.entries()].sort((a, b) => b[1].d / b[1].n - a[1].d / a[1].n).map(([k, v]) => [esc(k), C(v.n, 'num'), C(v.d, 'num'), C(chip((100 * v.d / v.n).toFixed(0) + '%', v.d / v.n > .4 ? 'r' : v.d / v.n > .2 ? 'o' : 'g'), 'nw')]), 4, 'No paired reports.', 15);
   }
-  window.rbeReliabilityRefresh=render;
-  window.rbeReliabilityExport=function(){
-    const lines=[['Equipment','Shaft','Date reported','Shift','Reported fault','Fault found','Classification','Recorded downtime hours','Open']];
-    lastRows.forEach(x=>lines.push([x.id,x.shaft,x.dt?x.dt.toISOString():'',x.shift,x.reported,x.found,x.mode,x.duration==null?'':x.duration,isClosed(x.u)?'No':'Yes']));
-    const csv=lines.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
-    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-    a.href=url;a.download='RBE_Reliability_Review_90_Day.csv';a.click();URL.revokeObjectURL(url);
+
+  window.rbeReliabilityRefresh = render;
+  window.rbeReliabilityExport = function () {
+    const L = [['Equipment','Shaft','Reported','Shift','Reported fault','Fault found','Class','Fault group','Downtime h','Estimated','Open','Repair team']];
+    lastRows.forEach(x => L.push([x.id, x.shaft, x.dt ? x.dt.toISOString() : '', x.shift, x.reported, x.found, x.mode, x.lab, x.hours == null ? '' : x.hours.toFixed(2), x.est ? 'Yes' : 'No', x.closed ? 'No' : 'Yes', x.team]));
+    const csv = L.map(r => r.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const a = document.createElement('a'), url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8;'}));
+    a.href = url; a.download = 'RBE_Reliability_Review_90_Day.csv'; a.click(); URL.revokeObjectURL(url);
   };
-  document.addEventListener('click',e=>{
-    const item=e.target.closest('#sidebar-menu li[data-section="reliability-improvement"]');
-    if(item) setTimeout(render,80);
+  const sec = () => $('reliability-improvement');
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.ri-more-btn');
+    if (b && sec() && sec().contains(b)) { const id = b.dataset.id; expanded[id] = !expanded[id]; const p = pg[id]; if (p) pagedTable(id, p.rows, p.cols, p.empty, p.n); return; }
+    if (e.target.closest('#sidebar-menu li[data-section="reliability-improvement"]')) setTimeout(render, 80);
   });
-  window.addEventListener('rbe:data-updated',render);
+  document.addEventListener('input', e => {
+    const id = e.target.id; if (!sec() || !sec().contains(e.target)) return;
+    const k = $('ri-shaft').value || '*';
+    if (id === 'ri-sched' || id === 'ri-target') { const m = id === 'ri-sched' ? S.sched : S.target, v = Number(e.target.value); if (v > 0) { m[k] = v; save(); render(); } }
+    else if (/^ri-start-[MAN]$/.test(id)) { S.start[id.slice(-1)] = e.target.value; save(); render(); }
+  });
+  window.addEventListener('rbe:data-updated', render);
 })();
 </script>
 
