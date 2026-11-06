@@ -2689,6 +2689,12 @@
         if (!k) continue;
         let a = _plain.get(k); if (!a) _plain.set(k, a = []); a.push(u);
       }
+      // Collapse near-duplicate rows per equipment so metrics / patterns do not double-count imports
+      if (typeof dedupeStatusUpdates === 'function') {
+        for (const [k, arr] of _plain) {
+          if (arr.length > 1) _plain.set(k, dedupeStatusUpdates(arr));
+        }
+      }
       window._updByPlain = _plain; window._updByPlainRef = updates; window._updByPlainLen = updates.length;
       window._statusCache && window._statusCache.clear();
       scheduleRefresh({ textMining: false });
@@ -3461,6 +3467,52 @@
     return false;
   }
   window.isFailureEvent = isFailureEvent;
+
+  /** Normalise reason text for near-duplicate detection (typos / spacing). */
+  function _normReasonKey(s) {
+    return String(s || '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80);
+  }
+
+  /**
+   * Collapse near-duplicate status rows for display & analytics.
+   * Same equipment + date + time + status + similar reason → keep one
+   * (prefer longer reason, explicit downtime, failure flag).
+   */
+  function dedupeStatusUpdates(list) {
+    if (!Array.isArray(list) || list.length < 2) return list || [];
+    const buckets = new Map();
+    list.forEach(function (u) {
+      const id = (typeof normaliseEquipId === 'function')
+        ? normaliseEquipId(u.equipmentId || u.locoNumber || '')
+        : String(u.equipmentId || u.locoNumber || '').toUpperCase();
+      const d = String(u.date || '').slice(0, 10);
+      const t = String(u.time || '').slice(0, 5);
+      const st = String(u.statusCode || u.status || '').trim().toLowerCase();
+      const rk = _normReasonKey(u.reason || u.fault || '');
+      // Primary key ignores minor reason typos by using a short fingerprint
+      const rkShort = rk.split(' ').slice(0, 8).join(' ');
+      const key = [id, d, t, st, rkShort].join('|');
+      const prev = buckets.get(key);
+      if (!prev) { buckets.set(key, u); return; }
+      const score = function (x) {
+        let s = 0;
+        const hrs = Number(x.downtimeHours != null ? x.downtimeHours : (x.downtime || 0)) || 0;
+        if (hrs > 0) s += 10;
+        if (x.isFailure === '1' || x.isFailure === 1 || x.isFailure === true) s += 5;
+        s += String(x.reason || x.fault || '').length;
+        if (x.shift) s += 2;
+        if (x.reportedBy || x.operator) s += 2;
+        return s;
+      };
+      if (score(u) > score(prev)) buckets.set(key, u);
+    });
+    return Array.from(buckets.values());
+  }
+  window.dedupeStatusUpdates = dedupeStatusUpdates;
 
   function isFixedLikeEvent(u) {
     if (!u) return false;
@@ -4915,18 +4967,28 @@
     const byShift = { Morning:0, Afternoon:0, Night:0, Unknown:0 };
     const byHourBand = { '00-06':0, '06-12':0, '12-18':0, '18-24':0 };
     let failureEvents = [];
-    // Same universe as getEquipmentStatus: period-filtered updates for this equipment
+    // Full equipment history (not only the short dashboard period) so day/shift patterns can form.
+    // Period-only windows often have 0–1 events → "Insufficient failure history".
     const st = (typeof getEquipmentStatus === 'function') ? getEquipmentStatus(id) : { status: 'Up', shaft: parsed.shaft || '' };
     const currentlyDown = (st.status === 'Down' || st.status === 'Restricted');
-    const allForEquip = (typeof getFilteredUpdates === 'function' ? getFilteredUpdates() : (updates || [])).filter(u => {
+    const pool = (typeof getScopedUpdates === 'function')
+      ? getScopedUpdates()
+      : ((typeof updates !== 'undefined' && updates) ? updates : []);
+    let allForEquip = pool.filter(u => {
       if (normaliseEquipId(u.equipmentId || u.locoNumber || '') !== displayId) return false;
       const wantShaft = parsed.shaft || st.shaft || '';
       if (wantShaft && wantShaft !== '—') {
         const us = normaliseShaftName(u.shaft || '');
+        // Include shaft-less rows for this ID (common on imports)
         if (us) return shaftsMatch(us, wantShaft);
       }
       return true;
     });
+    // Fall back to global updates if scope filtered everything out but the ID exists
+    if (!allForEquip.length && typeof updates !== 'undefined' && updates && updates.length) {
+      allForEquip = updates.filter(u => normaliseEquipId(u.equipmentId || u.locoNumber || '') === displayId);
+    }
+    allForEquip = dedupeStatusUpdates(allForEquip);
     const asc = allForEquip.slice().sort((a, b) => {
       const da = _eventTimeMs(a), db = _eventTimeMs(b);
       if (da !== db) return da - db;
@@ -4938,8 +5000,18 @@
     const updates = failIdxs.map(i => asc[i]);
     updates.forEach((u, k) => {
       const i = failIdxs[k];
-      const d = u.date ? new Date(u.date + (u.time ? 'T' + u.time : 'T12:00:00')) : null;
-      if (d && !isNaN(d.getTime())) {
+      // Parse date+time in a timezone-stable way (local components from logged fields)
+      let d = null;
+      const dayStr = String(u.date || '').slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dayStr)) {
+        const tm = String(u.time || '12:00').trim();
+        const hm = tm.match(/^(\d{1,2}):(\d{2})/);
+        const hh = hm ? Math.min(23, parseInt(hm[1], 10)) : 12;
+        const mm = hm ? Math.min(59, parseInt(hm[2], 10)) : 0;
+        d = new Date(parseInt(dayStr.slice(0, 4), 10), parseInt(dayStr.slice(5, 7), 10) - 1, parseInt(dayStr.slice(8, 10), 10), hh, mm, 0);
+        if (isNaN(d.getTime())) d = null;
+      }
+      if (d) {
         byDay[dayNames[d.getDay()]]++;
         const h = d.getHours();
         if (h < 6) byHourBand['00-06']++;
@@ -4949,7 +5021,7 @@
       }
       let sh = String(u.shift || '').trim();
       if (!sh) {
-        if (d && !isNaN(d.getTime())) {
+        if (d) {
           const h = d.getHours();
           sh = h >= 6 && h < 14 ? 'Morning' : (h >= 14 && h < 22 ? 'Afternoon' : 'Night');
         } else sh = 'Unknown';
@@ -7344,12 +7416,9 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     if (reasonFilter) filtered = filtered.filter(u => String(u.reason || u.fault || '').toLowerCase().includes(reasonFilter));
     filtered = filtered.filter(u => !isUnknownEquipmentId(u.equipmentId || u.locoNumber));
 
-    const seen = new Set();
-    filtered = filtered.filter(u => {
-      const key = [u.equipmentId||'', u.date||'', u.time||'', String(u.status||'').toLowerCase(), String(u.reason||'').trim().toLowerCase()].join('|');
-      if (seen.has(key)) return false;
-      seen.add(key); return true;
-    }).sort((a, b) => String((b.date||'')+' '+(b.time||'')).localeCompare(String((a.date||'')+' '+(a.time||''))));
+    filtered = (typeof dedupeStatusUpdates === 'function' ? dedupeStatusUpdates(filtered) : filtered)
+      .slice()
+      .sort((a, b) => String((b.date||'')+' '+(b.time||'')).localeCompare(String((a.date||'')+' '+(a.time||''))));
 
     const profileCard = document.getElementById('equipment-profile');
     const profileBody = document.getElementById('equipment-profile-body');
