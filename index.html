@@ -9039,26 +9039,26 @@ window.RBE = {
 </body>
 
 <!-- Ask RBE Chatbot -->
-<button type="button" id="rbe-chat-fab" title="Ask RBE about your data" aria-label="Open Ask RBE">
+<button type="button" id="rbe-chat-fab" title="Ask RBE — platform help & live data" aria-label="Open Ask RBE">
   <i class="fas fa-comments"></i>
 </button>
 <div id="rbe-chat-panel" role="dialog" aria-label="Ask RBE">
   <div id="rbe-chat-header">
     <div>
       <div class="title"><i class="fas fa-robot"></i> Ask RBE</div>
-      <div class="sub">Answers from live, shaft-scoped data</div>
+      <div class="sub">Platform guide + live shaft-scoped data</div>
     </div>
     <button type="button" id="rbe-chat-clear" title="Clear"><i class="fas fa-eraser"></i></button>
     <button type="button" id="rbe-chat-close" title="Close"><i class="fas fa-times"></i></button>
   </div>
   <div id="rbe-chat-messages"></div>
   <div id="rbe-chat-input-wrap">
-    <input type="text" id="rbe-chat-input" placeholder="e.g. brake faults on 11 shaft this week" autocomplete="off">
+    <input type="text" id="rbe-chat-input" placeholder="e.g. where is MTBF? · brake faults on 11 shaft" autocomplete="off">
     <button type="button" id="rbe-chat-send"><i class="fas fa-paper-plane"></i></button>
   </div>
 </div>
 <script>
-/* Ask RBE v3.1 — grounded Q&A: interpretation, memory, app-aligned helpers */
+/* Ask RBE v3.2 — platform guide + live data Q&A (Enterprise 2.6) */
 (function () {
   var fab = document.getElementById('rbe-chat-fab');
   var panel = document.getElementById('rbe-chat-panel');
@@ -9110,9 +9110,10 @@ window.RBE = {
     var ready = dataReady();
     var chip = filterChip();
     addMsg(
-      '<strong>Ask RBE</strong> — ask about equipment, faults, shafts, downtime, counts, or maintenance.<br><br>' +
-      'Examples: <em>brake faults on 11 shaft this week</em> · <em>which loco has highest downtime</em> · ' +
-      '<em>who reported antenna issues</em> · <em>overdue maintenance</em> · <em>is 511 safe to use?</em>' +
+      '<strong>Ask RBE</strong> — official assistant for <em>RBE Monitor Enterprise 2.6</em>.<br>' +
+      'Ask anything about the platform (screens, workflows, metrics) <strong>or</strong> your live equipment data.<br><br>' +
+      '<strong>Platform:</strong> <em>where is MTBF?</em> · <em>how do I import a PDF?</em> · <em>what is Reliability Center?</em><br>' +
+      '<strong>Data:</strong> <em>brake faults on 11 shaft this week</em> · <em>highest downtime</em> · <em>is 511 safe?</em> · <em>overdue PM</em>' +
       '<div class="meta" style="margin-top:0.5rem">' +
       (ready
         ? ('Live data linked: ' + nEq + ' equipment · ' + nUp + ' status events · ' + nMt + ' maintenance · scope ' + esc(chip))
@@ -9166,83 +9167,351 @@ window.RBE = {
   };
 
   function safe(fn, fb) {
-    try { return fn(); } catch (e) { console.warn('[AskRBE]', e); return fb; }
+    try { return fn(); } catch (e) { return fb; }
   }
-
-  /* ── App-aligned data access (no silent full-list fallback when filters intentionally empty) ── */
   function filteredEq() {
-    var r = api(); if (!r) return [];
-    return safe(function () { return r.getFilteredEquipment(); }, []) || [];
+    var r = api();
+    if (!r || !r.equipment) return [];
+    return safe(function () { return r.getFilteredEquipment ? r.getFilteredEquipment() : r.equipment; }, r.equipment || []);
   }
   function filteredUp() {
-    var r = api(); if (!r) return [];
-    return safe(function () { return r.getFilteredUpdates(); }, []) || [];
+    var r = api();
+    if (!r || !r.updates) return [];
+    return safe(function () { return r.getFilteredUpdates ? r.getFilteredUpdates() : r.updates; }, r.updates || []);
   }
   function allScopedUp() {
-    var r = api(); if (!r) return [];
-    return safe(function () { return r.getScopedUpdates(); }, []) || [];
+    var r = api();
+    if (!r || !r.updates) return [];
+    return safe(function () { return r.getScopedUpdates ? r.getScopedUpdates() : r.updates; }, r.updates || []);
   }
   function filteredMt() {
-    var r = api(); if (!r) return [];
-    return safe(function () { return r.getFilteredMaintenance(); }, []) || [];
+    var r = api();
+    if (!r || !r.maintenance) return [];
+    return safe(function () { return r.getFilteredMaintenance ? r.getFilteredMaintenance() : r.maintenance; }, r.maintenance || []);
   }
   function eqStatus(id) {
-    var r = api(); return r ? safe(function () { return r.getEquipmentStatus(id); }, null) : null;
+    var r = api();
+    if (!r || !r.getEquipmentStatus) return null;
+    return safe(function () { return r.getEquipmentStatus(id); }, null);
   }
   function relMetrics(id) {
-    var r = api(); return r ? safe(function () { return r.getReliabilityMetrics(id); }, null) : null;
+    var r = api();
+    if (!r || !r.getReliabilityMetrics) return null;
+    return safe(function () { return r.getReliabilityMetrics(id); }, null);
   }
   function isFail(u) {
     var r = api();
-    if (r && r.isFailureEvent) return !!r.isFailureEvent(u);
-    return !!(u && (u.isFailure === '1' || u.isFailure === 1 || String(u.status || '').toLowerCase() === 'down'));
-  }
-  function nextDue(lastDone, interval) {
-    var r = api();
-    if (r && r.calculateNextDue) return r.calculateNextDue(lastDone, interval) || '';
-    return '';
-  }
-  function periodLabel() {
-    var r = api();
-    var p = r ? safe(function () { return r.getSystemPeriod(); }, null) : null;
-    return (p && (p.label || p.key)) || 'selected period';
-  }
-  function periodKey() {
-    var r = api();
-    var p = r ? safe(function () { return r.getSystemPeriod(); }, null) : null;
-    return (p && p.key) || 'weekly';
-  }
-  function filterChip() {
-    var r = api();
-    if (!r) return 'All Shafts · All Types';
-    var sh = r.currentShaftFilter;
-    var ty = r.currentTypeFilter;
-    return (sh || 'All Shafts') + ' · ' + (ty || 'All Types');
-  }
-  function normId(id) {
-    var r = api();
-    if (r && r.normaliseEquipId) return r.normaliseEquipId(id);
-    return String(id || '').trim().toUpperCase();
+    if (r && r.isFailureEvent) return !!safe(function () { return r.isFailureEvent(u); }, false);
+    var s = String(u.status || '').toLowerCase();
+    return s === 'down' || s === 'failure' || s === 'fault' || !!u.isFailure;
   }
   function inferType(e) {
     var r = api();
-    if (r && r.inferEquipmentType) return r.inferEquipmentType(e);
-    return (e && (e.equipmentType || e.type)) || '—';
+    if (r && r.inferEquipmentType) return safe(function () { return r.inferEquipmentType(e); }, e.type || '—');
+    return e.type || e.equipmentType || '—';
+  }
+  function normId(id) {
+    return String(id || '').replace(/\s+/g, '').toUpperCase();
+  }
+  function periodKey() {
+    var r = api();
+    return (r && r.analysisPeriod) ? r.analysisPeriod : 'weekly';
+  }
+  function periodLabel() {
+    var k = periodKey();
+    if (k === 'daily') return 'daily (today)';
+    if (k === 'weekly') return 'weekly (7 days)';
+    if (k === 'monthly') return 'monthly';
+    return 'last 7 days';
+  }
+  function filterChip() {
+    var r = api();
+    var shaft = (r && r.shaftFilter) ? r.shaftFilter : '';
+    var type = (r && r.typeFilter) ? r.typeFilter : '';
+    var bits = [];
+    if (shaft) bits.push(shaft);
+    if (type) bits.push(type);
+    return bits.length ? bits.join(' · ') : 'All shafts / types';
+  }
+  function nextDue(last, interval) {
+    var r = api();
+    if (r && r.calculateNextDue) return safe(function () { return r.calculateNextDue(last, interval); }, null);
+    return null;
   }
 
-  /* ── Lexicon: stop words, plurals, synonyms, stems ── */
-  var STOP = {
-    a:1, an:1, the:1, is:1, are:1, was:1, were:1, be:1, been:1, being:1, to:1, of:1, in:1, on:1, for:1,
-    with:1, without:1, from:1, by:1, at:1, as:1, and:1, or:1, not:1, no:1, yes:1, which:1, what:1, who:1,
-    when:1, where:1, how:1, many:1, much:1, any:1, all:1, some:1, please:1, show:1, list:1, tell:1, me:1,
-    about:1, give:1, find:1, get:1, can:1, you:1, we:1, i:1, do:1, does:1, did:1, has:1, have:1, had:1,
-    there:1, their:1, this:1, that:1, these:1, those:1, our:1, your:1, my:1, currently:1, current:1,
-    equipment:1, equipments:1, asset:1, assets:1, unit:1, units:1, machine:1, machines:1, item:1, items:1,
-    shaft:1, shafts:1, status:1, statuses:1, report:1, reports:1, data:1, system:1, need:1, needs:1,
-    want:1, looking:1, see:1, check:1, info:1, information:1, details:1, detail:1, its:1, it:1, them:1,
-    also:1, just:1, only:1, still:1, very:1, more:1, less:1, than:1, then:1, vs:1, versus:1
+  /* ── Platform knowledge (GUIDE) ── */
+  var PLATFORM = {
+    dashboard: {
+      title: 'Dashboard',
+      where: 'Sidebar → <strong>Dashboard</strong> (home).',
+      body:
+        'Enterprise overview of fleet health.<br>' +
+        '• <strong>Shaft + equipment-type filters</strong> and “Show all” drive the whole system.<br>' +
+        '• <strong>Analysis-period selector</strong> (7 days / daily / weekly / monthly) controls KPIs, charts, and rankings.<br>' +
+        '• <strong>Compliance / data-quality bars</strong> show density gating (metrics are not invented when data is thin).<br>' +
+        '• <strong>Live alert summary</strong>: overdue / due soon / failure-pattern / high-risk — expand, CSV/PDF export, reset dismissed.<br>' +
+        '• <strong>KPI cards</strong> (dynamic), Fleet Availability Trend, Downtime/Delay Trend, Availability by Equipment, Failure Count, MTTF charts.<br>' +
+        '• <strong>Upcoming & Overdue Maintenance</strong> list with Excel/PDF export.<br>' +
+        '• <strong>Executive PDF export</strong> for leadership packs.'
+    },
+    textmining: {
+      title: 'Text Mining & Anomaly',
+      where: 'Sidebar → <strong>Text Mining & Anomaly</strong> (roles: admin, operations, reliability).',
+      body:
+        'NLP-style analysis of free-text fault reasons.<br>' +
+        '• KPIs: records with fault text, top failure mode, equipment with 2+ faults, total downtime hours.<br>' +
+        '• Failure-mode pie / workplace charts.<br>' +
+        '• <strong>Bad Actors</strong> and <strong>Recurrence Warnings</strong> tables (Excel/PDF).<br>' +
+        '• <strong>Test Classifier</strong>: paste a free-text reason/fault to see how it is classified.'
+    },
+    reliability: {
+      title: 'Reliability Center',
+      where: 'Sidebar → <strong>Reliability Center</strong> (admin, operations, reliability, executive).',
+      body:
+        'Deep reliability metrics for the fleet.<br>' +
+        '• Reliability KPIs, Fleet Health Distribution, Anomaly Score by Equipment charts.<br>' +
+        '• <strong>Equipment Reliability table</strong>: Availability %, <strong>MTBF</strong>, <strong>MTTR</strong>, Failures, Confidence — search, sort, CSV export; row click opens profile.<br>' +
+        '• Reliability Recommendations and Executive PDF export.<br>' +
+        '• <strong>Important:</strong> MTBF/MTTR and related metrics are <em>data-density gated</em> — the platform does not invent defaults when there are too few events.'
+    },
+    search: {
+      title: 'Search History',
+      where: 'Sidebar → <strong>Search History</strong>.',
+      body:
+        'Flexible search across status history.<br>' +
+        '• Search by Equipment ID, date range, reason/fault text.<br>' +
+        '• Respects dashboard shaft/type filters and your role’s shaft scope.<br>' +
+        '• Equipment Profile card, search results, and recent-searches history.'
+    },
+    import: {
+      title: 'Import Reports',
+      where: 'Sidebar → <strong>Import Reports</strong> (admin, operations, reliability).',
+      body:
+        'Bring external reports into the platform.<br>' +
+        '• Smart parse & auto-map (or manual column mapping).<br>' +
+        '• Supports breakdown sheets, pre-use checklists, Non-routine Maintenance Orders, Action Manager reports.<br>' +
+        '• Text PDF parse + <strong>on-device OCR (Tesseract)</strong> for scanned PDFs — no server upload of the image for OCR.<br>' +
+        '• Options: force shaft, force OCR, preview with select-all, import selected.<br>' +
+        '• Admin: duplicate-status cleanup tool.'
+    },
+    logstatus: {
+      title: 'Log Status Update',
+      where: 'Sidebar → <strong>Log Status Update</strong>.',
+      body:
+        'Manual status entry for an asset.<br>' +
+        'Fields: Date, time, Equipment ID, Status (Up / Down / Fixed→Up), Shift, Reason/Fault, Downtime Hours, Is Failure?'
+    },
+    newequip: {
+      title: '+ New Equipment',
+      where: 'Sidebar → <strong>+ New Equipment</strong> (admin, operations, reliability).',
+      body:
+        'Register a new asset.<br>' +
+        'Fields: Operation (shaft), Work Place/Level, Type, Size, Equipment ID, SECTION, OEM.'
+    },
+    register: {
+      title: 'Equipment Register',
+      where: 'Sidebar → <strong>Equipment Register</strong>.',
+      body:
+        'Full fleet register table: Operation, Workplace, Type, Size, ID, SECTION, OEM, Actions.<br>' +
+        'Quick-find, Excel/PDF export, expand for long lists.'
+    },
+    maint: {
+      title: 'Maintenance Plan',
+      where: 'Sidebar → <strong>Maintenance Plan</strong>.',
+      body:
+        'PM schedule table: Equipment, Task, Interval, Last Done, Due, Days Left, Source, Actions.<br>' +
+        'Add Task modal, Excel/PDF export, quick-find, expand, summary bar.<br>' +
+        'Sidebar badge shows overdue / due-soon count.'
+    },
+    calendar: {
+      title: 'Calendar',
+      where: 'Sidebar → <strong>Calendar</strong>.',
+      body:
+        'FullCalendar view of maintenance tasks.<br>' +
+        'Quick-find by Equipment ID.'
+    },
+    opsreport: {
+      title: 'Operations Report',
+      where: 'Sidebar → <strong>Operations Report</strong>.',
+      body:
+        'Operational status / problem / high-risk style reporting for the current filters and period.'
+    },
+    audit: {
+      title: 'Audit Trail',
+      where: 'Sidebar → <strong>Audit Trail</strong> (admin, executive).',
+      body:
+        'Dual audit (client + Firestore) of important actions for compliance. Not available to all roles.'
+    },
+    users: {
+      title: 'User Management',
+      where: 'Sidebar → <strong>User Management</strong> (admin only).',
+      body:
+        'Invite users, assign roles (admin, operations, reliability, executive, viewer), and shaft scope. Invite-only access.'
+    },
+    cleanup: {
+      title: 'Data Cleanup',
+      where: 'Sidebar → <strong>Data Cleanup</strong> (admin only).',
+      body:
+        'Purge or clean data by shaft / type and related admin tools. Destructive — use carefully.'
+    },
+    support: {
+      title: 'Support & SLA',
+      where: 'Sidebar → <strong>Support & SLA</strong> (admin, executive, reliability).',
+      body:
+        'Platform governance, support channels, and SLA targets (e.g. 99.5% target SLA badge).'
+    },
+    rbac: {
+      title: 'Roles, shafts & data scope',
+      where: 'Cross-cutting platform behaviour.',
+      body:
+        '• <strong>RBAC</strong>: menu items and actions are role-gated (admin, operations, reliability, executive, viewer).<br>' +
+        '• <strong>Shaft scope</strong>: users only see equipment and events for shafts they are assigned.<br>' +
+        '• Dashboard shaft/type filters further narrow what KPIs, charts, and Ask RBE data answers use.<br>' +
+        '• Metrics are <strong>data-density gated</strong> — no invented MTBF/MTTR defaults when history is thin.<br>' +
+        '• Safety / “is it safe?” answers are <strong>advisory only</strong> from logged status data — never a formal pre-use clearance.'
+    },
+    exports: {
+      title: 'Exports & charts',
+      where: 'Available on Dashboard, Reliability Center, Text Mining, Maintenance Plan, Equipment Register, and alert bars.',
+      body:
+        '• PDF via jsPDF + autotable (including Executive PDFs).<br>' +
+        '• Excel/CSV via SheetJS.<br>' +
+        '• Charts via Chart.js; FullCalendar for the calendar; HTML2Canvas for captures.<br>' +
+        '• Offline-aware behaviour and a performance layer (memoised filters, deferred heavy views).'
+    },
+    navigation: {
+      title: 'Main navigation',
+      where: 'Left sidebar (collapsible; hamburger on mobile).',
+      body:
+        'Overview: Dashboard<br>' +
+        'Monitoring & Analytics: Text Mining & Anomaly · Reliability Center<br>' +
+        'Operations: Search History · Import Reports · Log Status Update · + New Equipment<br>' +
+        'Assets & Planning: Equipment Register · Maintenance Plan · Calendar<br>' +
+        'Reporting & Governance: Operations Report · Audit Trail · User Management · Data Cleanup · Support & SLA'
+    }
   };
-  /* words that look like IDs but are type plurals / common words — never treat as equipment IDs */
+
+  function answerPlatform(q) {
+    var t = String(q || '').toLowerCase();
+
+    /* explicit help */
+    if (/\b(help|what can|examples|how to ask|what do you do)\b/.test(t)) {
+      return '<strong>Ask freely</strong> — I answer platform questions and live data questions. Every data answer shows <em>Interpreted as: …</em>.<br><br>' +
+        '<strong>Platform examples</strong><br>' +
+        '• <em>where is the calendar</em> · <em>how do I import a scanned PDF</em><br>' +
+        '• <em>what is MTBF and is it density-gated</em> · <em>who can use User Management</em><br>' +
+        '• <em>what does Text Mining do</em> · <em>how do filters work</em><br><br>' +
+        '<strong>Data examples</strong><br>' +
+        '• Equipment: <em>status of 511</em> · <em>is loco 16L10T026 safe?</em><br>' +
+        '• Faults: <em>brake faults on 11 shaft this week</em> · <em>who reported antenna issues</em><br>' +
+        '• Performance: <em>highest downtime</em> · <em>worst equipment</em> · <em>which shaft is worst</em><br>' +
+        '• Counts: <em>how many brake faults on 11 shaft</em> · <em>list down locos</em><br>' +
+        '• Maintenance: <em>overdue PM</em> · Follow-ups: <em>and its MTBF?</em><br>' +
+        '<div class="meta">Live answers use shaft-scoped data. Safety answers are advisory only — never “cleared to run”.</div>';
+    }
+
+    function pack(key) {
+      var p = PLATFORM[key];
+      if (!p) return null;
+      return '<strong>' + p.title + '</strong><br>' + p.where + '<br><br>' + p.body;
+    }
+
+    /* feature routing — order matters (specific before generic) */
+    if (/\b(mtbf|mttr|mean time|density.?gat|data.?quality|invented default)\b/.test(t)) {
+      return pack('reliability') +
+        '<div class="meta">MTBF/MTTR appear on Reliability Center and equipment profiles. Values are density-gated for the selected analysis period.</div>';
+    }
+    if (/\b(ocr|tesseract|scanned pdf|scan(ned)?|import.*(pdf|excel|sheet|report)|parse|column map)\b/.test(t)) {
+      return pack('import');
+    }
+    if (/\b(text min|anomaly|bad actor|recurrence|classif(y|ier)|failure mode)\b/.test(t)) {
+      return pack('textmining');
+    }
+    if (/\b(reliability center|health (score|distribution)|anomaly score|reliability (table|recommend))\b/.test(t)) {
+      return pack('reliability');
+    }
+    if (/\b(search history|equipment profile|recent search)\b/.test(t)) {
+      return pack('search');
+    }
+    if (/\b(log status|status update|fixed.?up|is failure)\b/.test(t) && !/\blist\b|\bhow many\b|\bcount\b/.test(t)) {
+      return pack('logstatus');
+    }
+    if (/\b(new equipment|add (equipment|asset)|register (a |new )?(loco|asset))\b/.test(t)) {
+      return pack('newequip');
+    }
+    if (/\b(equipment register|asset register|fleet register)\b/.test(t)) {
+      return pack('register');
+    }
+    if (/\b(maintenance plan|maintenance schedule|pm schedule|add task)\b/.test(t) && !/\boverdue\b|\bdue\b|\blist\b/.test(t)) {
+      return pack('maint');
+    }
+    if (/\bcalendar\b/.test(t) && !/\bevent\b.*\bdata\b/.test(t)) {
+      return pack('calendar');
+    }
+    if (/\b(operations report)\b/.test(t)) {
+      return pack('opsreport');
+    }
+    if (/\b(audit (trail|log)|compliance log)\b/.test(t)) {
+      return pack('audit');
+    }
+    if (/\b(user management|invite|roles?|rbac|shaft scope|permission)\b/.test(t)) {
+      if (/\b(role|rbac|shaft scope|permission|who can)\b/.test(t) && !/\binvite\b|\buser management\b/.test(t))
+        return pack('rbac');
+      return pack('users');
+    }
+    if (/\b(data cleanup|purge|delete data|erase)\b/.test(t)) {
+      return pack('cleanup');
+    }
+    if (/\b(support|sla)\b/.test(t)) {
+      return pack('support');
+    }
+    if (/\b(export|pdf|excel|csv|chart\.?js|fullcalendar|html2canvas)\b/.test(t) && !/\bwho reported\b|\bfault\b/.test(t)) {
+      return pack('exports');
+    }
+    if (/\b(dashboard|kpi|analysis period|alert summary|fleet availability)\b/.test(t) && !/\bhighest\b|\bworst\b|\blist\b/.test(t)) {
+      return pack('dashboard');
+    }
+    if (/\b(navigation|sidebar|menu|where (is|are|do i)|how do i (open|get to|find|access))\b/.test(t)) {
+      /* try to map “where is X” to a feature */
+      if (/\bcalendar\b/.test(t)) return pack('calendar');
+      if (/\bimport\b/.test(t)) return pack('import');
+      if (/\breliability\b/.test(t)) return pack('reliability');
+      if (/\btext min\b|\banomaly\b/.test(t)) return pack('textmining');
+      if (/\baudit\b/.test(t)) return pack('audit');
+      if (/\buser\b/.test(t)) return pack('users');
+      if (/\bcleanup\b/.test(t)) return pack('cleanup');
+      if (/\bmaint\b/.test(t)) return pack('maint');
+      if (/\bregister\b/.test(t)) return pack('register');
+      if (/\bsearch\b/.test(t)) return pack('search');
+      if (/\bdashboard\b/.test(t)) return pack('dashboard');
+      return pack('navigation');
+    }
+    if (/\b(what (is|does)|explain|tell me about|feature|capability|limitation)\b/.test(t)) {
+      if (/\bdashboard\b/.test(t)) return pack('dashboard');
+      if (/\breliability\b/.test(t)) return pack('reliability');
+      if (/\btext min\b|\banomaly\b/.test(t)) return pack('textmining');
+      if (/\bimport\b/.test(t)) return pack('import');
+      if (/\bfilter|shaft|role|scope\b/.test(t)) return pack('rbac');
+      return pack('navigation') +
+        '<div class="meta">Ask about a specific screen (e.g. “what is Reliability Center?”) for detail.</div>';
+    }
+
+    return null; /* not a platform question — fall through to data */
+  }
+
+  /* ── NLP helpers (data Q&A) ── */
+  var STOP = {
+    a:1, an:1, the:1, of:1, to:1, in:1, on:1, for:1, and:1, or:1, is:1, are:1, was:1, were:1,
+    be:1, been:1, being:1, have:1, has:1, had:1, do:1, does:1, did:1, will:1, would:1, could:1,
+    should:1, can:1, may:1, might:1, must:1, shall:1, with:1, from:1, by:1, at:1, as:1, into:1,
+    about:1, between:1, through:1, during:1, before:1, after:1, above:1, below:1, under:1,
+    again:1, further:1, then:1, once:1, here:1, there:1, when:1, where:1, why:1, how:1, all:1,
+    each:1, few:1, more:1, most:1, other:1, some:1, such:1, no:1, nor:1, not:1, only:1, own:1,
+    same:1, so:1, than:1, too:1, very:1, just:1, also:1, now:1, please:1, me:1, my:1, we:1,
+    our:1, you:1, your:1, they:1, their:1, what:1, which:1, who:1, whom:1, this:1, that:1,
+    these:1, those:1, am:1, i:1, any:1, get:1, give:1, show:1, tell:1, find:1, need:1, want:1,
+    looking:1, see:1, check:1, info:1, information:1, details:1, detail:1, its:1, it:1, them:1
+  };
   var NOT_ID = {
     loco:1, locos:1, locomotives:1, caboose:1, cabooses:1, hopper:1, hoppers:1,
     winch:1, winches:1, winder:1, winders:1, fan:1, fans:1, pump:1, pumps:1,
@@ -9252,7 +9521,6 @@ window.RBE = {
     most:1, least:1, reliable:1, availability:1, maintenance:1, overdue:1,
     antenna:1, antennas:1, issue:1, issues:1, problem:1, problems:1
   };
-
   var STEM = {
     brakes: 'brake', faults: 'fault', failures: 'failure', breakdowns: 'breakdown',
     locos: 'loco', locomotives: 'loco', hoppers: 'hopper', cabooses: 'caboose',
@@ -9278,13 +9546,11 @@ window.RBE = {
     if (w.length > 3 && w.slice(-1) === 's' && w.slice(-2) !== 'ss') return w.slice(0, -1);
     return w;
   }
-
   function tokens(q) {
     return String(q || '').toLowerCase().replace(/[^\w\s\-./]/g, ' ').split(/\s+/).filter(function (w) {
       return w.length > 1 && !STOP[w];
     }).map(stem);
   }
-
   function expandTerms(words) {
     var set = {};
     words.forEach(function (w) {
@@ -9294,14 +9560,11 @@ window.RBE = {
     });
     return Object.keys(set);
   }
-
-  /* ── Date range parsing (overrides dashboard period for event filters when present) ── */
   function parseDateRange(q) {
     var t = String(q || '').toLowerCase();
     var now = new Date();
     now.setHours(23, 59, 59, 999);
     var start = null, end = now, label = null;
-
     if (/\btoday\b/.test(t)) {
       start = new Date(now); start.setHours(0, 0, 0, 0);
       label = 'today';
@@ -9334,15 +9597,13 @@ window.RBE = {
     if (!start) return null;
     return { start: start, end: end, label: label };
   }
-
   function inDateRange(u, range) {
     if (!range) return true;
     var d = u.date || u.eventDate || u.timestamp || '';
     var dt = new Date(d);
-    if (isNaN(dt.getTime())) return true; /* keep if unparseable rather than drop */
+    if (isNaN(dt.getTime())) return true;
     return dt >= range.start && dt <= range.end;
   }
-
   function extractShaft(text) {
     var t = String(text || '');
     var m = t.match(/\b(\d{1,2}c?)\s*shaft\b/i) || t.match(/\bshaft\s*[#:]?\s*(\d{1,2}c?)\b/i);
@@ -9368,7 +9629,6 @@ window.RBE = {
     }
     return null;
   }
-
   function extractType(text) {
     var map = [
       ['locomotive', 'Loco'], ['loco', 'Loco'], ['caboose', 'Caboose'], ['hopper', 'Hopper'],
@@ -9382,8 +9642,6 @@ window.RBE = {
     }
     return null;
   }
-
-  /* Strict ID extraction — never treat type plurals as IDs; short tokens force clarify */
   function extractEquipToken(text) {
     var t = String(text || '');
     var m = t.match(/\b(?:loco|caboose|hopper|winch|winder|unit|equipment|eq|asset|machine)\s*[#:]?\s*([A-Za-z0-9\-_\/]+)\b/i);
@@ -9392,7 +9650,6 @@ window.RBE = {
       var low = cand.toLowerCase();
       if (!NOT_ID[low] && !STOP[low] && !/^[a-z]+s$/i.test(cand)) return cand;
     }
-    /* pure number only if 3+ digits; alnum mining IDs */
     m = t.match(/\b(\d{1,3}[A-Za-z]{1,8}\d{2,8}|\d{2,3}[A-Za-z]{1,6}\d{2,8}|[A-Za-z]{2,8}\d{3,10}|\d{3,10})\b/);
     if (m) {
       var c = m[1];
@@ -9400,7 +9657,6 @@ window.RBE = {
     }
     return null;
   }
-
   function findEquipMatches(token) {
     var n = normId(token);
     var dig = String(token).replace(/\D/g, '');
@@ -9416,19 +9672,16 @@ window.RBE = {
     if (exact.length) return exact;
     return partial;
   }
-
   function resolveEquip(token) {
     if (!token) return { status: 'none' };
     var hits = findEquipMatches(token);
     if (!hits.length) return { status: 'none', token: token };
-    /* short pure-digit tokens always clarify even on a single hit (avoid "1" → silent pick) */
     var digitsOnly = /^\d+$/.test(String(token));
     if (hits.length === 1 && digitsOnly && String(token).length <= 2)
       return { status: 'ambiguous', token: token, options: hits };
     if (hits.length === 1) return { status: 'ok', equip: hits[0] };
     return { status: 'ambiguous', token: token, options: hits };
   }
-
   function clarifyEquip(token, options) {
     var rows = options.slice(0, 12).map(function (e) {
       return [esc(e.id), esc(e.shaft || '—'), esc(inferType(e))];
@@ -9438,7 +9691,6 @@ window.RBE = {
       table(['ID', 'Shaft', 'Type'], rows, 12) +
       '<div class="meta">Reply with the full Equipment ID (e.g. ' + esc(options[0].id) + '). Short numbers are never auto-matched.</div>';
   }
-
   function riskScore(e) {
     var st = eqStatus(e.id) || {};
     var m = relMetrics(e.id) || {};
@@ -9452,7 +9704,6 @@ window.RBE = {
     if (String(st.status || '').toLowerCase() === 'down') score += 25;
     return { score: score, fails: fails, downtime: downtime, avail: avail, health: health, status: st.status || '—', mtbfLabel: m.mtbfLabel, mttrLabel: m.mttrLabel };
   }
-
   function table(headers, rows, limit) {
     limit = limit || 20;
     if (!rows.length) return '<em>No matching rows.</em>';
@@ -9464,7 +9715,6 @@ window.RBE = {
     if (rows.length > limit) html += '<div class="meta">Showing ' + limit + ' of ' + rows.length + '</div>';
     return html;
   }
-
   function interp(parts, range) {
     var bits = (parts || []).filter(Boolean);
     if (range && range.label) bits.push(range.label);
@@ -9472,25 +9722,21 @@ window.RBE = {
     bits.push(filterChip());
     return '<div class="meta"><strong>Interpreted as:</strong> ' + bits.map(function (b) { return esc(b); }).join(' · ') + '</div>';
   }
-
   function matchShaft(eShaft, want) {
     if (!want) return true;
     var es = String(eShaft || '').toLowerCase();
     var sk = String(want).toLowerCase().replace(/\s*shaft$/, '').trim();
     return es === String(want).toLowerCase() || es.indexOf(sk) !== -1;
   }
-
   function matchType(e, want) {
     if (!want) return true;
     return String(inferType(e)).toLowerCase().indexOf(String(want).toLowerCase()) !== -1;
   }
-
   function eventBlob(u) {
     return [u.reason, u.notes, u.description, u.fault, u.actionTaken, u.comment, u.rootCause,
       u.operator, u.reportedBy, u.equipmentId, u.locoNumber, u.shaft, u.workplace]
       .map(function (x) { return String(x || '').toLowerCase(); }).join(' ');
   }
-
   function filterEvents(opts) {
     opts = opts || {};
     var list = opts.scopedOnly ? allScopedUp() : filteredUp();
@@ -9552,7 +9798,6 @@ window.RBE = {
     }
     return html;
   }
-
   function answerIsSafe(eq, range, understood) {
     lastCtx.equipId = eq.id;
     lastCtx.topic = 'safety';
@@ -9614,7 +9859,6 @@ window.RBE = {
     }
     return html;
   }
-
   function answerDowntimeRank(highest, shaft, type, range, understood) {
     lastCtx.topic = 'downtime';
     lastCtx.shaft = shaft;
@@ -9624,7 +9868,6 @@ window.RBE = {
       var rs = riskScore(e);
       return { id: e.id, shaft: e.shaft || '—', type: inferType(e), downtime: rs.downtime, fails: rs.fails, status: rs.status };
     });
-    /* highest: only assets with downtime > 0; lowest: include zeros so true lowest is visible */
     if (highest) rows = rows.filter(function (r) { return r.downtime > 0; });
     rows.sort(function (a, b) {
       return highest ? (b.downtime - a.downtime) : (a.downtime - b.downtime);
@@ -9638,7 +9881,6 @@ window.RBE = {
     html += '<div class="meta">Ranked by downtime only (period metrics from getEquipmentStatus · ' + esc(periodLabel()) + '). Not a reliability ranking.</div>';
     return html;
   }
-
   function answerFaultRank(shaft, type, range, words, understood, limit) {
     lastCtx.topic = 'faults';
     lastCtx.shaft = shaft;
@@ -9668,7 +9910,6 @@ window.RBE = {
     }), 12);
     return html;
   }
-
   function answerRank(best, shaft, type, range, understood) {
     lastCtx.topic = best ? 'reliable' : 'worst';
     lastCtx.shaft = shaft;
@@ -9697,7 +9938,6 @@ window.RBE = {
     html += '<div class="meta">Uses period metrics from getEquipmentStatus / getReliabilityMetrics (' + esc(periodLabel()) + ').</div>';
     return html;
   }
-
   function answerShaftRank(range, understood) {
     lastCtx.topic = 'shaft';
     var by = {};
@@ -9726,7 +9966,6 @@ window.RBE = {
     html += '<div class="meta">Rankings use period metrics from getEquipmentStatus / getReliabilityMetrics.</div>';
     return html;
   }
-
   function answerNoBreakdowns(shaft, type, range, understood) {
     lastCtx.topic = 'no-breakdowns';
     var failed = {};
@@ -9749,7 +9988,6 @@ window.RBE = {
     html += '<div class="meta">Uses isFailureEvent consistently with the dashboard.</div>';
     return html;
   }
-
   function answerReplacement(shaft, type, range, understood) {
     lastCtx.topic = 'replacement';
     var pk = periodKey();
@@ -9776,7 +10014,6 @@ window.RBE = {
     }), 15);
     return html;
   }
-
   function resolveMaintDue(m) {
     var due = m.due || m.nextDue || m.dueDate || '';
     if (due) return String(due).slice(0, 10);
@@ -9788,7 +10025,6 @@ window.RBE = {
     }
     return '';
   }
-
   function answerMaintenance(q, shaft, range, understood) {
     lastCtx.topic = 'maintenance';
     lastCtx.shaft = shaft;
@@ -9838,7 +10074,6 @@ window.RBE = {
     }), 20);
     return html2;
   }
-
   function answerWhoReported(words, shaft, range, understood) {
     lastCtx.topic = 'reporter';
     var hits = filterEvents({ words: words, shaft: shaft, range: range, failuresOnly: false });
@@ -9853,7 +10088,6 @@ window.RBE = {
     }), 20);
     return html;
   }
-
   function answerCounts(words, shaft, type, range, failuresOnly, understood) {
     lastCtx.topic = 'count';
     lastCtx.shaft = shaft;
@@ -9886,7 +10120,6 @@ window.RBE = {
     }
     return html;
   }
-
   function answerList(shaft, type, wantDown, wantUp, range, understood) {
     lastCtx.topic = 'list';
     lastCtx.shaft = shaft;
@@ -9912,7 +10145,6 @@ window.RBE = {
     }), 25);
     return html;
   }
-
   function answerAvailSummary(eqList, range, understood) {
     eqList = eqList || filteredEq();
     var withA = 0, sum = 0, down = 0, up = 0;
@@ -9927,7 +10159,6 @@ window.RBE = {
       (withA ? (sum / withA).toFixed(1) + '%' : '—') + '</strong>' +
       '<br>Up: <strong>' + up + '</strong> · Down: <strong>' + down + '</strong>';
   }
-
   function answerMtbf(shaft, type, range, understood) {
     var rows = [];
     filteredEq().forEach(function (e) {
@@ -9948,7 +10179,6 @@ window.RBE = {
     return html;
   }
 
-  /* ── Main router — intent priority: specific before generic ── */
   function searchEverything(q) {
     var raw = String(q || '').trim();
     var t = raw.toLowerCase();
@@ -9956,7 +10186,6 @@ window.RBE = {
     var shaft = extractShaft(raw) || (/\b(same|that)\s+shaft\b/.test(t) ? lastCtx.shaft : null) || null;
     var type = extractType(raw);
     var equipToken = extractEquipToken(raw);
-    /* follow-up: "and its MTBF?" / "what about it?" */
     if (!equipToken && lastCtx.equipId && (/\b(its|it|that|this|same)\b/.test(t) || /^(and|also)\b/.test(t))) {
       equipToken = lastCtx.equipId;
     }
@@ -9967,7 +10196,6 @@ window.RBE = {
       if (type && type.toLowerCase().indexOf(w) !== -1) return false;
       if (equipToken && String(equipToken).toLowerCase().indexOf(w) !== -1) return false;
       if (/^(today|yesterday|week|month|year|last|days?|this)$/.test(w)) return false;
-      /* drop ranking / intent words from keyword bag */
       if (/^(highest|lowest|worst|best|top|bottom|most|least|reliable|downtime|safe|safety|overdue|maint|maintenance|count|number)$/.test(w)) return false;
       return true;
     });
@@ -10011,7 +10239,6 @@ window.RBE = {
     if (wantBest && !wantDowntime) understood.push('most reliable');
     if (wantWorst && !wantShaftPerf && !wantDowntime) understood.push('worst performing');
 
-    /* Equipment resolution */
     if (equipToken) {
       var res = resolveEquip(equipToken);
       if (res.status === 'ambiguous') return clarifyEquip(equipToken, res.options);
@@ -10030,7 +10257,6 @@ window.RBE = {
       return answerEquipProfile(res.equip, range, understood);
     }
 
-    /* Priority order — specific metrics BEFORE generic best/worst */
     if (wantWho) return answerWhoReported(words, shaft, range, understood);
     if (wantNoBreak) return answerNoBreakdowns(shaft, type, range, understood);
     if (wantReplace) return answerReplacement(shaft, type, range, understood);
@@ -10039,7 +10265,6 @@ window.RBE = {
     if (wantMtbf) return answerMtbf(shaft, type, range, understood);
     if (wantShaftPerf) return answerShaftRank(range, understood);
 
-    /* Fault / failure search & top faults — before generic rankings */
     if (wantFail || (words.length && !wantCount && !wantList && !wantBest && !wantWorst && !wantAvail)) {
       if (/\btop\b|\bmost common\b|\bcommon(est)?\b/i.test(t) || wantFail) {
         return answerFaultRank(shaft, type, range, words, understood, topN || 10);
@@ -10050,7 +10275,6 @@ window.RBE = {
       return answerCounts(words, shaft, type, range, wantFail || words.length > 0, understood);
     }
 
-    /* Rankings only if not downtime/faults */
     if (wantWorst) return answerRank(false, shaft, type, range, understood);
     if (wantBest) return answerRank(true, shaft, type, range, understood);
 
@@ -10062,7 +10286,6 @@ window.RBE = {
       return matchShaft(e.shaft, shaft) && matchType(e, type);
     }), range, understood);
 
-    /* Keyword search in events */
     if (words.length) {
       var hits = filterEvents({ words: words, shaft: shaft, range: range, failuresOnly: false });
       if (hits.length) {
@@ -10093,27 +10316,22 @@ window.RBE = {
   }
 
   function route(q) {
-    if (/\b(help|what can|examples|how to ask)\b/i.test(q)) {
-      return '<strong>Ask freely</strong> — every answer shows <em>Interpreted as: …</em> so you can see what was understood.<br><br>' +
-        '• Equipment: <em>status of 511</em> · <em>is loco 16L10T026 safe?</em><br>' +
-        '• Faults: <em>brake faults on 11 shaft this week</em> · <em>who reported antenna issues</em><br>' +
-        '• Performance: <em>highest downtime</em> · <em>worst equipment</em> · <em>which shaft is worst</em><br>' +
-        '• Counts: <em>how many brake faults on 11 shaft</em> · <em>list down locos</em><br>' +
-        '• Maintenance: <em>overdue PM</em><br>' +
-        '• Follow-ups: after an asset answer, ask <em>and its MTBF?</em><br>' +
-        '<div class="meta">Uses live shaft-scoped data. Safety answers are advisory only — never “cleared to run”.</div>';
-    }
-    if (!api()) return 'Live data API is not linked yet. Sign in, wait for the app to load, then open Ask RBE again.';
+    /* 1) Platform / how-to questions first (no live data required) */
+    var plat = answerPlatform(q);
+    if (plat) return plat;
+
+    /* 2) Live data path */
+    if (!api()) return 'Live data API is not linked yet. Sign in, wait for the app to load, then open Ask RBE again. You can still ask platform questions (e.g. “where is the calendar?”).';
     if (!dataReady()) {
       startWelcomePoll();
-      return 'No equipment or status records in memory yet. Stay signed in until the dashboard finishes loading, then ask again. ' +
-        '<div class="meta">Tip: open Dashboard once so KPIs populate. Welcome counts refresh when data arrives.</div>';
+      return 'No equipment or status records in memory yet for data answers. Stay signed in until the dashboard finishes loading, then ask again. ' +
+        '<div class="meta">Tip: open Dashboard once so KPIs populate. Platform questions (features, navigation) still work without data.</div>';
     }
     try {
       return searchEverything(q);
     } catch (err) {
       console.error(err);
-      return 'Could not answer that. Try an Equipment ID, shaft name, or fault keyword.';
+      return 'Could not answer that. Try an Equipment ID, shaft name, fault keyword, or a platform question such as “what is Reliability Center?”.';
     }
   }
 
@@ -10146,6 +10364,7 @@ window.RBE = {
   window.closeAskRBE = closeChat;
 })();
 </script>
+
 
 
 </html>
