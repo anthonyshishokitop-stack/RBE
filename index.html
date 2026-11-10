@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor Enterprise 2.8 | Reliability Improvement</title>
+  <title>RBE Monitor Enterprise 2.8.1 | Reliability Improvement</title>
   <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.googletagmanager.com blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.google-analytics.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://tessdata.projectnaptha.com blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'">
@@ -1029,7 +1029,7 @@
       </ul>
 
       <div class="version-footer">
-        <div class="enterprise-badge" style="margin-bottom:0.45rem;"><i class="fas fa-cube"></i> ENTERPRISE 2.7</div>
+        <div class="enterprise-badge" style="margin-bottom:0.45rem;"><i class="fas fa-cube"></i> ENTERPRISE 2.8.1</div>
         <span class="sla-pill" style="margin-top:0.4rem;background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.3);"><i class="fas fa-check-circle"></i> 99.5% target SLA</span>
       </div>
     </aside>
@@ -3521,7 +3521,10 @@
 
   /**
    * Canonical failure detector — single source of truth for status, MTTF, patterns, downtime UI.
-   * A failure is: explicit isFailure flag, Down-like status, or positive downtime on a non-Up event.
+   * A failure is: explicit isFailure flag, Down-like status (incl. restricted/limited),
+   * or positive downtime on a non-Up event.
+   * TOTAL FAILURES = count of these events inside the selected analysis period (after dedupe).
+   * Likelihood patterns = same detector over all history (after dedupe). Counts can differ by design.
    */
   function isFailureEvent(u) {
     if (!u) return false;
@@ -3760,7 +3763,7 @@
     const idNorm = parsed.id || normaliseEquipId(id);
     const shaftWant = parsed.shaft || (currentShaftFilter ? normaliseShaftName(currentShaftFilter) : '');
     const per = getSystemPeriod();
-    const cacheKey = (equipCompositeKey(idNorm, shaftWant) || idNorm) + '#' + per.key + '#v26d';
+    const cacheKey = (equipCompositeKey(idNorm, shaftWant) || idNorm) + '#' + per.key + '#v28fail';
     if (window._statusCache && window._statusCache.has(cacheKey)) {
       return window._statusCache.get(cacheKey);
     }
@@ -3822,6 +3825,20 @@
     if (effectiveShaft) {
       const tagged = eu.filter(u => normaliseShaftName(u.shaft || '') && shaftsMatch(u.shaft, effectiveShaft));
       if (tagged.length) eu = tagged;
+    }
+
+    // De-dupe near-identical status rows (same date/time/status/reason) so failure counts
+    // match likelihood analysis and Excel re-import noise does not inflate TOTAL FAILURES.
+    if (typeof dedupeStatusUpdates === 'function') {
+      eu = dedupeStatusUpdates(eu);
+      // Re-sort newest-first after dedupe (dedupe does not preserve order)
+      eu = eu.slice().sort((a, b) => {
+        const msDiff = eventMs(b) - eventMs(a);
+        if (msDiff !== 0) return msDiff;
+        const rankDiff = statusRank(b) - statusRank(a);
+        if (rankDiff !== 0) return rankDiff;
+        return String(b.reason || '').length - String(a.reason || '').length;
+      });
     }
 
     const last = eu && eu[0];
@@ -3910,6 +3927,15 @@
     if (currentlyDown && openDownEvent && isFailureEvent(openDownEvent) && failures === 0) {
       failures = 1;
     }
+    // All-history failure count (same equipment scope, no period filter) — used by likelihood UI
+    // so users can reconcile "TOTAL FAILURES (period)" vs "failure reports (all history)".
+    let failuresAllTime = 0;
+    try {
+      (eu || []).forEach(function (u) { if (isFailureEvent(u)) failuresAllTime++; });
+      if (currentlyDown && openDownEvent && isFailureEvent(openDownEvent) && failuresAllTime === 0) {
+        failuresAllTime = 1;
+      }
+    } catch (e) { failuresAllTime = failures; }
 
     const windowDays = Math.ceil(per.days);
     const downtimeInWindow = Math.min(Math.max(0, downtime), windowHours);
@@ -3947,6 +3973,7 @@
       status: statusCode,
       downtime: Number(downtime.toFixed(1)),
       failures,
+      failuresAllTime,
       availability: avail,
       availabilityLabel,
       dataDays,
@@ -5190,9 +5217,9 @@
     if (failureEvents.length >= 2) {
       likelihood = 'Most likely on ' + topDay.key + 's during ' + topShift.key + ' shift'
         + (topBand.key ? ' (' + topBand.key + 'h window, ' + topBand.pct + '% of events)' : '')
-        + '. Based on ' + failureEvents.length + ' failure report(s).';
+        + '. Based on ' + failureEvents.length + ' failure report(s) across all recorded history (not limited to the dashboard period).';
     } else if (failureEvents.length === 1) {
-      likelihood = 'Only one failure logged (' + failureEvents[0].date + ' · ' + failureEvents[0].shift + '). Need more events for a reliable pattern.';
+      likelihood = 'Only one failure logged in all history (' + failureEvents[0].date + ' · ' + failureEvents[0].shift + '). Need more events for a reliable pattern.';
     }
     return { byDay, byShift, byHourBand, failureEvents, topDay, topShift, topBand, likelihood, total: failureEvents.length };
   }
@@ -5287,12 +5314,17 @@
       body.innerHTML = `
         <div style="background:var(--surface-2);border-radius:10px;padding:1rem;border:1px solid var(--border);margin-bottom:1rem;">
           <div style="display:flex;flex-wrap:wrap;gap:1.25rem;">
-            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Total downtime (status)</div>
-              <div style="font-size:1.4rem;font-weight:800;color:var(--danger);">${(st.downtime || 0).toFixed(1)} h</div></div>
-            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Sum of reported events</div>
+            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Total downtime (status · period)</div>
+              <div style="font-size:1.4rem;font-weight:800;color:var(--danger);">${(st.downtime || 0).toFixed(1)} h</div>
+              <div style="font-size:0.72rem;color:var(--text-3);">${String(st.periodLabel || '').replace(/</g,'&lt;') || 'selected period'}</div></div>
+            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Sum of reported events (history)</div>
               <div style="font-size:1.4rem;font-weight:800;">${sumHrs.toFixed(1)} h</div></div>
-            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Failure events</div>
-              <div style="font-size:1.4rem;font-weight:800;">${timing.total}</div></div>
+            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Failures in period</div>
+              <div style="font-size:1.4rem;font-weight:800;">${st.failures || 0}</div>
+              <div style="font-size:0.72rem;color:var(--text-3);">TOTAL FAILURES card</div></div>
+            <div><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">Failure events (all history)</div>
+              <div style="font-size:1.4rem;font-weight:800;">${timing.total}</div>
+              <div style="font-size:0.72rem;color:var(--text-3);">likelihood / pattern</div></div>
             <div title="Uptime hours ÷ failures (${mm.periodLabel})"><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">MTTF (h)</div>
               <div style="font-size:${mm.mttf != null ? '1.4rem' : '0.95rem'};font-weight:800;color:var(--primary);">${mm.mttfLabel}</div></div>
             <div title="Period hours ÷ completed repairs (${mm.periodLabel})"><div style="font-size:0.75rem;color:var(--text-3);font-weight:600;text-transform:uppercase;">MTBR (h)</div>
@@ -5381,6 +5413,7 @@
     const patternHtml = `
       <div style="grid-column:1/-1;background:linear-gradient(135deg,rgba(12,74,110,0.06),rgba(14,165,233,0.04));border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;margin-top:0.25rem;">
         <div style="font-weight:700;color:var(--primary);margin-bottom:0.45rem;display:flex;align-items:center;gap:8px;"><i class="fas fa-chart-line"></i> Failure likelihood &amp; performance pattern</div>
+        <p style="font-size:0.82rem;margin:0 0 0.35rem;color:var(--text-3);">Uses <strong>all recorded failure history</strong> for this asset (deduped). TOTAL FAILURES above uses the <strong>selected period only</strong> (${String(st.periodLabel || mm.periodLabel || 'current period').replace(/</g,'&lt;')}: <strong>${st.failures || 0}</strong> · all history: <strong>${timing.total || 0}</strong>).</p>
         <p style="font-size:0.9rem;margin:0 0 0.75rem;color:var(--text-2);line-height:1.45;">${String(timing.likelihood).replace(/</g,'&lt;')}</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
           <div><div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-3);margin-bottom:0.35rem;">By day of week</div>${dayBars || '<span style="color:var(--text-3);font-size:0.85rem;">No data</span>'}</div>
@@ -5415,8 +5448,19 @@
       const escIdForClick = escJs(id);
       body.innerHTML = fields.map(([k, v]) => {
         const isDown = k === 'Total Downtime (h)';
+        const isFails = k === 'Total Failures';
         const click = isDown ? ` style="cursor:pointer;outline:1px dashed var(--primary);" title="Click for breakdown" onclick="showDowntimeBreakdown('${escIdForClick}')"` : '';
-        const defs = { 'MTTF (h)': 'Uptime ÷ failures · ' + mm.periodLabel, 'MTBR (h)': 'Period ÷ repairs · ' + mm.periodLabel };
+        const allTimeFails = (st.failuresAllTime != null ? st.failuresAllTime : (timing && timing.total != null ? timing.total : null));
+        const failHintExtra = (isFails && allTimeFails != null && Number(allTimeFails) !== Number(st.failures || 0))
+          ? (' · all history: ' + allTimeFails + ' (likelihood uses full history)')
+          : '';
+        const defs = {
+          'MTTF (h)': 'Uptime ÷ failures · ' + mm.periodLabel,
+          'MTBR (h)': 'Period ÷ repairs · ' + mm.periodLabel,
+          'Total Failures': 'isFailureEvent count · ' + (st.periodLabel || mm.periodLabel || 'selected period') + failHintExtra,
+          'Color Risk': 'Severity × frequency from period failures + current status',
+          'Availability': 'Period window minus downtime · ' + (st.periodLabel || mm.periodLabel || '')
+        };
         const hint = isDown ? '<div style="font-size:0.72rem;color:var(--primary);margin-top:0.2rem;">Click for breakdown →</div>'
           : (defs[k] ? '<div style="font-size:0.72rem;color:var(--text-3);margin-top:0.2rem;">' + defs[k] + '</div>' : '');
         return `<div${click} style="background:var(--surface-2);border-radius:8px;padding:0.65rem 0.85rem;border:1px solid var(--border);${isDown ? 'cursor:pointer;' : ''}">
