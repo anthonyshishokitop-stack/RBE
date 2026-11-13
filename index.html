@@ -2257,6 +2257,14 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+  /* ── Per-shaft scope: /shaft_1/ → /?shaft=1%20Shaft  (reads ONLY that shaft's data) ── */
+  const SHAFT_SCOPE = (new URLSearchParams(location.search).get('shaft') || '').trim();
+  const _shaftVariants = n => [...new Set([n, n.toUpperCase(), n.toLowerCase(), n.replace(/ shaft$/i, ''), 'Shaft ' + n.replace(/ shaft$/i, '')])];
+  function scoped(name) {
+    return SHAFT_SCOPE ? query(collection(db, name), where('shaft', 'in', _shaftVariants(SHAFT_SCOPE))) : collection(db, name);
+  }
+  if (SHAFT_SCOPE) document.title = SHAFT_SCOPE + ' · RBE Monitor';
+
   /* v2.3 – idle session timeout (30 min, warning at 28) */
   (function(){
     const LIMIT=30*60*1000, WARN=28*60*1000; let t1,t2;
@@ -2689,7 +2697,7 @@
     window._updatesByEquip = window._updatesByEquip || new Map();
     window._statusCache = window._statusCache || new Map();
 
-    unsubscribeFunctions.push(onSnapshot(collection(db, "equipment"), snap => {
+    unsubscribeFunctions.push(onSnapshot(scoped("equipment"), snap => {
       if (!_first.eq && !snap.docChanges().length) return; _first.eq = false;
       // Collapse LOCO-prefix variants only within the SAME shaft.
       // 183@11 Shaft and 183@12 Shaft remain separate assets.
@@ -2767,7 +2775,10 @@
       scheduleRefresh({ textMining: false });
     };
     // Prefer ordered query; fall back to full collection if index missing
-    try {
+    // Shaft-scoped pages use one filtered query (no orderBy → no composite index needed)
+    if (SHAFT_SCOPE) {
+      unsubscribeFunctions.push(onSnapshot(scoped("status_updates"), applyUpdates, (err) => console.warn('[RBE] scoped status_updates failed', err)));
+    } else try {
       unsubscribeFunctions.push(onSnapshot(query(collection(db, "status_updates"), orderBy("date", "desc")), applyUpdates, (err) => {
         console.warn('[RBE] Ordered status_updates listener failed — falling back to unordered collection. Create Firestore index if needed.', err);
         unsubscribeFunctions.push(onSnapshot(collection(db, "status_updates"), applyUpdates));
@@ -2776,7 +2787,7 @@
       console.warn('[RBE] status_updates ordered query setup failed', e);
       unsubscribeFunctions.push(onSnapshot(collection(db, "status_updates"), applyUpdates));
     }
-    unsubscribeFunctions.push(onSnapshot(collection(db, "maintenance"), snap => {
+    unsubscribeFunctions.push(onSnapshot(scoped("maintenance"), snap => {
       if (!_first.mt && !snap.docChanges().length) return; _first.mt = false;
       maintenance = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       scheduleRefresh();
@@ -3459,6 +3470,10 @@
       sel.innerHTML = '<option value="">All Shafts</option>' + shafts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
       if (current && shafts.includes(current)) sel.value = current;
       else if (current && !shafts.includes(current)) sel.value = '';
+    }
+    if (SHAFT_SCOPE && sel) {   // fixed-shaft page: lock the filter to this shaft
+      sel.innerHTML = `<option value="${escapeHtml(SHAFT_SCOPE)}">${escapeHtml(SHAFT_SCOPE)}</option>`;
+      sel.value = SHAFT_SCOPE; sel.disabled = true;
     }
     const tsel = document.getElementById('type-filter');
     if (tsel) {
@@ -6907,7 +6922,7 @@
   }
 
   async function dcBuildPlan() {
-    const [se, su, sm] = await Promise.all([getDocs(collection(db, 'equipment')), getDocs(collection(db, 'status_updates')), getDocs(collection(db, 'maintenance'))]);
+    const [se, su, sm] = await Promise.all([getDocs(scoped('equipment')), getDocs(scoped('status_updates')), getDocs(scoped('maintenance'))]);
     const eqList = se.docs.map(d => ({ id: d.id, ...d.data() }));
     const M = dcMasters(eqList);
     const mode = dcMode();
@@ -7313,7 +7328,7 @@
         // Cascade (batched + parallel): status_updates & maintenance, exact and normalised-variant matches
         const _nOrig = normaliseEquipId(originalId);
         try {
-          const [allUp, allM] = await Promise.all([getDocs(collection(db, 'status_updates')), getDocs(collection(db, 'maintenance'))]);
+          const [allUp, allM] = await Promise.all([getDocs(scoped('status_updates')), getDocs(scoped('maintenance'))]);
           const ops = [];
           allUp.docs.forEach(d => {
             const u = d.data() || {};
@@ -8787,7 +8802,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     if (btn) btn.disabled = true;
 
     try {
-      const snap = await getDocs(collection(db, 'status_updates'));
+      const snap = await getDocs(scoped('status_updates'));
       const groups = new Map(); // fingerprint -> [{ ref, data, score }]
       snap.forEach(d => {
         const data = d.data();
@@ -8907,7 +8922,7 @@ document.getElementById('add-eq-form').addEventListener('submit', async e => {
     const existingExact = new Set();
     const existingSoft = new Set();
     try {
-      const snap = await getDocs(collection(db, 'status_updates'));
+      const snap = await getDocs(scoped('status_updates'));
       snap.forEach(d => {
         const u = d.data();
         existingExact.add(statusUpdateFingerprint(u));
