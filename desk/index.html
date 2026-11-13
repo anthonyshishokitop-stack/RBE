@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RBE Desk · Breakdown reports</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f2ee;--card:#fffcf7;--ink:#17181a;--mut:#6f6e68;--line:#e3dfd6;--navy:#1f3547;--ok:#2d7a52;--bad:#b3392b;--warn:#b7791f;--mono:ui-monospace,Consolas,monospace}
+*{box-sizing:border-box;margin:0}
+body{font-family:Figtree,system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;min-height:100vh}
+h1,h2,.brand{font-family:Fraunces,Georgia,serif;font-weight:600}
+aside{width:260px;padding:28px 20px;border-right:1px solid var(--line);position:sticky;top:0;height:100vh;flex-shrink:0}
+.brand{font-size:26px}.sub{color:var(--mut);font-size:14px;margin:6px 0 28px}
+nav button{display:block;width:100%;text-align:left;padding:13px 16px;margin-bottom:6px;border:0;border-radius:12px;background:none;font:500 16px Figtree;color:var(--ink);cursor:pointer}
+nav button.on{background:var(--navy);color:#fff}
+main{flex:1;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center;padding:16px 36px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;font-size:15px;color:var(--mut)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);margin-right:8px}.dot.stale{background:var(--bad)}
+.top b{display:block;text-align:right;color:var(--ink);font-weight:500}
+section{padding:32px 36px 90px;max-width:900px}
+h1{font-size:32px;margin-bottom:8px}.lead{color:var(--mut);margin-bottom:24px;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px;margin-bottom:16px}
+.stat small{color:var(--mut);display:block}.stat strong{font:600 34px Fraunces,Georgia,serif}
+.card h2{font:600 18px Figtree;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.row{padding:12px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}
+.tag{display:inline-block;background:#e9e6df;border-radius:9px;padding:3px 10px;font-size:13px;margin-right:8px}
+.tag.red{background:#f6dcd7;color:var(--bad)}.tag.grn{background:#d9eee2;color:var(--ok)}
+.mut{color:var(--mut);font-size:14px}
+button.b,select,input,textarea{font:inherit;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:#fff}
+button.b{cursor:pointer;background:#fff}button.p{background:var(--navy);color:#fff;border-color:var(--navy)}
+label{display:block;font-weight:500;margin:12px 0 6px}input,select,textarea{width:100%}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+pre{background:#e9e8e2;border-radius:14px;padding:16px;font:14px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word}
+.rec{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+#login{margin:8vh auto;max-width:460px;padding:0 20px;width:100%}
+.err{color:var(--bad);margin-top:10px;min-height:20px}
+.hide{display:none!important}
+@media(max-width:760px){body{display:block}aside{position:fixed;bottom:0;top:auto;height:auto;width:100%;z-index:9;border:0;border-top:1px solid var(--line);background:var(--bg);padding:6px}
+aside .brand,aside .sub{display:none}nav{display:flex}nav button{text-align:center;padding:10px 2px;font-size:13px;margin:0}
+.top,section{padding-left:16px;padding-right:16px}h1{font-size:26px}}
+</style>
+</head>
+<body>
+<div id="login" class="hide">
+  <h1 class="brand">RBE Desk</h1>
+  <p class="lead">Your shaft's breakdown reports, simple like WhatsApp. For analysis use RBE Monitor.</p>
+  <div class="card"><h2>Join with a cell number</h2>
+    <label>Name</label><input id="jn" placeholder="Amahle Nkosi">
+    <label>Cell number</label><input id="jc" inputmode="tel" placeholder="082 555 0142">
+    <label>Shaft</label><select id="js"></select>
+    <label>Join code (from the control room)</label><input id="jk" placeholder="A1B2C3" autocapitalize="characters">
+    <div class="acts"><button class="b p" id="jb">Join</button></div>
+  </div>
+  <div class="card"><h2>RBE staff sign-in</h2>
+    <label>Email</label><input id="se" type="email" autocomplete="username">
+    <label>Password</label><input id="sp" type="password" autocomplete="current-password">
+    <div class="acts"><button class="b" id="sb">Sign in</button></div>
+  </div>
+  <div class="err" id="lerr"></div>
+</div>
+
+<aside class="hide" id="side"><div class="brand">RBE Desk</div><div class="sub">Breakdown reports by shaft</div>
+<nav id="nav"></nav></aside>
+<main class="hide" id="app">
+  <div class="top"><span><i class="dot" id="dot"></i><span id="sync">Connecting…</span></span><span>Next report<b id="next">–</b></span></div>
+  <section id="view"></section>
+</main>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInAnonymously,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {getFirestore,doc,collection,getDoc,getDocs,setDoc,updateDoc,deleteDoc,onSnapshot,arrayUnion} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const app=initializeApp({apiKey:"AIzaSyCnDsQVhQxk9Q7axCPcMSpHDcqOonBbNMc",authDomain:"rbe-equipment.firebaseapp.com",projectId:"rbe-equipment",storageBucket:"rbe-equipment.firebasestorage.app",messagingSenderId:"481759813476",appId:"1:481759813476:web:ef176ffa73fb65e01ca471"});
+const auth=getAuth(app),db=getFirestore(app);
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const S={shafts:{},groups:{},meta:{},members:[],me:null,admin:false,sel:null,page:'desk',unsubs:[]};
+const PAGES=[['desk','Desk'],['reports','Reports'],['groups','Groups'],['join','Join'],['watcher','Watcher']];
+
+/* ---------- login ---------- */
+const lerr=m=>$('lerr').textContent=m||'';
+const slugOf=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+async function loadPublicShafts(){
+  try{
+    if(!auth.currentUser) await signInAnonymously(auth);
+    const m=await getDoc(doc(db,'desk_meta','watcher'));
+    const list=(m.exists()&&m.data().shafts)||[];
+    $('js').innerHTML=list.length?list.map(s=>`<option value="${esc(s.slug)}">${esc(s.name)}</option>`).join(''):'<option value="">No shafts yet – is the watcher running?</option>';
+  }catch(e){lerr('Could not reach the server: '+e.code)}
+}
+$('jb').onclick=async()=>{
+  lerr();const name=$('jn').value.trim(),cell=$('jc').value.trim(),slug=$('js').value,code=$('jk').value.trim().toUpperCase();
+  if(!name||cell.replace(/\D/g,'').length<9||!slug||!code)return lerr('Fill in name, a valid cell number, shaft and join code.');
+  try{
+    if(!auth.currentUser) await signInAnonymously(auth);
+    const ref=doc(db,'desk_members',auth.currentUser.uid),ex=await getDoc(ref);
+    if(ex.exists()) await updateDoc(ref,{name,cell,code,shafts:arrayUnion(slug)});
+    else await setDoc(ref,{name,cell,code,shafts:[slug],createdAt:Date.now()});
+    boot(auth.currentUser);
+  }catch(e){lerr(e.code==='permission-denied'?'That join code is not right for this shaft.':'Join failed: '+e.code)}
+};
+$('sb').onclick=async()=>{
+  lerr();try{await signInWithEmailAndPassword(auth,$('se').value.trim(),$('sp').value)}catch(e){lerr('Sign-in failed: '+e.code)}
+};
+
+/* ---------- boot ---------- */
+onAuthStateChanged(auth,async u=>{
+  if(!u||u.isAnonymous){
+    const m=u&&(await getDoc(doc(db,'desk_members',u.uid)).catch(()=>null));
+    if(m&&m.exists()) return boot(u,m.data());
+    $('login').classList.remove('hide');$('app').classList.add('hide');$('side').classList.add('hide');
+    return loadPublicShafts();
+  }
+  boot(u);
+});
+function show(){$('login').classList.add('hide');$('app').classList.remove('hide');$('side').classList.remove('hide')}
+async function boot(u,mem){
+  S.unsubs.forEach(f=>f());S.unsubs=[];S.shafts={};S.groups={};
+  try{
+    if(!u.isAnonymous){
+      const ud=await getDoc(doc(db,'users',u.uid));
+      if(!ud.exists()||ud.data().status==='disabled'){await signOut(auth);return lerr('This account has no RBE access.')}
+      const d=ud.data();S.admin=d.role==='admin';S.me={name:d.name||u.email,staff:true};
+      const sub=(c,k)=>S.unsubs.push(onSnapshot(collection(db,c),s=>{S[k]={};s.forEach(x=>S[k][x.id]=x.data());render()},e=>lerr(e.code)));
+      sub('desk_shafts','shafts');sub('desk_groups','groups');
+    }else{
+      mem=mem||(await getDoc(doc(db,'desk_members',u.uid))).data();S.admin=false;S.me={name:mem.name,shafts:mem.shafts};
+      mem.shafts.forEach(sl=>{
+        S.unsubs.push(onSnapshot(doc(db,'desk_shafts',sl),s=>{if(s.exists())S.shafts[sl]=s.data();render()},()=>{}));
+        S.unsubs.push(onSnapshot(doc(db,'desk_groups',sl),s=>{if(s.exists())S.groups[sl]=s.data();render()},()=>{}));
+      });
+    }
+    S.unsubs.push(onSnapshot(doc(db,'desk_meta','watcher'),s=>{S.meta=s.data()||{};render()}));
+    if(S.admin) await loadMembers();
+    show();render();
+  }catch(e){lerr('Could not load: '+(e.code||e.message))}
+}
+async function loadMembers(){const s=await getDocs(collection(db,'desk_members'));S.members=s.docs.map(d=>({id:d.id,...d.data()}))}
+
+/* ---------- helpers ---------- */
+const ago=sec=>{sec=Math.max(0,Math.round(sec));return sec<60?sec+'s':sec<3600?Math.floor(sec/60)+'m':Math.floor(sec/3600)+'h '+Math.floor(sec%3600/60)+'m'};
+const waNum=c=>{c=c.replace(/\D/g,'');return c.startsWith('0')?'27'+c.slice(1):c};
+const since=r=>{const t=new Date(r.d+'T'+r.t+':00');return isNaN(t)?'':ago((Date.now()-t)/1000)};
+const sl=()=>Object.keys(S.shafts).sort((a,b)=>(S.shafts[a].shaft||'').localeCompare(S.shafts[b].shaft||'',undefined,{numeric:true}));
+function line(r){return `<div class="row"><span class="tag">${esc(r.ty||'Other')}</span><span class="tag ${r.fx?'grn':'red'}">${r.fx?'Fixed':'Open'}</span><span class="mut">${esc(r.d.slice(5))} ${esc(r.t)}${r.sh?' · '+esc(r.sh):''}</span>
+<div style="margin:6px 0 2px"><b>${esc(r.e)}</b> · ${esc(r.r)}</div><div class="mut">${esc(r.pl||'')}${r.fx&&r.dt?' · down '+r.dt+' h':''}${!r.fx&&since(r)?' · open '+since(r):''}</div></div>`}
+
+/* ---------- views ---------- */
+const V={
+desk(){
+  const k=sl();if(!k.length)return `<h1>The desk</h1><p class="lead">No data yet. Start the watcher on the control-room PC and the shaft reports appear here on their own.</p>`;
+  if(!S.sel||!S.shafts[S.sel])S.sel=k[0];const d=S.shafts[S.sel],st=d.stats||{};
+  return `<h1>The desk</h1><p class="lead">Live from the control-room Excel sheet. Pick a shaft to see what is open and what was logged.</p>
+  <select id="pick" style="margin-bottom:16px">${k.map(x=>`<option value="${x}" ${x===S.sel?'selected':''}>${esc(S.shafts[x].shaft)}</option>`).join('')}</select>
+  <div class="grid"><div class="card stat"><small>Open breakdowns</small><strong>${st.open??0}</strong></div><div class="card stat"><small>Reported today</small><strong>${st.today??0}</strong></div>
+  <div class="card stat"><small>Fixed today</small><strong>${st.fixedToday??0}</strong></div><div class="card stat"><small>Downtime logged today</small><strong>${st.downtimeToday??0} h</strong></div></div>
+  <div class="card"><h2>Open now</h2>${(d.open||[]).map(line).join('')||'<p class="mut">Nothing open. 🎉</p>'}</div>
+  <div class="card"><h2>Latest lines</h2>${(d.lines||[]).slice(0,15).map(line).join('')||'<p class="mut">No lines yet.</p>'}</div>`},
+reports(){
+  const k=Object.keys(S.groups).sort();if(!k.length)return `<h1>Reports</h1><p class="lead">No reports yet.</p>`;
+  return `<h1>Reports</h1><p class="lead">Each shaft gets a report on its interval. Share it to WhatsApp or SMS in one tap.</p>`+k.map(x=>{
+    const g=S.groups[x],r=(g.reports||[])[0];if(!r)return `<div class="card"><h2>${esc(g.shaft)}</h2><p class="mut">First report is due soon.</p></div>`;
+    const mem=S.admin?S.members.filter(m=>(m.shafts||[]).includes(x)):[];
+    return `<div class="card"><h2>${esc(g.shaft)}<span class="mut">${new Date(r.ts*1000).toLocaleString('en-ZA',{dateStyle:'medium',timeStyle:'short'})}</span></h2><pre>${esc(r.text)}</pre>
+    <div class="acts"><button class="b" data-copy="${x}">Copy report</button><a class="b" style="text-decoration:none;color:inherit" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(r.text)}">Share on WhatsApp</a></div>
+    ${mem.map(m=>`<div class="rec"><div>${esc(m.name)}<div class="mut">${esc(m.cell)}</div></div><div class="acts" style="margin:0"><a class="b" style="text-decoration:none;color:inherit" target="_blank" rel="noopener" href="https://wa.me/${waNum(m.cell)}?text=${encodeURIComponent(r.text)}">WhatsApp</a><a class="b" style="text-decoration:none;color:inherit" href="sms:+${waNum(m.cell)}?body=${encodeURIComponent(r.text)}">SMS</a></div></div>`).join('')}</div>`}).join('')},
+groups(){
+  const k=Object.keys(S.groups).sort();
+  return `<h1>Shaft groups</h1><p class="lead">One group per Excel file. ${S.admin?'Set how often each shaft report goes out.':'Your shaft reports go out on these intervals.'}</p>`+(k.map(x=>{
+    const g=S.groups[x],n=S.members.filter(m=>(m.shafts||[]).includes(x)).length,iv=g.intervalMin||60;
+    const opts=[[1,'every minute'],[15,'every 15 minutes'],[30,'every 30 minutes'],[60,'every hour'],[120,'every 2 hours'],[240,'every 4 hours'],[720,'every 12 hours'],[1440,'once a day']];
+    return `<div class="card"><h2>${esc(g.shaft)}<span class="mut">${g.paused?'Paused':'Running'}</span></h2>
+    <div class="mut">${S.admin?`Join code <b>${esc(g.code)}</b> · ${n} number${n===1?'':'s'}`:'Joined'}</div>
+    ${S.admin?`<label>Report interval</label><select data-iv="${x}">${opts.map(o=>`<option value="${o[0]}" ${o[0]==iv?'selected':''}>${o[1]}</option>`).join('')}</select>
+    <div class="acts"><button class="b p" data-send="${x}">Send now</button><button class="b" data-pause="${x}">${g.paused?'Resume':'Pause'}</button></div>`:`<div class="mut" style="margin-top:6px">${(opts.find(o=>o[0]==iv)||[0,iv+' min'])[1]}</div>`}</div>`}).join('')||'<p class="mut">No groups yet.</p>')},
+join(){
+  const k=Object.keys(S.groups).sort();
+  if(!S.admin)return `<h1>Your details</h1><p class="lead">You are registered as <b>${esc(S.me.name)}</b> for ${(S.me.shafts||[]).map(x=>esc((S.groups[x]||{}).shaft||x)).join(', ')}. To add another shaft, sign out and join again with that shaft's code.</p><div class="acts"><button class="b" id="out">Sign out</button></div>`;
+  return `<h1>People in each group</h1><p class="lead">Everyone who joined with a cell number. Remove anyone who should stop seeing reports.</p>`+k.map(x=>{
+    const m=S.members.filter(y=>(y.shafts||[]).includes(x));
+    return `<div class="card"><h2>${esc(S.groups[x].shaft)}<span class="mut">Code ${esc(S.groups[x].code)}</span></h2>${m.map(y=>`<div class="rec"><div>${esc(y.name)}<div class="mut">${esc(y.cell)}</div></div><button class="b" data-rm="${y.id}">Remove</button></div>`).join('')||'<p class="mut">Nobody yet.</p>'}</div>`}).join('')+`<div class="acts"><button class="b" id="out">Sign out</button></div>`},
+watcher(){
+  const m=S.meta,f=m.files||{},age=m.lastSync?Date.now()/1000-m.lastSync:null;
+  return `<h1>Excel watcher</h1><p class="lead">A small program on the control-room PC reads the OneDrive Live_Sheets workbooks and pushes each shaft here.</p>
+  <div class="card"><h2>${age!==null&&age<300?'Watcher is online':'Watcher looks offline'}<span class="mut">${age!==null?'last check '+ago(age)+' ago':''}</span></h2>
+  ${Object.keys(f).sort().map(x=>`<div class="row"><b>${esc(f[x].name)}</b><div class="mut">${esc(f[x].file)} · ${f[x].rows} rows · synced ${ago(Date.now()/1000-f[x].syncedAt)} ago</div></div>`).join('')||'<p class="mut">No files reported yet.</p>'}</div>`}
+};
+
+function render(){
+  $('nav').innerHTML=PAGES.map(p=>`<button class="${p[0]===S.page?'on':''}" data-go="${p[0]}">${p[1]}</button>`).join('');
+  const act=document.activeElement;if(act&&/INPUT|SELECT/.test(act.tagName)&&$('view').contains(act)&&act.id!=='pick')return;
+  $('view').innerHTML=V[S.page]();tick();
+}
+function tick(){
+  const m=S.meta,age=m.lastSync?Date.now()/1000-m.lastSync:null,ok=age!==null&&age<300;
+  $('dot').className='dot'+(ok?'':' stale');
+  $('sync').textContent=age===null?'Waiting for the watcher':ok?`Watching the control-room sheets · ${ago(age)} ago`:`Watcher offline · last seen ${ago(age)} ago`;
+  let best=null;Object.values(S.groups).forEach(g=>{if(g.paused)return;const t=(g.lastTs||0)+(g.intervalMin||60)*60;if(best===null||t<best)best=t});
+  $('next').textContent=best===null?'–':Date.now()/1000>=best?'due':ago(best-Date.now()/1000);
+}
+setInterval(tick,1000);
+
+document.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-go],[data-copy],[data-send],[data-pause],[data-rm],#out');if(!t)return;
+  const g=t.dataset;
+  try{
+    if(g.go){S.page=g.go;render()}
+    else if(g.copy){await navigator.clipboard.writeText(S.groups[g.copy].reports[0].text);t.textContent='Copied ✓'}
+    else if(g.send){await updateDoc(doc(db,'desk_groups',g.send),{sendNow:true});t.textContent='Queued ✓'}
+    else if(g.pause){await updateDoc(doc(db,'desk_groups',g.pause),{paused:!S.groups[g.pause].paused})}
+    else if(g.rm){await deleteDoc(doc(db,'desk_members',g.rm));await loadMembers();render()}
+    else if(t.id==='out'){await signOut(auth);location.reload()}
+  }catch(err){alert('Action failed: '+(err.code||err.message))}
+});
+document.addEventListener('change',async e=>{
+  if(e.target.id==='pick'){S.sel=e.target.value;render()}
+  if(e.target.dataset.iv){try{await updateDoc(doc(db,'desk_groups',e.target.dataset.iv),{intervalMin:+e.target.value})}catch(err){alert(err.code)}}
+});
+</script>
+</body>
+</html>
