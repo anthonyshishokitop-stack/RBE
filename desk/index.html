@@ -18,7 +18,7 @@ main{flex:1;min-width:0}
 .top{display:flex;justify-content:space-between;align-items:center;padding:16px 36px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;font-size:15px;color:var(--mut)}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);margin-right:8px}.dot.stale{background:var(--bad)}
 .top b{display:block;text-align:right;color:var(--ink);font-weight:500}
-section{padding:32px 36px 90px;max-width:900px}
+section{padding:32px 36px 90px;max-width:1100px}
 h1{font-size:32px;margin-bottom:8px}.lead{color:var(--mut);margin-bottom:24px;line-height:1.5}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px;margin-bottom:16px}
@@ -28,9 +28,18 @@ h1{font-size:32px;margin-bottom:8px}.lead{color:var(--mut);margin-bottom:24px;li
 .tag{display:inline-block;background:#e9e6df;border-radius:9px;padding:3px 10px;font-size:13px;margin-right:8px}
 .tag.red{background:#f6dcd7;color:var(--bad)}.tag.grn{background:#d9eee2;color:var(--ok)}
 .mut{color:var(--mut);font-size:14px}
-.eq-group{margin-top:18px}.eq-group:first-child{margin-top:4px}
-.eq-group h3{font:600 15px Figtree;color:var(--navy);margin-bottom:4px;padding-bottom:6px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.eq-group{margin-top:22px}.eq-group:first-child{margin-top:6px}
+.eq-group h3{font:600 15px Figtree;color:var(--navy);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
 .eq-group h3 .mut{font-weight:500;font-size:13px}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;border-radius:12px;border:1px solid var(--line)}
+table.bd{width:100%;border-collapse:collapse;font-size:13px;min-width:780px;background:#fff}
+table.bd th{background:var(--navy);color:#fff;font-weight:600;text-align:left;padding:10px 12px;white-space:nowrap;position:sticky;top:0}
+table.bd td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+table.bd tr:last-child td{border-bottom:0}
+table.bd tr:nth-child(even) td{background:#faf9f6}
+table.bd .fx-y{color:var(--ok);font-weight:600}
+table.bd .fx-n{color:var(--bad);font-weight:600}
+table.bd .eq{font-weight:600}
 button.b,select,input,textarea{font:inherit;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:#fff}
 button.b{cursor:pointer;background:#fff}button.p{background:var(--navy);color:#fff;border-color:var(--navy)}
 label{display:block;font-weight:500;margin:12px 0 6px}input,select,textarea{width:100%}
@@ -42,7 +51,9 @@ pre{background:#e9e8e2;border-radius:14px;padding:16px;font:14px/1.5 var(--mono)
 .hide{display:none!important}
 @media(max-width:760px){body{display:block}aside{position:fixed;bottom:0;top:auto;height:auto;width:100%;z-index:9;border:0;border-top:1px solid var(--line);background:var(--bg);padding:6px}
 aside .brand,aside .sub{display:none}nav{display:flex}nav button{text-align:center;padding:10px 2px;font-size:13px;margin:0}
-.top,section{padding-left:16px;padding-right:16px}h1{font-size:26px}}
+.top,section{padding-left:12px;padding-right:12px}h1{font-size:26px}
+.card{padding:14px;border-radius:16px}.grid{grid-template-columns:1fr 1fr;gap:10px}
+table.bd{font-size:12px}table.bd th,table.bd td{padding:8px 9px}}
 </style>
 </head>
 <body>
@@ -150,35 +161,62 @@ const since=r=>{const t=new Date(r.d+'T'+r.t+':00');return isNaN(t)?'':ago((Date
 const sl=()=>Object.keys(S.shafts).sort((a,b)=>(S.shafts[a].shaft||'').localeCompare(S.shafts[b].shaft||'',undefined,{numeric:true}));
 /* Classify equipment type for grouping: Locos, Winches, Others */
 function eqGroup(r){
-  const raw=(r.ty||r.e||'').toString().toLowerCase();
+  const raw=(r.ty||r.e||r.eq||'').toString().toLowerCase();
   if(/loco|locomotive|locos?\b/.test(raw))return 'Locos';
   if(/winch|winches?\b/.test(raw))return 'Winches';
   return 'Others';
 }
-function line(r){
-  const typ=esc(r.ty||'Other');
-  const place=r.pl?esc(r.pl):'';
-  const workplace=place?`<span class="tag">${place}</span>`:'';
-  const meta=[];
-  if(r.fx&&r.dt)meta.push('down '+r.dt+' h');
-  if(!r.fx&&since(r))meta.push('open '+since(r));
-  return `<div class="row">
-    <span class="tag">${typ}</span>
-    <span class="tag ${r.fx?'grn':'red'}">${r.fx?'Fixed':'Open'}</span>
-    ${workplace}
-    <span class="mut">${esc(r.d.slice(5))} ${esc(r.t)}${r.sh?' · '+esc(r.sh):''}</span>
-    <div style="margin:6px 0 2px"><b>${esc(r.e)}</b> · ${esc(r.r)}</div>
-    ${meta.length?`<div class="mut">${meta.join(' · ')}</div>`:''}
-  </div>`;
+/* Map report fields to spreadsheet-style columns (supports common watcher field names) */
+function cols(r){
+  const date=r.d||r.date||'';
+  let time=(r.t||r.time||'').toString();
+  // Normalise 00:15 → 00H15 to match Excel style
+  if(/^\d{1,2}:\d{2}/.test(time)) time=time.replace(/^(\d{1,2}):(\d{2}).*/,'$1H$2');
+  const level=r.lv??r.level??r.lvl??'';
+  const place=r.pl||r.wp||r.place||r.workingPlace||'';
+  const eid=r.id||r.eid||r.eqId||r.equipmentId||r.e||'';
+  const etype=r.ty||r.eqType||r.equipmentType||r.type||'Other';
+  const reason=r.r||r.reason||r.breakdown||'';
+  const fixed=r.fx===true||r.fx==='Yes'||r.fixed===true||String(r.fixed||'').toLowerCase()==='yes';
+  const dt=r.dt??r.downtime??'';
+  const by=r.by||r.rb||r.repairedBy||r.repaired||r.rep||'';
+  return {date,time,level,place,eid,etype,reason,fixed,dt,by};
 }
-function groupLines(arr,emptyMsg){
+function tableHead(){
+  return `<thead><tr>
+    <th>Date reported</th><th>Time reported</th><th>Level</th><th>Working place</th>
+    <th>Equipment ID</th><th>Equipment type</th><th>Reason / breakdown</th>
+    <th>Fixed</th><th>Downtime</th><th>Repaired by</th>
+  </tr></thead>`;
+}
+function tableRow(r){
+  const c=cols(r);
+  const fx=c.fixed?'<span class="fx-y">Yes</span>':'<span class="fx-n">No</span>';
+  const dt=c.dt!==''&&c.dt!=null?esc(String(c.dt)):(c.fixed?'':(since(r)||''));
+  return `<tr>
+    <td>${esc(c.date)}</td>
+    <td>${esc(c.time)}</td>
+    <td>${esc(c.level)}</td>
+    <td>${esc(c.place)}</td>
+    <td class="eq">${esc(c.eid)}</td>
+    <td>${esc(c.etype)}</td>
+    <td>${esc(c.reason)}</td>
+    <td>${fx}</td>
+    <td>${dt}</td>
+    <td>${esc(c.by||'-')}</td>
+  </tr>`;
+}
+function groupTables(arr,emptyMsg){
   const order=['Locos','Winches','Others'];
   const buckets={Locos:[],Winches:[],Others:[]};
   (arr||[]).forEach(r=>buckets[eqGroup(r)].push(r));
   const html=order.map(g=>{
     const items=buckets[g];
     if(!items.length)return '';
-    return `<div class="eq-group"><h3>${g} <span class="mut">(${items.length})</span></h3>${items.map(line).join('')}</div>`;
+    return `<div class="eq-group">
+      <h3>${g} <span class="mut">(${items.length})</span></h3>
+      <div class="tbl-wrap"><table class="bd">${tableHead()}<tbody>${items.map(tableRow).join('')}</tbody></table></div>
+    </div>`;
   }).join('');
   return html||`<p class="mut">${emptyMsg||'Nothing here.'}</p>`;
 }
@@ -188,12 +226,12 @@ const V={
 desk(){
   const k=sl();if(!k.length)return `<h1>The desk</h1><p class="lead">No data yet. Start the watcher on the control-room PC and the shaft reports appear here on their own.</p>`;
   if(!S.sel||!S.shafts[S.sel])S.sel=k[0];const d=S.shafts[S.sel],st=d.stats||{};
-  return `<h1>The desk</h1><p class="lead">Live from the control-room Excel sheet. Pick a shaft to see what is open and what was logged — grouped by equipment type so you can jump straight to Locos, Winches or Others.</p>
+  return `<h1>The desk</h1><p class="lead">Live from the control-room Excel sheet. Breakdowns shown in table form, grouped by Locos · Winches · Others so crews find their section fast.</p>
   <select id="pick" style="margin-bottom:16px">${k.map(x=>`<option value="${x}" ${x===S.sel?'selected':''}>${esc(S.shafts[x].shaft)}</option>`).join('')}</select>
   <div class="grid"><div class="card stat"><small>Open breakdowns</small><strong>${st.open??0}</strong></div><div class="card stat"><small>Reported today</small><strong>${st.today??0}</strong></div>
   <div class="card stat"><small>Fixed today</small><strong>${st.fixedToday??0}</strong></div><div class="card stat"><small>Downtime logged today</small><strong>${st.downtimeToday??0} h</strong></div></div>
-  <div class="card"><h2>Open now</h2>${groupLines(d.open,'Nothing open. 🎉')}</div>
-  <div class="card"><h2>Latest lines</h2>${groupLines((d.lines||[]).slice(0,20),'No lines yet.')}</div>`},
+  <div class="card"><h2>Open now</h2>${groupTables(d.open,'Nothing open. 🎉')}</div>
+  <div class="card"><h2>Latest lines</h2>${groupTables((d.lines||[]).slice(0,30),'No lines yet.')}</div>`},
 reports(){
   const k=Object.keys(S.groups).sort();if(!k.length)return `<h1>Reports</h1><p class="lead">No reports yet.</p>`;
   return `<h1>Reports</h1><p class="lead">Each shaft gets a report on its interval. Share it to WhatsApp or SMS in one tap.</p>`+k.map(x=>{
