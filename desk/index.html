@@ -206,32 +206,78 @@ function tableRow(r){
     <td>${esc(c.by||'-')}</td>
   </tr>`;
 }
-function groupTables(arr,emptyMsg){
-  const order=['Locos','Winches','Others'];
+function bucketByType(arr){
   const buckets={Locos:[],Winches:[],Others:[]};
   (arr||[]).forEach(r=>buckets[eqGroup(r)].push(r));
-  const html=order.map(g=>{
+  return buckets;
+}
+function groupTables(arr){
+  const order=['Locos','Winches','Others'];
+  const buckets=bucketByType(arr);
+  return order.map(g=>{
     const items=buckets[g];
-    if(!items.length)return '';
+    const body=items.length
+      ?`<div class="tbl-wrap"><table class="bd">${tableHead()}<tbody>${items.map(tableRow).join('')}</tbody></table></div>`
+      :`<p class="mut" style="margin:8px 0 4px">None open.</p>`;
     return `<div class="eq-group">
-      <h3>${g} <span class="mut">(${items.length})</span></h3>
-      <div class="tbl-wrap"><table class="bd">${tableHead()}<tbody>${items.map(tableRow).join('')}</tbody></table></div>
+      <h3>${g} <span class="mut">(${items.length} open)</span></h3>
+      ${body}
     </div>`;
   }).join('');
-  return html||`<p class="mut">${emptyMsg||'Nothing here.'}</p>`;
+}
+/* Derive summary numbers from the same rows that feed the three tables */
+function deskStats(d){
+  const open=d.open||[];
+  const lines=d.lines||[];
+  const todayStr=(()=>{const n=new Date();const p=x=>String(x).padStart(2,'0');return `${p(n.getDate())}.${p(n.getMonth()+1)}.${n.getFullYear()}`})();
+  // also accept ISO-ish dates that start with today's yyyy-mm-dd
+  const isoToday=(()=>{const n=new Date();const p=x=>String(x).padStart(2,'0');return `${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`})();
+  const isToday=r=>{
+    const raw=(r.d||r.date||'').toString();
+    return raw===todayStr||raw.startsWith(isoToday)||raw.includes(todayStr);
+  };
+  const openCount=open.length;
+  const reportedToday=lines.filter(isToday).length || open.filter(isToday).length;
+  const fixedToday=lines.filter(r=>{
+    const fixed=r.fx===true||r.fx==='Yes'||r.fixed===true||String(r.fixed||'').toLowerCase()==='yes';
+    return fixed&&isToday(r);
+  }).length;
+  const downtimeToday=lines.reduce((s,r)=>{
+    if(!isToday(r))return s;
+    const v=parseFloat(r.dt??r.downtime??0);
+    return s+(isNaN(v)?0:v);
+  },0);
+  // Prefer watcher stats when present, else derived
+  const st=d.stats||{};
+  return {
+    open:st.open??openCount,
+    today:st.today??reportedToday,
+    fixedToday:st.fixedToday??fixedToday,
+    downtimeToday:st.downtimeToday??Math.round(downtimeToday*10)/10
+  };
 }
 
 /* ---------- views ---------- */
 const V={
 desk(){
   const k=sl();if(!k.length)return `<h1>The desk</h1><p class="lead">No data yet. Start the watcher on the control-room PC and the shaft reports appear here on their own.</p>`;
-  if(!S.sel||!S.shafts[S.sel])S.sel=k[0];const d=S.shafts[S.sel],st=d.stats||{};
-  return `<h1>The desk</h1><p class="lead">Live from the control-room Excel sheet. Breakdowns shown in table form, grouped by Locos · Winches · Others so crews find their section fast.</p>
+  if(!S.sel||!S.shafts[S.sel])S.sel=k[0];
+  const d=S.shafts[S.sel],st=deskStats(d);
+  const buckets=bucketByType(d.open||[]);
+  return `<h1>The desk</h1><p class="lead">Live from the control-room Excel sheet. One table each for Locos, Winches and Others — open breakdowns only.</p>
   <select id="pick" style="margin-bottom:16px">${k.map(x=>`<option value="${x}" ${x===S.sel?'selected':''}>${esc(S.shafts[x].shaft)}</option>`).join('')}</select>
-  <div class="grid"><div class="card stat"><small>Open breakdowns</small><strong>${st.open??0}</strong></div><div class="card stat"><small>Reported today</small><strong>${st.today??0}</strong></div>
-  <div class="card stat"><small>Fixed today</small><strong>${st.fixedToday??0}</strong></div><div class="card stat"><small>Downtime logged today</small><strong>${st.downtimeToday??0} h</strong></div></div>
-  <div class="card"><h2>Open now</h2>${groupTables(d.open,'Nothing open. 🎉')}</div>
-  <div class="card"><h2>Latest lines</h2>${groupTables((d.lines||[]).slice(0,30),'No lines yet.')}</div>`},
+  <div class="grid">
+    <div class="card stat"><small>Open breakdowns</small><strong>${st.open}</strong>
+      <div class="mut" style="margin-top:6px;font-size:12px">Locos ${buckets.Locos.length} · Winches ${buckets.Winches.length} · Others ${buckets.Others.length}</div>
+    </div>
+    <div class="card stat"><small>Reported today</small><strong>${st.today}</strong></div>
+    <div class="card stat"><small>Fixed today</small><strong>${st.fixedToday}</strong></div>
+    <div class="card stat"><small>Downtime logged today</small><strong>${st.downtimeToday} h</strong></div>
+  </div>
+  <div class="card">
+    <h2>Open breakdowns by type</h2>
+    ${groupTables(d.open)}
+  </div>`},
 reports(){
   const k=Object.keys(S.groups).sort();if(!k.length)return `<h1>Reports</h1><p class="lead">No reports yet.</p>`;
   return `<h1>Reports</h1><p class="lead">Each shaft gets a report on its interval. Share it to WhatsApp or SMS in one tap.</p>`+k.map(x=>{
