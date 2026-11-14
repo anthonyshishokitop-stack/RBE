@@ -28,6 +28,9 @@ h1{font-size:32px;margin-bottom:8px}.lead{color:var(--mut);margin-bottom:24px;li
 .tag{display:inline-block;background:#e9e6df;border-radius:9px;padding:3px 10px;font-size:13px;margin-right:8px}
 .tag.red{background:#f6dcd7;color:var(--bad)}.tag.grn{background:#d9eee2;color:var(--ok)}
 .mut{color:var(--mut);font-size:14px}
+.eq-group{margin-top:18px}.eq-group:first-child{margin-top:4px}
+.eq-group h3{font:600 15px Figtree;color:var(--navy);margin-bottom:4px;padding-bottom:6px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.eq-group h3 .mut{font-weight:500;font-size:13px}
 button.b,select,input,textarea{font:inherit;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:#fff}
 button.b{cursor:pointer;background:#fff}button.p{background:var(--navy);color:#fff;border-color:var(--navy)}
 label{display:block;font-weight:500;margin:12px 0 6px}input,select,textarea{width:100%}
@@ -145,20 +148,52 @@ const ago=sec=>{sec=Math.max(0,Math.round(sec));return sec<60?sec+'s':sec<3600?M
 const waNum=c=>{c=c.replace(/\D/g,'');return c.startsWith('0')?'27'+c.slice(1):c};
 const since=r=>{const t=new Date(r.d+'T'+r.t+':00');return isNaN(t)?'':ago((Date.now()-t)/1000)};
 const sl=()=>Object.keys(S.shafts).sort((a,b)=>(S.shafts[a].shaft||'').localeCompare(S.shafts[b].shaft||'',undefined,{numeric:true}));
-function line(r){return `<div class="row"><span class="tag">${esc(r.ty||'Other')}</span><span class="tag ${r.fx?'grn':'red'}">${r.fx?'Fixed':'Open'}</span><span class="mut">${esc(r.d.slice(5))} ${esc(r.t)}${r.sh?' · '+esc(r.sh):''}</span>
-<div style="margin:6px 0 2px"><b>${esc(r.e)}</b> · ${esc(r.r)}</div><div class="mut">${esc(r.pl||'')}${r.fx&&r.dt?' · down '+r.dt+' h':''}${!r.fx&&since(r)?' · open '+since(r):''}</div></div>`}
+/* Classify equipment type for grouping: Locos, Winches, Others */
+function eqGroup(r){
+  const raw=(r.ty||r.e||'').toString().toLowerCase();
+  if(/loco|locomotive|locos?\b/.test(raw))return 'Locos';
+  if(/winch|winches?\b/.test(raw))return 'Winches';
+  return 'Others';
+}
+function line(r){
+  const typ=esc(r.ty||'Other');
+  const place=r.pl?esc(r.pl):'';
+  const workplace=place?`<span class="tag">${place}</span>`:'';
+  const meta=[];
+  if(r.fx&&r.dt)meta.push('down '+r.dt+' h');
+  if(!r.fx&&since(r))meta.push('open '+since(r));
+  return `<div class="row">
+    <span class="tag">${typ}</span>
+    <span class="tag ${r.fx?'grn':'red'}">${r.fx?'Fixed':'Open'}</span>
+    ${workplace}
+    <span class="mut">${esc(r.d.slice(5))} ${esc(r.t)}${r.sh?' · '+esc(r.sh):''}</span>
+    <div style="margin:6px 0 2px"><b>${esc(r.e)}</b> · ${esc(r.r)}</div>
+    ${meta.length?`<div class="mut">${meta.join(' · ')}</div>`:''}
+  </div>`;
+}
+function groupLines(arr,emptyMsg){
+  const order=['Locos','Winches','Others'];
+  const buckets={Locos:[],Winches:[],Others:[]};
+  (arr||[]).forEach(r=>buckets[eqGroup(r)].push(r));
+  const html=order.map(g=>{
+    const items=buckets[g];
+    if(!items.length)return '';
+    return `<div class="eq-group"><h3>${g} <span class="mut">(${items.length})</span></h3>${items.map(line).join('')}</div>`;
+  }).join('');
+  return html||`<p class="mut">${emptyMsg||'Nothing here.'}</p>`;
+}
 
 /* ---------- views ---------- */
 const V={
 desk(){
   const k=sl();if(!k.length)return `<h1>The desk</h1><p class="lead">No data yet. Start the watcher on the control-room PC and the shaft reports appear here on their own.</p>`;
   if(!S.sel||!S.shafts[S.sel])S.sel=k[0];const d=S.shafts[S.sel],st=d.stats||{};
-  return `<h1>The desk</h1><p class="lead">Live from the control-room Excel sheet. Pick a shaft to see what is open and what was logged.</p>
+  return `<h1>The desk</h1><p class="lead">Live from the control-room Excel sheet. Pick a shaft to see what is open and what was logged — grouped by equipment type so you can jump straight to Locos, Winches or Others.</p>
   <select id="pick" style="margin-bottom:16px">${k.map(x=>`<option value="${x}" ${x===S.sel?'selected':''}>${esc(S.shafts[x].shaft)}</option>`).join('')}</select>
   <div class="grid"><div class="card stat"><small>Open breakdowns</small><strong>${st.open??0}</strong></div><div class="card stat"><small>Reported today</small><strong>${st.today??0}</strong></div>
   <div class="card stat"><small>Fixed today</small><strong>${st.fixedToday??0}</strong></div><div class="card stat"><small>Downtime logged today</small><strong>${st.downtimeToday??0} h</strong></div></div>
-  <div class="card"><h2>Open now</h2>${(d.open||[]).map(line).join('')||'<p class="mut">Nothing open. 🎉</p>'}</div>
-  <div class="card"><h2>Latest lines</h2>${(d.lines||[]).slice(0,15).map(line).join('')||'<p class="mut">No lines yet.</p>'}</div>`},
+  <div class="card"><h2>Open now</h2>${groupLines(d.open,'Nothing open. 🎉')}</div>
+  <div class="card"><h2>Latest lines</h2>${groupLines((d.lines||[]).slice(0,20),'No lines yet.')}</div>`},
 reports(){
   const k=Object.keys(S.groups).sort();if(!k.length)return `<h1>Reports</h1><p class="lead">No reports yet.</p>`;
   return `<h1>Reports</h1><p class="lead">Each shaft gets a report on its interval. Share it to WhatsApp or SMS in one tap.</p>`+k.map(x=>{
