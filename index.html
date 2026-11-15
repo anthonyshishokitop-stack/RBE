@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RBE Monitor Enterprise 2.8.1 | Reliability Improvement</title>
+  <title>RBE Monitor Enterprise 2.8.2 | Reliability Improvement</title>
   <meta name="description" content="Enterprise asset reliability platform for mining operations — availability, MTBF/MTTR (data-density gated), structured status, audit trails and data-quality metrics."/>
 
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.googletagmanager.com blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.google-analytics.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://tessdata.projectnaptha.com blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta name="theme-color" content="#0c4a6e">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%230c4a6e%27/%3E%3Ctext x=%2732%27 y=%2742%27 font-size=%2726%27 font-family=%27Arial%27 font-weight=%27700%27 text-anchor=%27middle%27 fill=%27white%27%3ERBE%3C/text%3E%3C/svg%3E">
   <script>
   /* v2.3 safety helpers (available before the app module runs) */
   window.escapeHtml=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]});};
@@ -21,7 +23,7 @@
   <!-- Firebase loaded only via ES module imports in the app script (no classic SDK) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
@@ -912,6 +914,7 @@
   </style>
 </head>
 <body>
+<noscript><div style="padding:1rem;background:#fef2f2;color:#991b1b;font:600 14px Inter,sans-serif;text-align:center;">RBE Monitor needs JavaScript enabled to run.</div></noscript>
 
 <!-- AUTH -->
 <div id="auth-section">
@@ -1029,7 +1032,7 @@
       </ul>
 
       <div class="version-footer">
-        <div class="enterprise-badge" style="margin-bottom:0.45rem;"><i class="fas fa-cube"></i> ENTERPRISE 2.8.1</div>
+        <div class="enterprise-badge" style="margin-bottom:0.45rem;"><i class="fas fa-cube"></i> ENTERPRISE 2.8.2</div>
         <span class="sla-pill" style="margin-top:0.4rem;background:rgba(22,163,74,0.2);color:#86efac;border-color:rgba(134,239,172,0.3);"><i class="fas fa-check-circle"></i> 99.5% target SLA</span>
       </div>
     </aside>
@@ -1545,7 +1548,7 @@
           </div>
           <div class="card" id="equip-reliability-card">
             <div class="table-toolbar" style="flex-wrap:wrap;gap:8px;">
-              <h2 style="margin:0;"><i class="fas fa-table"></i> Equipment Reliability — Availability, MTBF &amp; MTTR</h2>
+              <h2 style="margin:0;"><i class="fas fa-table"></i> Equipment Reliability — Availability, MTBF &amp; MTTR <small id="equip-rel-period" style="font-weight:500;color:var(--text-3);font-size:.75rem;margin-left:.4rem;"></small></h2>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                 <input type="search" id="equip-rel-search" placeholder="Search Equipment ID / shaft…" oninput="renderEquipReliabilityTable()" style="padding:0.4rem 0.7rem;border:1px solid var(--border);border-radius:8px;min-width:200px;"/>
                 <button type="button" class="btn btn-primary" style="padding:0.4rem 0.85rem;" onclick="exportEquipReliabilityCSV()"><i class="fas fa-file-csv"></i> CSV</button>
@@ -1790,7 +1793,7 @@
 <!-- RELIABILITY IMPROVEMENT -->
         <section id="reliability-improvement" class="hidden">
           <div class="header-bar">
-            <div><h1>Reliability Improvement</h1><div class="ri-sub">Rolling 90 days</div></div>
+            <div><h1>Reliability Improvement</h1><div class="ri-sub" id="ri-sub">Rolling 90 days</div></div>
             <div class="ri-actions">
               <button class="btn btn-secondary" type="button" onclick="window.rbeReliabilityRefresh()"><i class="fas fa-sync-alt"></i> Refresh</button>
               <button class="btn btn-primary" type="button" onclick="window.rbeReliabilityExport()"><i class="fas fa-file-export"></i> Export CSV</button>
@@ -1798,7 +1801,7 @@
           </div>
           <div class="ri-wrap">
             <div class="card"><div class="ri-bar">
-              <label>Shaft<select id="ri-shaft" onchange="window.rbeReliabilityRefresh()"></select></label><label>Equipment type<select id="ri-type" onchange="window.rbeReliabilityRefresh()"></select></label><label>Classification<select id="ri-class" onchange="window.rbeReliabilityRefresh()"><option value="">All events</option><option>Mechanical</option><option>Electrical</option><option>Derailment</option><option>Operational</option><option>Unclassified</option></select></label>
+              <label>Window<select id="ri-window" onchange="window.rbeReliabilityRefresh()"><option value="sys">Follow Analysis period</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="180">Last 180 days</option><option value="365">Last 365 days</option></select></label><label>Shaft<select id="ri-shaft" onchange="window.rbeReliabilityRefresh()"></select></label><label>Equipment type<select id="ri-type" onchange="window.rbeReliabilityRefresh()"></select></label><label>Classification<select id="ri-class" onchange="window.rbeReliabilityRefresh()"><option value="">All events</option><option>Mechanical</option><option>Electrical</option><option>Derailment</option><option>Operational</option><option>Unclassified</option></select></label>
               <label>Scheduled h / day<input id="ri-sched" type="number" min="1" max="24" step="0.5"></label>
               <label>Availability target %<input id="ri-target" type="number" min="1" max="100" step="0.5"></label>
             </div></div>
@@ -9514,7 +9517,7 @@ window.RBE = {
   try { S = Object.assign(S, JSON.parse(localStorage.getItem(LS) || '{}')); } catch(e) {}
   const save = () => { try { localStorage.setItem(LS, JSON.stringify(S)); } catch(e) {} };
   const ch = {}, pg = {}, expanded = {};
-  let lastRows = [];
+  let lastRows = [], lastWinDays = 90;
   const $ = id => document.getElementById(id);
   const txt = v => String(v == null ? '' : v).trim();
   const esc = v => txt(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -9599,7 +9602,7 @@ window.RBE = {
     if (document.activeElement !== $('ri-target')) $('ri-target').value = setting('target', shaft, 90);
     ['M','A','N'].forEach(k => { const el = $('ri-start-' + k); if (el && document.activeElement !== el) el.value = S.start[k] || ''; });
 
-    const now = new Date(), start90 = new Date(now - 90 * 864e5);
+    const winEl = $('ri-window'); if (winEl && !winEl.dataset.init) { winEl.value = S.win || 'sys'; winEl.dataset.init = '1'; } const winSel = winEl ? winEl.value : '90'; if (S.win !== winSel) { S.win = winSel; save(); } let winDays = 90; if (winSel === 'sys') { try { winDays = Math.max(7, Math.min(366, Math.round(Number(window.RBE.getSystemPeriod().days) || 90))); } catch(e) {} } else winDays = Number(winSel) || 90; lastWinDays = winDays; const subEl = $('ri-sub'); if (subEl) { let pl = ''; if (winSel === 'sys') { try { pl = ' · follows Analysis period (' + window.RBE.getSystemPeriod().label + ')'; } catch(e) {} } subEl.textContent = 'Rolling ' + winDays + ' days' + pl; } const now = new Date(), start90 = new Date(now - winDays * 864e5);
     const build = u => {
       const id = txt(first(u, ['equipmentId','locoNumber','equipment','equipmentNo'])), e = regMap.get(id.toUpperCase());
       const dt = startOf(u), rep = repOf(u), found = txt(first(u, ['actualFault','actionTaken','faultFound','servicemanReport'])), reported = txt(first(u, ['reason','fault','description']));
@@ -9624,7 +9627,7 @@ window.RBE = {
     const rows = hist.filter(x => x.dt >= start90 && x.dt <= now);
     lastRows = rows;
     const ef = rows.filter(x => EQ.has(x.mode));
-    const open = rows.filter(x => !x.closed).sort((a, b) => (b.rawAge || 0) - (a.rawAge || 0));
+    const open = hist.filter(x => !x.closed && x.dt <= now).sort((a, b) => (b.rawAge || 0) - (a.rawAge || 0));
     const hrs = a => a.reduce((s, x) => s + (x.hours || 0), 0);
 
     // Repeats (same equipment + same fault group within 7 days; flag ≤72 h)
@@ -9646,6 +9649,7 @@ window.RBE = {
     const issueCount = {}; rows.forEach(x => { x.bad = 0; for (const k in ISS) if (ISS[k](x)) { issueCount[k] = (issueCount[k] || 0) + 1; x.bad++; } });
     const score = list => list.length ? Math.round(100 * list.filter(x => !x.bad).length / list.length) : null;
     const scoreC = s => s == null ? '' : s >= 90 ? 'g' : s >= 70 ? 'o' : 'r';
+    const futureN = hist.filter(x => x.dt > now).length; const FUT = 'Future-dated report (excluded)'; if (futureN) issueCount[FUT] = futureN;
     const dq = score(rows);
 
     // Per-shaft performance
@@ -9657,10 +9661,10 @@ window.RBE = {
       const meas = list.filter(x => !x.est && x.hours != null).map(x => x.hours);
       return {n, f: list.length, down: hrs(list), est: list.filter(x => x.est).length, avail: sched ? 100 * (1 - d / sched) : null, mtbf: list.length && sched ? (sched - d) / list.length : null, mttr: avg(meas), target: setting('target', s, 90)};
     };
-    const st = shafts.map(s => ({s, ...stat(s, hist, 90), w1: stat(s, hist, 7), w0: stat(s, hist, 7, new Date(now - 7 * 864e5)), m1: stat(s, hist, 30), m0: stat(s, hist, 30, new Date(now - 30 * 864e5))}));
+    const st = shafts.map(s => ({s, ...stat(s, hist, winDays), w1: stat(s, hist, 7), w0: stat(s, hist, 7, new Date(now - 7 * 864e5)), m1: stat(s, hist, 30), m0: stat(s, hist, 30, new Date(now - 30 * 864e5))}));
     const best = Math.max(...st.map(x => x.avail == null ? -1 : x.avail), -1);
     const tot = st.reduce((o, x) => ({n: o.n + x.n, f: o.f + x.f, down: o.down + x.down, est: o.est + x.est}), {n: 0, f: 0, down: 0, est: 0});
-    const schedAll = st.reduce((s, x) => s + x.n * 90 * setting('sched', x.s, 24), 0);
+    const schedAll = st.reduce((s, x) => s + x.n * winDays * setting('sched', x.s, 24), 0);
     const availAll = schedAll ? 100 * (1 - Math.min(tot.down, schedAll) / schedAll) : null;
     const mtbfAll = tot.f && schedAll ? (schedAll - Math.min(tot.down, schedAll)) / tot.f : null;
     const mttrAll = avg(ef.filter(x => !x.est && x.hours != null).map(x => x.hours));
@@ -9732,7 +9736,7 @@ window.RBE = {
     pagedTable('ri-repeat-team', grp(x => x.team), 4, 'No data.', 15);
 
     // Data quality tables
-    pagedTable('ri-quality-table', Object.keys(ISS).map(k => [esc(k), C('<strong>' + (issueCount[k] || 0) + '</strong>', 'num')]), 2, '', 15);
+    pagedTable('ri-quality-table', Object.keys(ISS).concat(futureN ? [FUT] : []).map(k => [esc(k), C('<strong>' + (issueCount[k] || 0) + '</strong>', 'num')]), 2, '', 15);
     const sc = keyFn => { const m = new Map(); rows.forEach(x => { const k = keyFn(x) || '—'; (m.get(k) || m.set(k, []).get(k)).push(x); }); return [...m.entries()].sort().map(([k, l]) => { const s = score(l); return [C(esc(k), 'wrap'), C(l.length, 'num'), C(chip(s + '%', scoreC(s)), 'nw')]; }); };
     pagedTable('ri-dq-shaft', sc(x => x.shaft), 3, 'No data.', 15);
     pagedTable('ri-dq-shift', sc(x => x.shift), 3, 'No data.', 15);
@@ -9757,9 +9761,10 @@ window.RBE = {
   window.rbeReliabilityExport = function () {
     const L = [['Equipment','Shaft','Reported','Shift','Reported fault','Fault found','Class','Fault group','Downtime h','Estimated','Open','Repair team']];
     lastRows.forEach(x => L.push([x.id, x.shaft, x.dt ? x.dt.toISOString() : '', x.shift, x.reported, x.found, x.mode, x.lab, x.hours == null ? '' : x.hours.toFixed(2), x.est ? 'Yes' : 'No', x.closed ? 'No' : 'Yes', x.team]));
-    const csv = L.map(r => r.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const safe = v => { v = String(v == null ? '' : v); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; };
+    const csv = '\ufeff' + L.map(r => r.map(v => '"' + safe(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'), url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8;'}));
-    a.href = url; a.download = 'RBE_Reliability_Review_90_Day.csv'; a.click(); URL.revokeObjectURL(url);
+    a.href = url; a.download = 'RBE_Reliability_Review_' + lastWinDays + '_Day_' + new Date().toISOString().slice(0, 10) + '.csv'; a.click(); URL.revokeObjectURL(url);
   };
   const sec = () => $('reliability-improvement');
   document.addEventListener('click', e => {
@@ -9770,14 +9775,17 @@ window.RBE = {
   document.addEventListener('input', e => {
     const id = e.target.id; if (!sec() || !sec().contains(e.target)) return;
     const k = $('ri-shaft').value || '*';
-    if (id === 'ri-sched' || id === 'ri-target') { const m = id === 'ri-sched' ? S.sched : S.target, v = Number(e.target.value); if (v > 0) { m[k] = v; save(); render(); } }
+    if (id === 'ri-sched' || id === 'ri-target') { const m = id === 'ri-sched' ? S.sched : S.target, v = Number(e.target.value); const ok = id === 'ri-sched' ? (v >= 1 && v <= 24) : (v >= 1 && v <= 100); e.target.style.outline = ok ? '' : '2px solid #b91c1c'; if (ok) { m[k] = v; save(); render(); } }
     else if (/^ri-start-[MAN]$/.test(id)) { S.start[id.slice(-1)] = e.target.value; save(); render(); }
   });
-  window.addEventListener('rbe:data-updated', render);
+  let dirty = false, timer = null;
+  const visible = () => { const x = sec(); return !!x && !x.classList.contains('hidden'); };
+  const schedule = () => { if (!visible()) { dirty = true; return; } clearTimeout(timer); timer = setTimeout(() => { dirty = false; render(); }, 250); };
+  window.addEventListener('rbe:data-updated', schedule);
+  document.addEventListener('change', e => { if (e.target && e.target.id === 'trend-period') schedule(); });
+  document.addEventListener('click', e => { if (dirty && e.target.closest('#sidebar-menu li[data-section="reliability-improvement"]')) { dirty = false; } });
 })();
 </script>
-
-</body>
 
 <!-- Ask RBE Chatbot -->
 <button type="button" id="rbe-chat-fab" title="Ask RBE — platform help & live data" aria-label="Open Ask RBE">
@@ -11136,7 +11144,5 @@ window.RBE = {
   window.closeAskRBE = closeChat;
 })();
 </script>
-
-
-
+</body>
 </html>
